@@ -27,11 +27,20 @@ interface Faixa {
   ordem: number;
 }
 
+interface Orcamento {
+  id: string;
+  projeto_id: string;
+  valor_total: number;
+  valor_realizado: number;
+  status: string;
+}
+
 export default function ProjetoDetalhes() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [projeto, setProjeto] = useState<Projeto | null>(null);
   const [faixas, setFaixas] = useState<Faixa[]>([]);
+  const [orcamento, setOrcamento] = useState<Orcamento | null>(null);
   const [loading, setLoading] = useState(true);
   const [showFaixaModal, setShowFaixaModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -85,6 +94,32 @@ export default function ProjetoDetalhes() {
       }
       
       if (faixasData) setFaixas(faixasData);
+
+      // Carregar orçamento do projeto
+      const { data: orcamentoData } = await supabase
+        .from('orcamentos')
+        .select('id, projeto_id, valor_total, status')
+        .eq('projeto_id', id)
+        .eq('status', 'aprovado')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (orcamentoData) {
+        // Calcular valor realizado
+        const { data: pagamentosData } = await supabase
+          .from('pagamentos')
+          .select('valor')
+          .eq('orcamento_id', orcamentoData.id)
+          .eq('status', 'pago');
+
+        const valorRealizado = pagamentosData?.reduce((sum, p) => sum + (p.valor || 0), 0) || 0;
+        
+        setOrcamento({
+          ...orcamentoData,
+          valor_realizado: valorRealizado
+        });
+      }
     } catch (error) {
       console.error('Erro ao carregar dados do projeto:', error);
     } finally {
@@ -493,6 +528,82 @@ export default function ProjetoDetalhes() {
                   <p className="text-sm text-gray-500 italic">Nenhuma observação técnica cadastrada</p>
                 )}
               </div>
+            </div>
+
+            {/* Orçamento e Financeiro */}
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-white">Orçamento e Financeiro</h2>
+                {orcamento && (
+                  <button
+                    onClick={() => navigate(`/financeiro?orcamento_id=${orcamento.id}`)}
+                    className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer flex items-center gap-2"
+                  >
+                    Ver Pagamentos
+                    <i className="ri-arrow-right-line"></i>
+                  </button>
+                )}
+              </div>
+              {orcamento ? (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Orçamento Total</p>
+                    <p className="text-xl font-bold text-white">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(orcamento.valor_total)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Valor Realizado</p>
+                    <p className="text-xl font-bold text-primary-teal">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(orcamento.valor_realizado)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Diferença</p>
+                    <p className={`text-lg font-semibold ${
+                      orcamento.valor_total - orcamento.valor_realizado >= 0 ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(orcamento.valor_total - orcamento.valor_realizado)}
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-gray-400">Progresso</span>
+                      <span className="text-xs text-gray-400">
+                        {orcamento.valor_total > 0 ? Math.round((orcamento.valor_realizado / orcamento.valor_total) * 100) : 0}%
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-dark-border rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-smooth ${
+                          orcamento.valor_realizado <= orcamento.valor_total ? 'bg-primary-teal' : 'bg-red-500'
+                        }`}
+                        style={{ 
+                          width: `${Math.min((orcamento.valor_realizado / orcamento.valor_total) * 100, 100)}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate('/orcamentos')}
+                    className="w-full mt-4 px-4 py-2 bg-dark-bg hover:bg-dark-hover text-white text-sm rounded-lg transition-smooth cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <i className="ri-file-list-3-line"></i>
+                    Gerenciar Orçamentos
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <i className="ri-file-list-3-line text-4xl text-gray-600 mb-3"></i>
+                  <p className="text-sm text-gray-400 mb-4">Nenhum orçamento aprovado</p>
+                  <button
+                    onClick={() => navigate('/orcamentos')}
+                    className="px-4 py-2 bg-gradient-primary text-white text-sm rounded-lg hover:opacity-90 transition-smooth cursor-pointer"
+                  >
+                    Criar Orçamento
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
