@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
+import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 
 type FilterTab = 'todos' | 'pendente' | 'pago' | 'atrasado';
@@ -35,8 +36,24 @@ const categoriasLabels: Record<string, string> = {
 };
 
 export default function Financeiro() {
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const orcamentoIdParam = searchParams.get('orcamento_id');
+  
+  // Verificar permissão
+  if (!user || !['admin', 'financeiro'].includes(user.role)) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center">
+            <i className="ri-error-warning-line text-6xl text-red-400 mb-4"></i>
+            <h2 className="text-2xl font-bold text-white mb-2">Acesso Negado</h2>
+            <p className="text-gray-400">Você não tem permissão para acessar esta página.</p>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
   
   const [activeTab, setActiveTab] = useState<FilterTab>('todos');
   const [searchTerm, setSearchTerm] = useState('');

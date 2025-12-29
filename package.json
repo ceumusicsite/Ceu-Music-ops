@@ -39,6 +39,7 @@
     "preview": "vite preview",
     "type-check": "tsc --noEmit --project tsconfig.app.json",
     "create-admin": "node scripts/create-admin.js",
+    "create-user": "node scripts/create-user.js",
     "check-users": "node scripts/check-users.js"
   },
   "type": "module",

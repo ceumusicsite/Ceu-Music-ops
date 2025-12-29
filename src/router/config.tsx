@@ -13,6 +13,7 @@ import Orcamentos from "../pages/orcamentos/page";
 import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
 import Documentos from "../pages/documentos/page";
+import Usuarios from "../pages/usuarios/page";
 
 const routes: RouteObject[] = [
   {
@@ -70,6 +71,10 @@ const routes: RouteObject[] = [
   {
     path: "/documentos",
     element: <Documentos />,
+  },
+  {
+    path: "/usuarios",
+    element: <Usuarios />,
   },
   {
     path: "*",

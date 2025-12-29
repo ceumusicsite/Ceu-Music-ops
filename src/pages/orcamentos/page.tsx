@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
+import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 
 type FilterStatus = 'todos' | 'pendente' | 'aprovado' | 'recusado';
@@ -23,8 +24,27 @@ interface Projeto {
 }
 
 export default function Orcamentos() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('todos');
+  
+  // Verificar permissão
+  if (!user || !['admin', 'producao', 'financeiro'].includes(user.role)) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center">
+            <i className="ri-error-warning-line text-6xl text-red-400 mb-4"></i>
+            <h2 className="text-2xl font-bold text-white mb-2">Acesso Negado</h2>
+            <p className="text-gray-400">Você não tem permissão para acessar esta página.</p>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
+  
+  const canApprove = user.role === 'admin' || user.role === 'financeiro';
+  const canCreate = user.role === 'admin' || user.role === 'producao';
   const [searchTerm, setSearchTerm] = useState('');
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
   const [projetos, setProjetos] = useState<Projeto[]>([]);
@@ -201,13 +221,15 @@ export default function Orcamentos() {
             <h1 className="text-3xl font-bold text-white mb-2">Orçamentos</h1>
             <p className="text-gray-400">Gerencie orçamentos e aprovações por projeto</p>
           </div>
-          <button 
-            onClick={() => setShowModal(true)}
-            className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
-          >
-            <i className="ri-add-line text-xl"></i>
-            Novo Orçamento
-          </button>
+          {canCreate && (
+            <button 
+              onClick={() => setShowModal(true)}
+              className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
+            >
+              <i className="ri-add-line text-xl"></i>
+              Novo Orçamento
+            </button>
+          )}
         </div>
 
         {/* Stats */}
@@ -322,7 +344,7 @@ export default function Orcamentos() {
                       </td>
                       <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
-                          {orc.status === 'pendente' && (
+                          {orc.status === 'pendente' && canApprove && (
                             <>
                               <button 
                                 onClick={() => handleApprove(orc.id)}

@@ -2,13 +2,14 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const menuItems = [
-  { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro'] },
-  { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'executivo', 'ar', 'producao'] },
-  { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'executivo', 'ar', 'producao'] },
-  { path: '/orcamentos', icon: 'ri-file-list-3-line', label: 'Orçamentos', roles: ['admin', 'executivo', 'ar', 'financeiro'] },
-  { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'executivo', 'financeiro'] },
-  { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'executivo', 'ar', 'producao'] },
-  { path: '/documentos', icon: 'ri-folder-line', label: 'Documentos', roles: ['admin', 'executivo', 'ar', 'producao'] },
+  { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'producao', 'financeiro'] },
+  { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'producao'] },
+  { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'producao'] },
+  { path: '/orcamentos', icon: 'ri-file-list-3-line', label: 'Orçamentos', roles: ['admin', 'producao', 'financeiro'] },
+  { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'financeiro'] },
+  { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'producao'] },
+  { path: '/documentos', icon: 'ri-folder-line', label: 'Documentos', roles: ['admin', 'producao'] },
+  { path: '/usuarios', icon: 'ri-user-settings-line', label: 'Usuários', roles: ['admin'] },
 ];
 
 export default function Sidebar() {

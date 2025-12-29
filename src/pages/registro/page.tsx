@@ -40,7 +40,7 @@ export default function Registro() {
             id: data.user.id,
             name: nome || email.split('@')[0],
             email: email,
-            role: 'admin',
+            role: 'producao',
             avatar: null
           }], {
             onConflict: 'id'
