@@ -20,7 +20,23 @@ export default function Login() {
       navigate('/dashboard');
     } catch (err: any) {
       console.error('Erro ao fazer login:', err);
-      setError(err.message || 'Erro ao fazer login. Verifique suas credenciais.');
+      let errorMessage = 'Erro ao fazer login. Verifique suas credenciais.';
+      
+      if (err.message?.includes('Invalid login credentials')) {
+        errorMessage = 'E-mail ou senha incorretos. Verifique suas credenciais.';
+        // Verificar se pode ser problema de email não confirmado
+        if (err.message?.includes('Email not confirmed') || err.status === 400) {
+          errorMessage = 'E-mail não confirmado. Verifique sua caixa de entrada e confirme seu e-mail antes de fazer login.';
+        }
+      } else if (err.message?.includes('Email not confirmed') || err.message?.includes('email_not_confirmed')) {
+        errorMessage = 'E-mail não confirmado. Verifique sua caixa de entrada e clique no link de confirmação antes de fazer login.';
+      } else if (err.message?.includes('User not found')) {
+        errorMessage = 'Usuário não encontrado. Verifique se o e-mail está correto ou crie uma conta.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -88,8 +104,25 @@ export default function Login() {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <a href="#" className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer">
+          <div className="mt-6 text-center space-y-2">
+            <a 
+              href="/registro" 
+              onClick={(e) => {
+                e.preventDefault();
+                navigate('/registro');
+              }}
+              className="block text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer"
+            >
+              Criar primeira conta
+            </a>
+            <a 
+              href="/recuperar-senha" 
+              onClick={(e) => {
+                e.preventDefault();
+                navigate('/recuperar-senha');
+              }}
+              className="block text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer"
+            >
               Esqueceu sua senha?
             </a>
           </div>

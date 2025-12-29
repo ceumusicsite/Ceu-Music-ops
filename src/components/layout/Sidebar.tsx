@@ -59,9 +59,11 @@ export default function Sidebar() {
       {/* User Profile */}
       <div className="p-4 border-t border-dark-border">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center">
-            <span className="text-sm font-bold">{user?.name.charAt(0)}</span>
-          </div>
+          <img 
+            src="/favicon com gradiente.png" 
+            alt={user?.name || 'Usuário'} 
+            className="w-10 h-10 rounded-full object-cover"
+          />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white truncate">{user?.name}</p>
             <p className="text-xs text-gray-400 capitalize">{user?.role}</p>
