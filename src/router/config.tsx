@@ -12,6 +12,7 @@ import ProjetoDetalhes from "../pages/projetos/Detalhes";
 import Orcamentos from "../pages/orcamentos/page";
 import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
+import Documentos from "../pages/documentos/page";
 
 const routes: RouteObject[] = [
   {
@@ -65,6 +66,10 @@ const routes: RouteObject[] = [
   {
     path: "/lancamentos",
     element: <Lancamentos />,
+  },
+  {
+    path: "/documentos",
+    element: <Documentos />,
   },
   {
     path: "*",

@@ -8,6 +8,7 @@ const menuItems = [
   { path: '/orcamentos', icon: 'ri-file-list-3-line', label: 'Orçamentos', roles: ['admin', 'executivo', 'ar', 'financeiro'] },
   { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'executivo', 'financeiro'] },
   { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'executivo', 'ar', 'producao'] },
+  { path: '/documentos', icon: 'ri-folder-line', label: 'Documentos', roles: ['admin', 'executivo', 'ar', 'producao'] },
 ];
 
 export default function Sidebar() {
