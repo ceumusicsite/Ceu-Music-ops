@@ -1,5 +1,6 @@
-// Script para importar artistas de um arquivo CSV ou JSON
-// Execute com: node scripts/import-artistas.js <arquivo.csv|arquivo.json>
+// Script para importar artistas de um arquivo JSON para o Supabase
+// Execute com: node scripts/import-artistas.js [caminho-do-json]
+// Se não especificar o caminho, procurará por 'artistas.json' na raiz do projeto
 
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
@@ -18,176 +19,194 @@ const supabaseAnonKey = process.env.VITE_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('❌ Erro: Credenciais do Supabase não encontradas!');
+  console.log('\n💡 Dica: Crie um arquivo .env.local na raiz do projeto com:');
+  console.log('   VITE_PUBLIC_SUPABASE_URL=sua_url_aqui');
+  console.log('   VITE_PUBLIC_SUPABASE_ANON_KEY=sua_chave_aqui\n');
   process.exit(1);
 }
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Função para processar CSV
-function parseCSV(text) {
-  const lines = text.trim().split('\n');
-  if (lines.length < 2) {
-    throw new Error('CSV deve ter pelo menos uma linha de cabeçalho e uma linha de dados');
-  }
-  
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-  const artistas = [];
-  
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim());
-    const artista = {};
-    
-    headers.forEach((header, index) => {
-      const value = values[index] || '';
-      if (header.includes('nome') || header.includes('name')) {
-        artista.nome = value;
-      } else if (header.includes('gênero') || header.includes('genero') || header.includes('genre')) {
-        artista.genero = value;
-      } else if (header.includes('email') || header.includes('e-mail')) {
-        artista.contato_email = value;
-      } else if (header.includes('telefone') || header.includes('phone') || header.includes('tel')) {
-        artista.contato_telefone = value;
-      } else if (header.includes('status')) {
-        artista.status = value || 'ativo';
-      } else if (header.includes('observa') || header.includes('note') || header.includes('obs')) {
-        artista.observacoes_internas = value;
-      }
-    });
-    
-    if (artista.nome && artista.contato_email) {
-      artistas.push(artista);
-    }
-  }
-  
-  return artistas;
-}
+// Função para mapear dados do JSON para a estrutura do banco
+function mapArtistaData(jsonArtista) {
+  // Campos obrigatórios do sistema
+  const artista = {
+    nome: jsonArtista.nome || jsonArtista.name || '',
+    genero: jsonArtista.genero || jsonArtista.genre || jsonArtista.genero_musical || '',
+    status: jsonArtista.status || 'ativo',
+    contato_email: jsonArtista.contato_email || jsonArtista.email || jsonArtista.contato?.email || '',
+    contato_telefone: jsonArtista.contato_telefone || jsonArtista.telefone || jsonArtista.contato?.telefone || null,
+    observacoes_internas: null
+  };
 
-// Função para processar JSON
-function parseJSON(text) {
-  const data = JSON.parse(text);
-  const artistas = [];
+  // Adicionar informações extras nas observações se disponíveis
+  const observacoes = [];
   
-  const items = Array.isArray(data) ? data : (data.artistas || data.artists || []);
+  if (jsonArtista.biografia) {
+    observacoes.push(`Biografia: ${jsonArtista.biografia}`);
+  }
   
-  items.forEach((item) => {
-    const artista = {
-      nome: item.nome || item.name || item.artist_name || '',
-      genero: item.genero || item.genero_musical || item.genre || '',
-      contato_email: item.contato_email || item.email || item.contato?.email || '',
-      contato_telefone: item.contato_telefone || item.telefone || item.phone || item.contato?.telefone || '',
-      status: item.status || 'ativo',
-      observacoes_internas: item.observacoes_internas || item.observacoes || item.notes || ''
-    };
-    
-    if (artista.nome && artista.contato_email) {
-      artistas.push(artista);
+  if (jsonArtista.redes_sociais) {
+    const redes = [];
+    if (jsonArtista.redes_sociais.instagram) redes.push(`Instagram: ${jsonArtista.redes_sociais.instagram}`);
+    if (jsonArtista.redes_sociais.spotify) redes.push(`Spotify: ${jsonArtista.redes_sociais.spotify}`);
+    if (jsonArtista.redes_sociais.youtube) redes.push(`YouTube: ${jsonArtista.redes_sociais.youtube}`);
+    if (redes.length > 0) {
+      observacoes.push(`Redes Sociais: ${redes.join(', ')}`);
     }
-  });
-  
-  return artistas;
+  }
+
+  if (jsonArtista.seguidores) {
+    const seguidores = [];
+    if (jsonArtista.seguidores.instagram) seguidores.push(`IG: ${jsonArtista.seguidores.instagram}`);
+    if (jsonArtista.seguidores.spotify) seguidores.push(`Spotify: ${jsonArtista.seguidores.spotify}`);
+    if (jsonArtista.seguidores.youtube) seguidores.push(`YT: ${jsonArtista.seguidores.youtube}`);
+    if (seguidores.length > 0) {
+      observacoes.push(`Seguidores: ${seguidores.join(', ')}`);
+    }
+  }
+
+  if (observacoes.length > 0) {
+    artista.observacoes_internas = observacoes.join('\n\n');
+  }
+
+  return artista;
 }
 
 async function importArtistas() {
-  const filePath = process.argv[2];
-  
-  if (!filePath) {
-    console.error('❌ Erro: Especifique o caminho do arquivo CSV ou JSON');
-    console.log('Uso: node scripts/import-artistas.js <arquivo.csv|arquivo.json>');
+  console.log('🎵 Importando Artistas da CEU Music\n');
+
+  // Obter caminho do arquivo JSON
+  const jsonPath = process.argv[2] || join(__dirname, '../artistas.json');
+
+  let artistasData;
+  try {
+    console.log(`📂 Lendo arquivo: ${jsonPath}\n`);
+    const fileContent = readFileSync(jsonPath, 'utf-8');
+    artistasData = JSON.parse(fileContent);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      console.error(`❌ Erro: Arquivo não encontrado: ${jsonPath}`);
+      console.log('\n💡 Dica: Coloque o arquivo JSON na raiz do projeto como "artistas.json"');
+      console.log('   ou especifique o caminho: node scripts/import-artistas.js caminho/para/artistas.json\n');
+    } else if (error instanceof SyntaxError) {
+      console.error('❌ Erro: Arquivo JSON inválido!');
+      console.error(`   ${error.message}\n`);
+    } else {
+      console.error('❌ Erro ao ler arquivo:', error.message);
+    }
     process.exit(1);
   }
-  
+
+  // Garantir que é um array
+  if (!Array.isArray(artistasData)) {
+    if (artistasData.artistas && Array.isArray(artistasData.artistas)) {
+      artistasData = artistasData.artistas;
+    } else {
+      console.error('❌ Erro: O JSON deve conter um array de artistas ou um objeto com propriedade "artistas"');
+      process.exit(1);
+    }
+  }
+
+  console.log(`✅ Encontrados ${artistasData.length} artista(s) no arquivo\n`);
+
+  // Verificar se a tabela existe
   try {
-    console.log(`📂 Lendo arquivo: ${filePath}\n`);
-    const fileContent = readFileSync(filePath, 'utf-8');
-    
-    // Determinar tipo de arquivo
-    const isCSV = filePath.toLowerCase().endsWith('.csv');
-    const isJSON = filePath.toLowerCase().endsWith('.json');
-    
-    if (!isCSV && !isJSON) {
-      throw new Error('Arquivo deve ser CSV (.csv) ou JSON (.json)');
-    }
-    
-    // Processar arquivo
-    console.log(`🔄 Processando arquivo ${isCSV ? 'CSV' : 'JSON'}...`);
-    const artistas = isCSV ? parseCSV(fileContent) : parseJSON(fileContent);
-    
-    if (artistas.length === 0) {
-      throw new Error('Nenhum artista válido encontrado no arquivo');
-    }
-    
-    console.log(`✅ ${artistas.length} artista(s) encontrado(s) no arquivo\n`);
-    
-    // Verificar artistas existentes
-    console.log('🔍 Verificando artistas existentes...');
-    const { data: existingArtistas } = await supabase
+    const { error: testError } = await supabase
       .from('artistas')
-      .select('contato_email');
-    
-    const existingEmails = new Set((existingArtistas || []).map(a => a.contato_email.toLowerCase()));
-    
-    // Importar artistas
-    console.log('📤 Importando artistas...\n');
-    let successCount = 0;
-    let skipCount = 0;
-    const errors = [];
-    
-    for (const artista of artistas) {
-      try {
-        // Pular se já existe
-        if (existingEmails.has(artista.contato_email.toLowerCase())) {
-          console.log(`⏭️  Pulando: ${artista.nome} (email já existe)`);
-          skipCount++;
-          continue;
-        }
-        
-        const { error } = await supabase
-          .from('artistas')
-          .insert([{
-            nome: artista.nome,
-            genero: artista.genero || 'Não especificado',
-            status: artista.status || 'ativo',
-            contato_email: artista.contato_email,
-            contato_telefone: artista.contato_telefone || null,
-            observacoes_internas: artista.observacoes_internas || null
-          }]);
-        
-        if (error) {
-          errors.push(`${artista.nome}: ${error.message}`);
-          console.log(`❌ Erro: ${artista.nome} - ${error.message}`);
-        } else {
-          successCount++;
-          existingEmails.add(artista.contato_email.toLowerCase());
-          console.log(`✅ Importado: ${artista.nome}`);
-        }
-      } catch (error) {
-        errors.push(`${artista.nome}: ${error.message}`);
-        console.log(`❌ Erro: ${artista.nome} - ${error.message}`);
+      .select('id')
+      .limit(1);
+
+    if (testError) {
+      if (testError.code === 'PGRST116' || testError.message.includes('relation') || testError.message.includes('does not exist')) {
+        console.error('❌ Erro: A tabela "artistas" não existe no Supabase!');
+        console.log('💡 Você precisa criar a tabela no Supabase primeiro.\n');
+        process.exit(1);
       }
-    }
-    
-    console.log('\n' + '='.repeat(50));
-    console.log('📊 Resumo da Importação:');
-    console.log(`   ✅ Importados: ${successCount}`);
-    console.log(`   ⏭️  Pulados: ${skipCount}`);
-    console.log(`   ❌ Erros: ${errors.length}`);
-    console.log('='.repeat(50));
-    
-    if (errors.length > 0) {
-      console.log('\n⚠️  Erros encontrados:');
-      errors.forEach((error, index) => {
-        console.log(`   ${index + 1}. ${error}`);
-      });
-    }
-    
-    if (successCount > 0) {
-      console.log('\n✅ Importação concluída com sucesso!');
+      throw testError;
     }
   } catch (error) {
-    console.error('\n❌ Erro ao importar artistas:', error.message);
+    console.error('❌ Erro ao verificar tabela:', error.message);
     process.exit(1);
+  }
+
+  let sucesso = 0;
+  let erros = 0;
+  const errosDetalhes = [];
+
+  // Importar cada artista
+  for (let i = 0; i < artistasData.length; i++) {
+    const jsonArtista = artistasData[i];
+    const artista = mapArtistaData(jsonArtista);
+
+    // Validar campos obrigatórios
+    if (!artista.nome || !artista.genero || !artista.contato_email) {
+      console.log(`⚠️  [${i + 1}/${artistasData.length}] ${artista.nome || 'Sem nome'}: Campos obrigatórios faltando (nome, genero ou email)`);
+      erros++;
+      errosDetalhes.push({
+        artista: artista.nome || 'Sem nome',
+        erro: 'Campos obrigatórios faltando'
+      });
+      continue;
+    }
+
+    try {
+      // Verificar se o artista já existe (por nome ou email)
+      const { data: existing } = await supabase
+        .from('artistas')
+        .select('id, nome')
+        .or(`nome.eq.${artista.nome},contato_email.eq.${artista.contato_email}`)
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        console.log(`⏭️  [${i + 1}/${artistasData.length}] ${artista.nome}: Já existe no banco (${existing[0].nome})`);
+        continue;
+      }
+
+      // Inserir artista
+      const { error: insertError } = await supabase
+        .from('artistas')
+        .insert([artista]);
+
+      if (insertError) {
+        throw insertError;
+      }
+
+      console.log(`✅ [${i + 1}/${artistasData.length}] ${artista.nome}: Importado com sucesso`);
+      sucesso++;
+    } catch (error) {
+      console.log(`❌ [${i + 1}/${artistasData.length}] ${artista.nome}: Erro - ${error.message}`);
+      erros++;
+      errosDetalhes.push({
+        artista: artista.nome,
+        erro: error.message
+      });
+    }
+  }
+
+  // Resumo
+  console.log('\n' + '='.repeat(50));
+  console.log('📊 Resumo da Importação:');
+  console.log(`   ✅ Sucesso: ${sucesso}`);
+  console.log(`   ❌ Erros: ${erros}`);
+  console.log(`   ⏭️  Ignorados (já existem): ${artistasData.length - sucesso - erros}`);
+  console.log('='.repeat(50) + '\n');
+
+  if (erros > 0 && errosDetalhes.length > 0) {
+    console.log('🔍 Detalhes dos erros:');
+    errosDetalhes.forEach(({ artista, erro }) => {
+      console.log(`   - ${artista}: ${erro}`);
+    });
+    console.log('');
+  }
+
+  if (sucesso > 0) {
+    console.log('🎉 Importação concluída! Os artistas estão disponíveis no sistema.');
   }
 }
 
-importArtistas();
+importArtistas().catch(error => {
+  console.error('❌ Erro fatal:', error);
+  process.exit(1);
+});
 

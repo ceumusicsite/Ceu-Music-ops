@@ -1,0 +1,28 @@
+[
+  {
+    "nome": "Nome do Artista",
+    "genero": "Pop",
+    "status": "ativo",
+    "contato_email": "artista@email.com",
+    "contato_telefone": "(11) 99999-9999",
+    "biografia": "Biografia do artista...",
+    "redes_sociais": {
+      "instagram": "https://instagram.com/artista",
+      "spotify": "https://open.spotify.com/artist/...",
+      "youtube": "https://youtube.com/@artista"
+    },
+    "seguidores": {
+      "instagram": 50000,
+      "spotify": 30000,
+      "youtube": 20000
+    }
+  },
+  {
+    "nome": "Outro Artista",
+    "genero": "Rock",
+    "status": "ativo",
+    "contato_email": "outro@email.com",
+    "biografia": "Outra biografia..."
+  }
+]
+
