@@ -8,12 +8,10 @@ import Dashboard from "../pages/dashboard/page";
 import Artistas from "../pages/artistas/page";
 import ArtistaDetalhes from "../pages/artistas/Detalhes";
 import Projetos from "../pages/projetos/page";
-import ProjetoDetalhes from "../pages/projetos/Detalhes";
 import Orcamentos from "../pages/orcamentos/page";
 import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
 import Documentos from "../pages/documentos/page";
-import Usuarios from "../pages/usuarios/page";
 
 const routes: RouteObject[] = [
   {
@@ -53,10 +51,6 @@ const routes: RouteObject[] = [
     element: <Projetos />,
   },
   {
-    path: "/projetos/:id",
-    element: <ProjetoDetalhes />,
-  },
-  {
     path: "/orcamentos",
     element: <Orcamentos />,
   },
@@ -71,10 +65,6 @@ const routes: RouteObject[] = [
   {
     path: "/documentos",
     element: <Documentos />,
-  },
-  {
-    path: "/usuarios",
-    element: <Usuarios />,
   },
   {
     path: "*",

@@ -2,14 +2,13 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const menuItems = [
-  { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'producao', 'financeiro'] },
-  { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'producao'] },
-  { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'producao'] },
-  { path: '/orcamentos', icon: 'ri-file-list-3-line', label: 'Orçamentos', roles: ['admin', 'producao', 'financeiro'] },
-  { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'financeiro'] },
-  { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'producao'] },
-  { path: '/documentos', icon: 'ri-folder-line', label: 'Documentos', roles: ['admin', 'producao'] },
-  { path: '/usuarios', icon: 'ri-user-settings-line', label: 'Usuários', roles: ['admin'] },
+  { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro'] },
+  { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'executivo', 'ar', 'producao'] },
+  { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'executivo', 'ar', 'producao'] },
+  { path: '/orcamentos', icon: 'ri-file-list-3-line', label: 'Orçamentos', roles: ['admin', 'executivo', 'ar', 'financeiro'] },
+  { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'executivo', 'financeiro'] },
+  { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'executivo', 'ar', 'producao'] },
+  { path: '/documentos', icon: 'ri-file-line', label: 'Documentos', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro'] },
 ];
 
 export default function Sidebar() {
@@ -61,11 +60,9 @@ export default function Sidebar() {
       {/* User Profile */}
       <div className="p-4 border-t border-dark-border">
         <div className="flex items-center gap-3 mb-3">
-          <img 
-            src="/favicon com gradiente.png" 
-            alt={user?.name || 'Usuário'} 
-            className="w-10 h-10 rounded-full object-cover"
-          />
+          <div className="w-10 h-10 rounded-full bg-gradient-primary flex items-center justify-center">
+            <span className="text-sm font-bold">{user?.name.charAt(0)}</span>
+          </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white truncate">{user?.name}</p>
             <p className="text-xs text-gray-400 capitalize">{user?.role}</p>
