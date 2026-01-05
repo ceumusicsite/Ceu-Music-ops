@@ -36,6 +36,8 @@ export default function Orcamentos() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showDetalhesModal, setShowDetalhesModal] = useState(false);
+  const [orcamentoSelecionado, setOrcamentoSelecionado] = useState<Orcamento | null>(null);
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
   const [artistas, setArtistas] = useState<Artista[]>([]);
   const [projetos, setProjetos] = useState<Projeto[]>([]);
@@ -237,7 +239,7 @@ export default function Orcamentos() {
         .eq('id', id);
 
       if (error) throw error;
-      loadOrcamentos();
+      loadData();
     } catch (error) {
       console.error('Erro ao aprovar orçamento:', error);
       alert('Erro ao aprovar orçamento. Tente novamente.');
@@ -252,11 +254,16 @@ export default function Orcamentos() {
         .eq('id', id);
 
       if (error) throw error;
-      loadOrcamentos();
+      loadData();
     } catch (error) {
       console.error('Erro ao recusar orçamento:', error);
       alert('Erro ao recusar orçamento. Tente novamente.');
     }
+  };
+
+  const handleVisualizarDetalhes = async (orcamento: Orcamento) => {
+    setOrcamentoSelecionado(orcamento);
+    setShowDetalhesModal(true);
   };
 
   const stats = [
@@ -396,7 +403,11 @@ export default function Orcamentos() {
                             </button>
                           </>
                         )}
-                        <button className="p-2 hover:bg-dark-bg rounded-lg transition-smooth cursor-pointer">
+                        <button 
+                          onClick={() => handleVisualizarDetalhes(orc)}
+                          className="p-2 hover:bg-dark-bg rounded-lg transition-smooth cursor-pointer"
+                          title="Ver detalhes"
+                        >
                           <i className="ri-eye-line text-gray-400 text-lg"></i>
                         </button>
                       </div>
@@ -603,6 +614,178 @@ export default function Orcamentos() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Detalhes do Orçamento */}
+        {showDetalhesModal && orcamentoSelecionado && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-8 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-2xl font-bold text-white">Detalhes do Orçamento</h2>
+                <button 
+                  onClick={() => setShowDetalhesModal(false)}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Status e Tipo */}
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Status</label>
+                    <span className={`inline-block px-4 py-2 rounded-lg text-sm font-medium ${getStatusColor(orcamentoSelecionado.status)}`}>
+                      {getStatusLabel(orcamentoSelecionado.status)}
+                    </span>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Tipo</label>
+                    <span className="inline-block px-4 py-2 bg-primary-teal/20 text-primary-teal rounded-lg text-sm font-medium">
+                      {getTipoLabel(orcamentoSelecionado.tipo)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Título */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Título</label>
+                  <p className="text-white text-lg font-semibold">{orcamentoSelecionado.titulo}</p>
+                </div>
+
+                {/* Descrição */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Descrição</label>
+                  <p className="text-white bg-dark-bg p-4 rounded-lg">{orcamentoSelecionado.descricao}</p>
+                </div>
+
+                {/* Valor */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Valor</label>
+                  <p className="text-2xl font-bold text-white">
+                    R$ {orcamentoSelecionado.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+
+                {/* Recuperabilidade */}
+                {orcamentoSelecionado.recuperavel && (
+                  <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                    <div className="flex items-center gap-2">
+                      <i className="ri-alert-line text-yellow-400 text-xl"></i>
+                      <span className="text-yellow-400 font-medium">Valor Recuperável</span>
+                    </div>
+                    <p className="text-sm text-gray-400 mt-1">Este valor será descontado do artista</p>
+                  </div>
+                )}
+
+                {/* Artista */}
+                {orcamentoSelecionado.artista_id && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Artista Vinculado</label>
+                    <p className="text-white">
+                      {artistas.find(a => a.id === orcamentoSelecionado.artista_id)?.nome || 'Não encontrado'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Projeto */}
+                {orcamentoSelecionado.projeto_id && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Projeto Vinculado</label>
+                    <p className="text-white">
+                      {projetos.find(p => p.id === orcamentoSelecionado.projeto_id)?.nome || 'Não encontrado'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Data de Vencimento */}
+                {orcamentoSelecionado.data_vencimento && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Data de Vencimento</label>
+                    <p className="text-white">
+                      {new Date(orcamentoSelecionado.data_vencimento).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                )}
+
+                {/* Status de Pagamento */}
+                {orcamentoSelecionado.status_pagamento && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Status de Pagamento</label>
+                    <span className={`inline-block px-4 py-2 rounded-lg text-sm font-medium ${
+                      orcamentoSelecionado.status_pagamento === 'pago' ? 'bg-green-500/20 text-green-400' :
+                      orcamentoSelecionado.status_pagamento === 'parcial' ? 'bg-yellow-500/20 text-yellow-400' :
+                      orcamentoSelecionado.status_pagamento === 'atrasado' ? 'bg-red-500/20 text-red-400' :
+                      'bg-gray-500/20 text-gray-400'
+                    }`}>
+                      {orcamentoSelecionado.status_pagamento === 'pago' ? 'Pago' :
+                       orcamentoSelecionado.status_pagamento === 'parcial' ? 'Parcialmente Pago' :
+                       orcamentoSelecionado.status_pagamento === 'atrasado' ? 'Atrasado' :
+                       'Pendente'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Comprovante */}
+                {orcamentoSelecionado.comprovante_url && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Comprovante</label>
+                    <a
+                      href={orcamentoSelecionado.comprovante_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-primary-teal/20 text-primary-teal rounded-lg hover:bg-primary-teal/30 transition-smooth"
+                    >
+                      <i className="ri-file-line text-lg"></i>
+                      <span>Ver Comprovante</span>
+                    </a>
+                  </div>
+                )}
+
+                {/* Data de Criação */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Criado em</label>
+                  <p className="text-white">
+                    {new Date(orcamentoSelecionado.created_at).toLocaleString('pt-BR')}
+                  </p>
+                </div>
+
+                {/* Ações do Modal */}
+                <div className="flex gap-3 pt-6 border-t border-dark-border">
+                  {orcamentoSelecionado.status === 'pendente' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          handleAprovar(orcamentoSelecionado.id);
+                          setShowDetalhesModal(false);
+                        }}
+                        className="flex-1 px-4 py-3 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-smooth cursor-pointer whitespace-nowrap font-medium"
+                      >
+                        <i className="ri-check-line mr-2"></i>
+                        Aprovar
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleRecusar(orcamentoSelecionado.id);
+                          setShowDetalhesModal(false);
+                        }}
+                        className="flex-1 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-smooth cursor-pointer whitespace-nowrap font-medium"
+                      >
+                        <i className="ri-close-line mr-2"></i>
+                        Recusar
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => setShowDetalhesModal(false)}
+                    className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
