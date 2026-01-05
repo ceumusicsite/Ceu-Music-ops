@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const menuItems = [
@@ -13,7 +13,13 @@ const menuItems = [
 
 export default function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
 
   const visibleMenuItems = menuItems.filter(item => 
     user && item.roles.includes(user.role)
@@ -69,7 +75,7 @@ export default function Sidebar() {
           </div>
         </div>
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-dark-hover hover:bg-red-600/20 text-gray-400 hover:text-red-400 rounded-lg transition-smooth cursor-pointer"
         >
           <i className="ri-logout-box-line text-lg"></i>

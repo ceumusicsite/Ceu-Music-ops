@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 
-export type UserRole = 'admin' | 'producao' | 'financeiro';
+export type UserRole = 'admin' | 'executivo' | 'ar' | 'producao' | 'financeiro' | 'viewer';
 
 export interface User {
   id: string;
@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: userId,
           name: email.split('@')[0],
           email: email,
-          role: 'producao' as UserRole,
+          role: 'admin' as UserRole,
           avatar: null,
         };
 

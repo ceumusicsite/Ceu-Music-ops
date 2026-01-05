@@ -1,59 +1,57 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
-import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 type FilterStatus = 'todos' | 'pendente' | 'aprovado' | 'recusado';
 
 interface Orcamento {
   id: string;
-  projeto_id: string;
-  valor_total: number;
-  valor_realizado: number;
-  status: 'pendente' | 'aprovado' | 'recusado';
-  descricao?: string;
+  titulo: string;
+  tipo: string;
+  descricao: string;
+  valor: number;
+  status: string;
+  recuperavel?: boolean;
+  artista_id?: string;
+  projeto_id?: string;
+  data_vencimento?: string;
+  status_pagamento?: string;
+  comprovante_url?: string;
   created_at: string;
-  projeto?: { nome: string; artista?: { nome: string } };
+}
+
+interface Artista {
+  id: string;
+  nome: string;
 }
 
 interface Projeto {
   id: string;
   nome: string;
-  artista?: { nome: string };
 }
 
 export default function Orcamentos() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('todos');
-  
-  // Verificar permissão
-  if (!user || !['admin', 'producao', 'financeiro'].includes(user.role)) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <i className="ri-error-warning-line text-6xl text-red-400 mb-4"></i>
-            <h2 className="text-2xl font-bold text-white mb-2">Acesso Negado</h2>
-            <p className="text-gray-400">Você não tem permissão para acessar esta página.</p>
-          </div>
-        </div>
-      </MainLayout>
-    );
-  }
-  
-  const canApprove = user.role === 'admin' || user.role === 'financeiro';
-  const canCreate = user.role === 'admin' || user.role === 'producao';
   const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
+  const [artistas, setArtistas] = useState<Artista[]>([]);
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [formData, setFormData] = useState({
+    titulo: '',
+    tipo: '',
+    descricao: '',
+    valor: '',
+    recuperavel: false,
+    artista_id: '',
     projeto_id: '',
-    valor_total: '',
-    descricao: ''
+    data_vencimento: '',
+    status_pagamento: 'pendente',
+    comprovante: null as File | null
   });
 
   useEffect(() => {
@@ -62,38 +60,40 @@ export default function Orcamentos() {
 
   const loadData = async () => {
     try {
-      const [orcamentosRes, projetosRes] = await Promise.all([
+      const [orcamentosRes, artistasRes] = await Promise.all([
         supabase
           .from('orcamentos')
-          .select('*, projeto:projeto_id(nome, artista:artista_id(nome))')
+          .select('*')
           .order('created_at', { ascending: false }),
         supabase
-          .from('projetos')
-          .select('id, nome, artista:artista_id(nome)')
+          .from('artistas')
+          .select('id, nome')
+          .eq('status', 'ativo')
           .order('nome')
       ]);
 
-      if (orcamentosRes.data) {
-        // Calcular valor realizado de cada orçamento
-        const orcamentosComRealizado = await Promise.all(
-          orcamentosRes.data.map(async (orc: any) => {
-            const { data: pagamentos } = await supabase
-              .from('pagamentos')
-              .select('valor')
-              .eq('orcamento_id', orc.id)
-              .eq('status', 'pago');
+      if (orcamentosRes.data) setOrcamentos(orcamentosRes.data);
+      if (artistasRes.data) setArtistas(artistasRes.data);
 
-            const valorRealizado = pagamentos?.reduce((sum: number, p: any) => sum + (p.valor || 0), 0) || 0;
-            
-            return {
-              ...orc,
-              valor_realizado: valorRealizado
-            };
-          })
-        );
-        setOrcamentos(orcamentosComRealizado as any);
+      // Carregar projetos (verificar estrutura da tabela primeiro)
+      try {
+        const { data: projetosData, error: projetosError } = await supabase
+          .from('projetos')
+          .select('*')
+          .limit(100);
+
+        if (!projetosError && projetosData) {
+          // Adaptar para usar o campo correto (pode ser 'titulo' ou 'nome')
+          const projetosAdaptados = projetosData.map((p: any) => ({
+            id: p.id,
+            nome: p.titulo || p.nome || p.name || 'Projeto sem nome'
+          }));
+          setProjetos(projetosAdaptados);
+        }
+      } catch (projError) {
+        console.log('Projetos não disponíveis:', projError);
+        setProjetos([]);
       }
-      if (projetosRes.data) setProjetos(projetosRes.data as any);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
@@ -101,66 +101,9 @@ export default function Orcamentos() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const { error } = await supabase
-        .from('orcamentos')
-        .insert([{
-          projeto_id: formData.projeto_id,
-          valor_total: parseFloat(formData.valor_total),
-          descricao: formData.descricao || null,
-          status: 'pendente'
-        }]);
-
-      if (error) throw error;
-
-      setShowModal(false);
-      setFormData({
-        projeto_id: '',
-        valor_total: '',
-        descricao: ''
-      });
-      loadData();
-    } catch (error) {
-      console.error('Erro ao criar orçamento:', error);
-      alert('Erro ao criar orçamento. Tente novamente.');
-    }
-  };
-
-  const handleApprove = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('orcamentos')
-        .update({ status: 'aprovado' })
-        .eq('id', id);
-
-      if (error) throw error;
-      loadData();
-    } catch (error) {
-      console.error('Erro ao aprovar orçamento:', error);
-      alert('Erro ao aprovar orçamento. Tente novamente.');
-    }
-  };
-
-  const handleReject = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('orcamentos')
-        .update({ status: 'recusado' })
-        .eq('id', id);
-
-      if (error) throw error;
-      loadData();
-    } catch (error) {
-      console.error('Erro ao recusar orçamento:', error);
-      alert('Erro ao recusar orçamento. Tente novamente.');
-    }
-  };
-
   const filteredOrcamentos = orcamentos.filter(orc => {
-    const matchesSearch = orc.projeto?.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         orc.descricao?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = orc.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         orc.tipo.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'todos' || orc.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -183,21 +126,144 @@ export default function Orcamentos() {
     return labels[status] || status;
   };
 
-  const totalPendente = orcamentos.filter(o => o.status === 'pendente').reduce((sum, o) => sum + o.valor_total, 0);
-  const totalAprovado = orcamentos.filter(o => o.status === 'aprovado').reduce((sum, o) => sum + o.valor_total, 0);
-  const totalRealizado = orcamentos.filter(o => o.status === 'aprovado').reduce((sum, o) => sum + o.valor_realizado, 0);
-  const aguardandoAprovacao = orcamentos.filter(o => o.status === 'pendente').length;
+  const getTipoLabel = (tipo: string) => {
+    const labels: Record<string, string> = {
+      'producao': 'Produção',
+      'clipe': 'Clipe',
+      'capa': 'Capa',
+      'midia': 'Mídia',
+      'outro': 'Outro',
+    };
+    return labels[tipo] || tipo;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFormData({ ...formData, comprovante: e.target.files[0] });
+    }
+  };
+
+  const uploadComprovante = async (file: File): Promise<string | null> => {
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `comprovantes/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('orcamentos')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error('Erro ao fazer upload:', uploadError);
+        return null;
+      }
+
+      const { data } = supabase.storage
+        .from('orcamentos')
+        .getPublicUrl(filePath);
+
+      return data.publicUrl;
+    } catch (error) {
+      console.error('Erro ao fazer upload do comprovante:', error);
+      return null;
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUploading(true);
+    
+    try {
+      // Upload do comprovante se houver
+      let comprovanteUrl = null;
+      if (formData.comprovante) {
+        comprovanteUrl = await uploadComprovante(formData.comprovante);
+      }
+
+      // Preparar dados para inserção
+      const dadosInsercao: any = {
+        titulo: formData.titulo,
+        tipo: formData.tipo,
+        descricao: formData.descricao,
+        valor: parseFloat(formData.valor),
+        status: 'pendente',
+        recuperavel: formData.recuperavel,
+        status_pagamento: formData.status_pagamento
+      };
+
+      // Adicionar campos opcionais apenas se preenchidos
+      if (formData.artista_id) dadosInsercao.artista_id = formData.artista_id;
+      if (formData.projeto_id) dadosInsercao.projeto_id = formData.projeto_id;
+      if (formData.data_vencimento) dadosInsercao.data_vencimento = formData.data_vencimento;
+      if (comprovanteUrl) dadosInsercao.comprovante_url = comprovanteUrl;
+
+      const { error } = await supabase
+        .from('orcamentos')
+        .insert([dadosInsercao]);
+
+      if (error) {
+        console.error('Erro detalhado:', error);
+        throw error;
+      }
+
+      setShowModal(false);
+      setFormData({
+        titulo: '',
+        tipo: '',
+        descricao: '',
+        valor: '',
+        recuperavel: false,
+        artista_id: '',
+        projeto_id: '',
+        data_vencimento: '',
+        status_pagamento: 'pendente',
+        comprovante: null
+      });
+      loadData();
+    } catch (error: any) {
+      console.error('Erro ao criar orçamento:', error);
+      const errorMessage = error?.message || 'Erro desconhecido ao criar orçamento';
+      alert(`Erro ao criar orçamento: ${errorMessage}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleAprovar = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('orcamentos')
+        .update({ status: 'aprovado' })
+        .eq('id', id);
+
+      if (error) throw error;
+      loadOrcamentos();
+    } catch (error) {
+      console.error('Erro ao aprovar orçamento:', error);
+      alert('Erro ao aprovar orçamento. Tente novamente.');
+    }
+  };
+
+  const handleRecusar = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('orcamentos')
+        .update({ status: 'recusado' })
+        .eq('id', id);
+
+      if (error) throw error;
+      loadOrcamentos();
+    } catch (error) {
+      console.error('Erro ao recusar orçamento:', error);
+      alert('Erro ao recusar orçamento. Tente novamente.');
+    }
+  };
 
   const stats = [
-    { label: 'Total Pendente', value: `R$ ${totalPendente.toLocaleString('pt-BR')}`, icon: 'ri-time-line', color: 'from-yellow-500 to-yellow-700' },
-    { label: 'Total Aprovado', value: `R$ ${totalAprovado.toLocaleString('pt-BR')}`, icon: 'ri-check-line', color: 'from-green-500 to-green-700' },
-    { label: 'Total Realizado', value: `R$ ${totalRealizado.toLocaleString('pt-BR')}`, icon: 'ri-money-dollar-circle-line', color: 'from-primary-teal to-primary-brown' },
-    { label: 'Aguardando Aprovação', value: aguardandoAprovacao, icon: 'ri-file-list-3-line', color: 'from-blue-500 to-blue-700' },
+    { label: 'Total Pendente', value: `R$ ${orcamentos.filter(o => o.status === 'pendente').reduce((sum, o) => sum + (o.valor || 0), 0).toLocaleString('pt-BR')}`, icon: 'ri-time-line', color: 'from-yellow-500 to-yellow-700' },
+    { label: 'Total Aprovado', value: `R$ ${orcamentos.filter(o => o.status === 'aprovado').reduce((sum, o) => sum + (o.valor || 0), 0).toLocaleString('pt-BR')}`, icon: 'ri-check-line', color: 'from-green-500 to-green-700' },
+    { label: 'Aguardando Aprovação', value: orcamentos.filter(o => o.status === 'pendente').length, icon: 'ri-file-list-3-line', color: 'from-primary-teal to-primary-brown' },
   ];
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-  };
 
   if (loading) {
     return (
@@ -219,28 +285,26 @@ export default function Orcamentos() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">Orçamentos</h1>
-            <p className="text-gray-400">Gerencie orçamentos e aprovações por projeto</p>
+            <p className="text-gray-400">Gerencie orçamentos e aprovações</p>
           </div>
-          {canCreate && (
-            <button 
-              onClick={() => setShowModal(true)}
-              className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
-            >
-              <i className="ri-add-line text-xl"></i>
-              Novo Orçamento
-            </button>
-          )}
+          <button 
+            onClick={() => setShowModal(true)}
+            className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
+          >
+            <i className="ri-add-line text-xl"></i>
+            Novo Orçamento
+          </button>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           {stats.map((stat, index) => (
             <div key={index} className="bg-dark-card border border-dark-border rounded-xl p-6">
               <div className="flex items-center justify-between mb-3">
                 <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${stat.color} flex items-center justify-center`}>
                   <i className={`${stat.icon} text-2xl text-white`}></i>
                 </div>
-                <span className="text-2xl font-bold text-white">{typeof stat.value === 'number' ? stat.value : stat.value}</span>
+                <span className="text-2xl font-bold text-white">{stat.value}</span>
               </div>
               <p className="text-sm text-gray-400">{stat.label}</p>
             </div>
@@ -254,13 +318,13 @@ export default function Orcamentos() {
               <i className="ri-search-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg"></i>
               <input
                 type="text"
-                placeholder="Buscar orçamentos por projeto ou descrição..."
+                placeholder="Buscar orçamentos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
               />
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2">
               {(['todos', 'pendente', 'aprovado', 'recusado'] as FilterStatus[]).map((status) => (
                 <button
                   key={status}
@@ -284,96 +348,61 @@ export default function Orcamentos() {
             <table className="w-full">
               <thead className="bg-dark-bg border-b border-dark-border">
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Projeto</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Artista</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Orçamento Total</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Valor Realizado</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Diferença</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Tipo</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Descrição</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Valor</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Status</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Data</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredOrcamentos.map((orc) => {
-                  const diferenca = orc.valor_total - orc.valor_realizado;
-                  const percentualRealizado = orc.valor_total > 0 ? (orc.valor_realizado / orc.valor_total) * 100 : 0;
-                  
-                  return (
-                    <tr 
-                      key={orc.id} 
-                      className="border-b border-dark-border hover:bg-dark-hover transition-smooth cursor-pointer"
-                      onClick={() => navigate(`/financeiro?orcamento_id=${orc.id}`)}
-                    >
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-medium text-white">{orc.projeto?.nome || 'Projeto não encontrado'}</span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-400">{orc.projeto?.artista?.nome || '-'}</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-white whitespace-nowrap">
-                        {formatCurrency(orc.valor_total)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-sm font-semibold text-primary-teal whitespace-nowrap">
-                            {formatCurrency(orc.valor_realizado)}
-                          </span>
-                          <div className="w-20 h-1.5 bg-dark-border rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full transition-smooth ${
-                                percentualRealizado <= 100 ? 'bg-primary-teal' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${Math.min(percentualRealizado, 100)}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`text-sm font-medium whitespace-nowrap ${
-                          diferenca >= 0 ? 'text-green-400' : 'text-red-400'
-                        }`}>
-                          {formatCurrency(diferenca)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusColor(orc.status)}`}>
-                          {getStatusLabel(orc.status)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-400 whitespace-nowrap">
-                        {new Date(orc.created_at).toLocaleDateString('pt-BR')}
-                      </td>
-                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-2">
-                          {orc.status === 'pendente' && canApprove && (
-                            <>
-                              <button 
-                                onClick={() => handleApprove(orc.id)}
-                                className="p-2 hover:bg-green-500/20 text-green-400 rounded-lg transition-smooth cursor-pointer" 
-                                title="Aprovar"
-                              >
-                                <i className="ri-check-line text-lg"></i>
-                              </button>
-                              <button 
-                                onClick={() => handleReject(orc.id)}
-                                className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-smooth cursor-pointer" 
-                                title="Recusar"
-                              >
-                                <i className="ri-close-line text-lg"></i>
-                              </button>
-                            </>
-                          )}
-                          <button 
-                            onClick={() => navigate(`/financeiro?orcamento_id=${orc.id}`)}
-                            className="p-2 hover:bg-dark-bg rounded-lg transition-smooth cursor-pointer"
-                            title="Ver pagamentos"
-                          >
-                            <i className="ri-eye-line text-gray-400 text-lg hover:text-primary-teal"></i>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {filteredOrcamentos.map((orc) => (
+                  <tr key={orc.id} className="border-b border-dark-border hover:bg-dark-hover transition-smooth">
+                    <td className="px-6 py-4">
+                      <span className="px-3 py-1 bg-primary-teal/20 text-primary-teal text-xs rounded-full font-medium whitespace-nowrap">
+                        {getTipoLabel(orc.tipo)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-white font-medium">{orc.descricao}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-white whitespace-nowrap">
+                      R$ {orc.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusColor(orc.status)}`}>
+                        {getStatusLabel(orc.status)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-400 whitespace-nowrap">
+                      {new Date(orc.created_at).toLocaleDateString('pt-BR')}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        {orc.status === 'pendente' && (
+                          <>
+                            <button 
+                              onClick={() => handleAprovar(orc.id)}
+                              className="p-2 hover:bg-green-500/20 text-green-400 rounded-lg transition-smooth cursor-pointer" 
+                              title="Aprovar"
+                            >
+                              <i className="ri-check-line text-lg"></i>
+                            </button>
+                            <button 
+                              onClick={() => handleRecusar(orc.id)}
+                              className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-smooth cursor-pointer" 
+                              title="Recusar"
+                            >
+                              <i className="ri-close-line text-lg"></i>
+                            </button>
+                          </>
+                        )}
+                        <button className="p-2 hover:bg-dark-bg rounded-lg transition-smooth cursor-pointer">
+                          <i className="ri-eye-line text-gray-400 text-lg"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -389,9 +418,9 @@ export default function Orcamentos() {
         {/* Modal Novo Orçamento */}
         {showModal && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-white">Novo Orçamento</h2>
+            <div className="bg-dark-card border border-dark-border rounded-xl p-8 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-2xl font-bold text-white">Novo Orçamento</h2>
                 <button 
                   onClick={() => setShowModal(false)}
                   className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
@@ -400,47 +429,161 @@ export default function Orcamentos() {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Título */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Projeto</label>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Título</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.titulo}
+                    onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                    placeholder="Ex: Produção Single - Alex Lucio"
+                  />
+                </div>
+
+                {/* Tipo */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Tipo</label>
                   <select
                     required
-                    value={formData.projeto_id}
-                    onChange={(e) => setFormData({ ...formData, projeto_id: e.target.value })}
+                    value={formData.tipo}
+                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
                     className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
                   >
-                    <option value="">Selecione um projeto</option>
-                    {projetos.map((projeto) => (
-                      <option key={projeto.id} value={projeto.id}>
-                        {projeto.nome} {projeto.artista?.nome ? `- ${projeto.artista.nome}` : ''}
-                      </option>
+                    <option value="">Selecione o tipo</option>
+                    <option value="producao">Produção</option>
+                    <option value="clipe">Clipe / Vídeo</option>
+                    <option value="capa">Capa / Design</option>
+                    <option value="midia">Mídia / Marketing</option>
+                    <option value="outro">Outro</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 Para Mixagem ou Masterização, use "Produção" ou "Outro"
+                  </p>
+                </div>
+
+                {/* Descrição */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Descrição</label>
+                  <textarea
+                    required
+                    value={formData.descricao}
+                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
+                    placeholder="Descreva o orçamento detalhadamente"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Valor */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Valor (R$)</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.valor}
+                    onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                {/* Recuperabilidade */}
+                <div className="flex items-center gap-3 p-4 bg-dark-bg rounded-lg border border-dark-border">
+                  <input
+                    type="checkbox"
+                    id="recuperavel"
+                    checked={formData.recuperavel}
+                    onChange={(e) => setFormData({ ...formData, recuperavel: e.target.checked })}
+                    className="w-5 h-5 rounded border-dark-border bg-dark-hover text-primary-teal focus:ring-primary-teal focus:ring-2 cursor-pointer"
+                  />
+                  <label htmlFor="recuperavel" className="text-sm text-white cursor-pointer">
+                    Valor Recuperável <span className="text-gray-500 text-xs">(será descontado do artista)</span>
+                  </label>
+                </div>
+
+                {/* Vínculo com Artista */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Vínculo com Artista (opcional)</label>
+                  <select
+                    value={formData.artista_id}
+                    onChange={(e) => setFormData({ ...formData, artista_id: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  >
+                    <option value="">Nenhum artista</option>
+                    {artistas.map((artista) => (
+                      <option key={artista.id} value={artista.id}>{artista.nome}</option>
                     ))}
                   </select>
                 </div>
 
+                {/* Vínculo com Projeto */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Orçamento Total (R$)</label>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Vínculo com Projeto (opcional)</label>
+                  <select
+                    value={formData.projeto_id}
+                    onChange={(e) => setFormData({ ...formData, projeto_id: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  >
+                    <option value="">Nenhum projeto</option>
+                    {projetos.map((projeto) => (
+                      <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Data de Vencimento */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Data de Vencimento (opcional)</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                    value={formData.valor_total}
-                    onChange={(e) => setFormData({ ...formData, valor_total: e.target.value })}
+                    type="date"
+                    value={formData.data_vencimento}
+                    onChange={(e) => setFormData({ ...formData, data_vencimento: e.target.value })}
                     className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                    placeholder="0,00"
                   />
                 </div>
 
+                {/* Status de Pagamento */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Descrição (opcional)</label>
-                  <textarea
-                    value={formData.descricao}
-                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
-                    placeholder="Descrição do orçamento..."
-                    rows={3}
-                  />
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Status de Pagamento</label>
+                  <select
+                    value={formData.status_pagamento}
+                    onChange={(e) => setFormData({ ...formData, status_pagamento: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  >
+                    <option value="pendente">Pendente</option>
+                    <option value="pago">Pago</option>
+                    <option value="parcial">Parcialmente Pago</option>
+                    <option value="atrasado">Atrasado</option>
+                  </select>
+                </div>
+
+                {/* Anexo de Comprovante */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Anexar Comprovante (opcional)</label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={handleFileChange}
+                      className="hidden"
+                      id="comprovante-upload"
+                    />
+                    <label
+                      htmlFor="comprovante-upload"
+                      className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-gray-400 hover:text-white hover:border-primary-teal transition-smooth cursor-pointer"
+                    >
+                      <i className="ri-upload-2-line text-xl"></i>
+                      <span className="text-sm">
+                        {formData.comprovante ? formData.comprovante.name : 'Selecione um arquivo'}
+                      </span>
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Formatos aceitos: PDF, JPG, PNG (máx. 10MB)</p>
                 </div>
 
                 <div className="flex gap-3 pt-4">
@@ -453,9 +596,10 @@ export default function Orcamentos() {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
+                    disabled={uploading}
+                    className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Criar Orçamento
+                    {uploading ? 'Salvando...' : 'Criar Orçamento'}
                   </button>
                 </div>
               </form>
