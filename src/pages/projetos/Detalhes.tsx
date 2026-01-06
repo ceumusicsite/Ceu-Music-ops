@@ -44,6 +44,7 @@ export default function ProjetoDetalhes() {
   const [loading, setLoading] = useState(true);
   const [showFaixaModal, setShowFaixaModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showFaseDropdown, setShowFaseDropdown] = useState(false);
   const [editingFaixa, setEditingFaixa] = useState<Faixa | null>(null);
   const [formData, setFormData] = useState({
     estudio: '',
@@ -61,6 +62,21 @@ export default function ProjetoDetalhes() {
       loadProjetoData();
     }
   }, [id]);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showFaseDropdown && !target.closest('.fase-dropdown-container')) {
+        setShowFaseDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFaseDropdown]);
 
   const loadProjetoData = async () => {
     try {
@@ -150,6 +166,39 @@ export default function ProjetoDetalhes() {
       alert('Erro ao atualizar projeto. Tente novamente.');
     }
   };
+
+  const handleUpdateFase = async (novaFase: string) => {
+    if (!id || !projeto) return;
+
+    try {
+      const { error } = await supabase
+        .from('projetos')
+        .update({
+          fase: novaFase,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setProjeto({ ...projeto, fase: novaFase });
+      setShowFaseDropdown(false);
+      loadProjetoData();
+    } catch (error) {
+      console.error('Erro ao atualizar fase:', error);
+      alert('Erro ao atualizar fase. Tente novamente.');
+    }
+  };
+
+  const fases = [
+    { value: 'planejamento', label: 'Planejamento' },
+    { value: 'gravando', label: 'Gravando' },
+    { value: 'em_edicao', label: 'Em edição' },
+    { value: 'mixagem', label: 'Mixagem' },
+    { value: 'masterizacao', label: 'Masterização' },
+    { value: 'finalizado', label: 'Finalizado' },
+    { value: 'lancado', label: 'Lançado' }
+  ];
 
   const handleSubmitFaixa = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -327,9 +376,32 @@ export default function ProjetoDetalhes() {
                 <span className="px-3 py-1 bg-primary-teal/20 text-primary-teal text-sm font-medium rounded">
                   {getTipoLabel(projeto.tipo)}
                 </span>
-                <span className="px-3 py-1 bg-blue-500/20 text-blue-400 text-sm font-medium rounded">
-                  {getFaseLabel(projeto.fase)}
-                </span>
+                <div className="relative fase-dropdown-container">
+                  <button
+                    onClick={() => setShowFaseDropdown(!showFaseDropdown)}
+                    className="px-3 py-1 bg-blue-500/20 text-blue-400 text-sm font-medium rounded hover:bg-blue-500/30 transition-smooth cursor-pointer flex items-center gap-2"
+                  >
+                    {getFaseLabel(projeto.fase)}
+                    <i className={`ri-arrow-${showFaseDropdown ? 'up' : 'down'}-s-line text-xs`}></i>
+                  </button>
+                  {showFaseDropdown && (
+                    <div className="absolute top-full left-0 mt-2 bg-dark-card border border-dark-border rounded-lg shadow-xl z-50 min-w-[180px]">
+                      {fases.map((fase) => (
+                        <button
+                          key={fase.value}
+                          onClick={() => handleUpdateFase(fase.value)}
+                          className={`w-full text-left px-4 py-2 text-sm transition-smooth cursor-pointer first:rounded-t-lg last:rounded-b-lg ${
+                            projeto.fase === fase.value
+                              ? 'bg-blue-500/20 text-blue-400'
+                              : 'text-gray-300 hover:bg-dark-hover hover:text-white'
+                          }`}
+                        >
+                          {fase.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <p className="text-gray-400">{projeto.artista?.nome || 'Sem artista'}</p>
             </div>

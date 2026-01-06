@@ -2,22 +2,29 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const menuItems = [
-  { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro'] },
-  { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'executivo', 'ar', 'producao'] },
-  { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'executivo', 'ar', 'producao'] },
-  { path: '/orcamentos', icon: 'ri-file-list-3-line', label: 'Orçamentos', roles: ['admin', 'executivo', 'ar', 'financeiro'] },
-  { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'executivo', 'financeiro'] },
-  { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'executivo', 'ar', 'producao'] },
-  { path: '/documentos', icon: 'ri-file-line', label: 'Documentos', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro'] },
+  { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'producao', 'financeiro'] },
+  { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'producao'] },
+  { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'producao'] },
+  { path: '/orcamentos', icon: 'ri-file-list-3-line', label: 'Orçamentos', roles: ['admin', 'producao', 'financeiro'] },
+  { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'financeiro'] },
+  { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'producao'] },
+  { path: '/documentos', icon: 'ri-file-line', label: 'Documentos', roles: ['admin', 'producao', 'financeiro'] },
 ];
 
 export default function Sidebar() {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
 
   const visibleMenuItems = menuItems.filter(item => 
     user && item.roles.includes(user.role)
   );
+
+  // Debug: verificar se usuário está carregado
+  if (!loading && !user) {
+    console.warn('Sidebar: Usuário não está logado');
+  } else if (user) {
+    console.log('Sidebar: Usuário logado:', { name: user.name, role: user.role, visibleItems: visibleMenuItems.length });
+  }
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-dark-card border-r border-dark-border flex flex-col z-50">
@@ -38,23 +45,29 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-3">
-        {visibleMenuItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-smooth cursor-pointer ${
-                isActive
-                  ? 'bg-gradient-primary text-white'
-                  : 'text-gray-400 hover:bg-dark-hover hover:text-white'
-              }`}
-            >
-              <i className={`${item.icon} text-xl w-6 h-6 flex items-center justify-center`}></i>
-              <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
-            </Link>
-          );
-        })}
+        {visibleMenuItems.length > 0 ? (
+          visibleMenuItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-smooth cursor-pointer ${
+                  isActive
+                    ? 'bg-gradient-primary text-white'
+                    : 'text-gray-400 hover:bg-dark-hover hover:text-white'
+                }`}
+              >
+                <i className={`${item.icon} text-xl w-6 h-6 flex items-center justify-center`}></i>
+                <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
+              </Link>
+            );
+          })
+        ) : (
+          <div className="px-4 py-3 text-gray-500 text-sm">
+            {user ? `Carregando menu... (Role: ${user.role})` : 'Faça login para ver o menu'}
+          </div>
+        )}
       </nav>
 
       {/* User Profile */}

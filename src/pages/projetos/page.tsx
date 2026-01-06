@@ -71,12 +71,96 @@ export default function Projetos() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validar campos obrigatórios com mensagens específicas
+    if (!formData.nome || !formData.nome.trim()) {
+      alert('Por favor, preencha o nome do projeto.');
+      return;
+    }
+    
+    if (!formData.artista_id || formData.artista_id.trim() === '') {
+      alert('Por favor, selecione um artista responsável.');
+      return;
+    }
+    
+    if (!formData.tipo || formData.tipo.trim() === '') {
+      alert('Por favor, selecione o tipo do projeto.');
+      return;
+    }
+    
+    if (!formData.fase || formData.fase.trim() === '') {
+      alert('Por favor, selecione o status do projeto.');
+      return;
+    }
+    
     try {
-      const { error } = await supabase
+      // Preparar dados para inserção
+      const dadosParaInserir: any = {
+        nome: formData.nome.trim(),
+        titulo: formData.nome.trim(), // A tabela também requer titulo
+        tipo: formData.tipo.trim(),
+        artista_id: formData.artista_id.trim(),
+        fase: formData.fase.trim(),
+        progresso: formData.progresso || 0,
+        prioridade: formData.prioridade || 'media'
+      };
+      
+      // Adicionar datas apenas se preenchidas e válidas
+      if (formData.data_inicio && formData.data_inicio.trim()) {
+        const dataInicio = new Date(formData.data_inicio);
+        if (!isNaN(dataInicio.getTime())) {
+          dadosParaInserir.data_inicio = formData.data_inicio;
+        }
+      }
+      
+      if (formData.previsao_lancamento && formData.previsao_lancamento.trim()) {
+        const dataLancamento = new Date(formData.previsao_lancamento);
+        if (!isNaN(dataLancamento.getTime())) {
+          dadosParaInserir.previsao_lancamento = formData.previsao_lancamento;
+        }
+      }
+      
+      // Validar que todos os campos obrigatórios estão presentes
+      const camposObrigatorios = ['nome', 'tipo', 'artista_id', 'fase'];
+      const camposFaltando = camposObrigatorios.filter(campo => !dadosParaInserir[campo]);
+      
+      if (camposFaltando.length > 0) {
+        alert(`Erro: Os seguintes campos são obrigatórios e não foram preenchidos: ${camposFaltando.join(', ')}`);
+        console.error('Campos faltando:', camposFaltando);
+        console.error('Dados completos:', dadosParaInserir);
+        return;
+      }
+      
+      console.log('=== DEBUG: Criando Projeto ===');
+      console.log('FormData completo:', formData);
+      console.log('Dados sendo enviados:', dadosParaInserir);
+      console.log('Validação: Todos os campos obrigatórios estão presentes');
+      console.log('Nome:', dadosParaInserir.nome, '- Tipo:', typeof dadosParaInserir.nome);
+      console.log('Tipo:', dadosParaInserir.tipo, '- Tipo:', typeof dadosParaInserir.tipo);
+      console.log('Artista ID:', dadosParaInserir.artista_id, '- Tipo:', typeof dadosParaInserir.artista_id);
+      console.log('Fase:', dadosParaInserir.fase, '- Tipo:', typeof dadosParaInserir.fase);
+      
+      // Verificar se artista_id é um UUID válido
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (dadosParaInserir.artista_id && !uuidRegex.test(dadosParaInserir.artista_id)) {
+        console.warn('⚠️ Artista ID não parece ser um UUID válido:', dadosParaInserir.artista_id);
+      }
+      
+      // Forçar atualização do cache fazendo um select primeiro
+      await supabase.from('projetos').select('nome, fase').limit(0);
+      
+      const { data, error } = await supabase
         .from('projetos')
-        .insert([formData]);
+        .insert([dadosParaInserir])
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro detalhado:', error);
+        console.error('Dados que tentaram ser inseridos:', dadosParaInserir);
+        throw error;
+      }
+
+      console.log('Projeto criado com sucesso:', data);
 
       setShowModal(false);
       setFormData({
@@ -90,9 +174,46 @@ export default function Projetos() {
         previsao_lancamento: ''
       });
       loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao criar projeto:', error);
-      alert('Erro ao criar projeto. Tente novamente.');
+      console.error('Detalhes completos do erro:', JSON.stringify(error, null, 2));
+      console.error('FormData atual:', formData);
+      
+      // Mensagem de erro mais específica
+      let errorMessage = 'Erro ao criar projeto. Tente novamente.';
+      
+      if (error) {
+        // Log completo do erro
+        console.log('Código do erro:', error.code);
+        console.log('Mensagem do erro:', error.message);
+        console.log('Detalhes:', error.details);
+        console.log('Hint:', error.hint);
+        
+        if (error.message) {
+          if (error.message.includes('foreign key') || error.message.includes('violates foreign key')) {
+            errorMessage = 'Erro: Artista selecionado não é válido. Verifique se o artista existe no banco de dados.';
+          } else if (error.message.includes('check constraint') || error.message.includes('violates check constraint')) {
+            errorMessage = 'Erro: Algum valor não está nos formatos permitidos.\n\nVerifique:\n- Tipo: deve ser "single", "ep" ou "album"\n- Fase: deve ser uma das fases válidas\n- Prioridade: deve ser "alta", "media" ou "baixa"';
+          } else if (error.message.includes('null value') || error.message.includes('violates not-null constraint') || error.message.includes('null constraint')) {
+            // Tentar identificar qual campo está faltando
+            let campoFaltando = 'algum campo';
+            if (error.message.includes('nome')) campoFaltando = 'nome';
+            else if (error.message.includes('tipo')) campoFaltando = 'tipo';
+            else if (error.message.includes('artista_id') || error.message.includes('artista')) campoFaltando = 'artista responsável';
+            else if (error.message.includes('fase')) campoFaltando = 'fase/status';
+            
+            errorMessage = `Erro: O campo "${campoFaltando}" é obrigatório e não foi preenchido corretamente.\n\nVerifique se todos os campos foram preenchidos antes de criar o projeto.`;
+          } else if (error.message.includes('PGRST204') || error.message.includes('Could not find')) {
+            errorMessage = `Erro: Coluna não encontrada no banco.\n\nCache pode não ter atualizado. Aguarde alguns segundos e tente novamente.\n\nDetalhes: ${error.message}`;
+          } else {
+            errorMessage = `Erro: ${error.message}\n\nVerifique o console do navegador (F12) para mais detalhes.`;
+          }
+        } else if (error.code) {
+          errorMessage = `Erro ${error.code}: ${error.message || 'Erro desconhecido'}\n\nVerifique o console do navegador (F12) para mais detalhes.`;
+        }
+      }
+      
+      alert(errorMessage);
     }
   };
 
@@ -361,12 +482,19 @@ export default function Projetos() {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Nome do Projeto</label>
+                  <label htmlFor="nome-projeto-input" className="block text-sm font-medium text-gray-400 mb-2">Nome do Projeto</label>
                   <input
+                    id="nome-projeto-input"
                     type="text"
                     required
+                    autoFocus
                     value={formData.nome}
-                    onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setFormData({ ...formData, nome: e.target.value });
+                    }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
                     className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
                     placeholder="Ex: Novo Single - Verão 2024"
                   />

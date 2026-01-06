@@ -26,6 +26,9 @@ export default function Artistas() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [supabaseTableName, setSupabaseTableName] = useState('artistas');
+  const [showActionsMenu, setShowActionsMenu] = useState<string | null>(null);
+  const [artistaToDelete, setArtistaToDelete] = useState<Artista | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     nome: '',
@@ -79,6 +82,37 @@ export default function Artistas() {
       console.error('Erro ao criar artista:', error);
       alert('Erro ao criar artista. Tente novamente.');
     }
+  };
+
+  const handleDeleteClick = (artista: Artista) => {
+    setArtistaToDelete(artista);
+    setShowDeleteConfirm(true);
+    setShowActionsMenu(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!artistaToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('artistas')
+        .delete()
+        .eq('id', artistaToDelete.id);
+
+      if (error) throw error;
+
+      setShowDeleteConfirm(false);
+      setArtistaToDelete(null);
+      loadArtistas();
+    } catch (error) {
+      console.error('Erro ao deletar artista:', error);
+      alert('Erro ao deletar artista. Tente novamente.');
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setArtistaToDelete(null);
   };
 
   const filteredArtistas = artistas.filter(artista => {
@@ -404,7 +438,16 @@ export default function Artistas() {
         {/* Artists Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredArtistas.map((artista) => (
-            <div key={artista.id} className="bg-dark-card border border-dark-border rounded-xl p-6 hover:border-primary-teal transition-smooth cursor-pointer">
+            <div 
+              key={artista.id} 
+              className="bg-dark-card border border-dark-border rounded-xl p-6 hover:border-primary-teal transition-smooth"
+              onClick={() => {
+                // Fechar menu de ações se clicar fora dele
+                if (showActionsMenu !== artista.id) {
+                  setShowActionsMenu(null);
+                }
+              }}
+            >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center">
@@ -446,16 +489,58 @@ export default function Artistas() {
                 )}
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 relative">
                 <button 
                   onClick={() => navigate(`/artistas/${artista.id}`)}
                   className="flex-1 px-4 py-2 bg-dark-bg hover:bg-dark-hover text-white text-sm rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                 >
                   Ver Detalhes
                 </button>
-                <button className="px-4 py-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer">
-                  <i className="ri-more-2-fill"></i>
-                </button>
+                <div className="relative">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowActionsMenu(showActionsMenu === artista.id ? null : artista.id);
+                    }}
+                    className="px-4 py-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                    title="Mais opções"
+                  >
+                    <i className="ri-more-2-fill"></i>
+                  </button>
+                  
+                  {showActionsMenu === artista.id && (
+                    <div className="absolute right-0 bottom-full mb-2 w-48 bg-dark-card border border-dark-border rounded-lg shadow-lg z-10">
+                      <button
+                        onClick={() => {
+                          navigate(`/artistas/${artista.id}`);
+                          setShowActionsMenu(null);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2 rounded-t-lg"
+                      >
+                        <i className="ri-eye-line"></i>
+                        Ver Detalhes
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigate(`/artistas/${artista.id}`);
+                          setShowActionsMenu(null);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2"
+                      >
+                        <i className="ri-edit-line"></i>
+                        Editar
+                      </button>
+                      <div className="border-t border-dark-border"></div>
+                      <button
+                        onClick={() => handleDeleteClick(artista)}
+                        className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-smooth cursor-pointer flex items-center gap-2 rounded-b-lg"
+                      >
+                        <i className="ri-delete-bin-line"></i>
+                        Excluir
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -667,6 +752,42 @@ export default function Artistas() {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Confirmação de Exclusão */}
+        {showDeleteConfirm && artistaToDelete && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <i className="ri-alert-line text-2xl text-red-400"></i>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Confirmar Exclusão</h2>
+                  <p className="text-sm text-gray-400">Esta ação não pode ser desfeita</p>
+                </div>
+              </div>
+              
+              <p className="text-white mb-6">
+                Tem certeza que deseja excluir o artista <strong>"{artistaToDelete.nome}"</strong>?
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDeleteCancel}
+                  className="flex-1 px-4 py-2 bg-dark-bg border border-dark-border text-white font-medium rounded-lg hover:bg-dark-hover transition-smooth"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  className="flex-1 px-4 py-2 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-smooth"
+                >
+                  Excluir
+                </button>
+              </div>
             </div>
           </div>
         )}
