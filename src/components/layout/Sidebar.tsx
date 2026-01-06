@@ -44,23 +44,29 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-3">
-        {visibleMenuItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-smooth cursor-pointer ${
-                isActive
-                  ? 'bg-gradient-primary text-white'
-                  : 'text-gray-400 hover:bg-dark-hover hover:text-white'
-              }`}
-            >
-              <i className={`${item.icon} text-xl w-6 h-6 flex items-center justify-center`}></i>
-              <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
-            </Link>
-          );
-        })}
+        {visibleMenuItems.length > 0 ? (
+          visibleMenuItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-smooth cursor-pointer ${
+                  isActive
+                    ? 'bg-gradient-primary text-white'
+                    : 'text-gray-400 hover:bg-dark-hover hover:text-white'
+                }`}
+              >
+                <i className={`${item.icon} text-xl w-6 h-6 flex items-center justify-center`}></i>
+                <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
+              </Link>
+            );
+          })
+        ) : (
+          <div className="px-4 py-3 text-gray-500 text-sm">
+            {user ? `Carregando menu... (Role: ${user.role})` : 'Faça login para ver o menu'}
+          </div>
+        )}
       </nav>
 
       {/* User Profile */}

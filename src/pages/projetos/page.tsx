@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import { supabase } from '../../lib/supabase';
 
@@ -7,11 +8,14 @@ type ViewMode = 'list' | 'kanban';
 interface Projeto {
   id: string;
   nome: string;
+  tipo?: string;
   fase: string;
   progresso: number;
-  prazo: string;
+  prazo?: string;
+  previsao_lancamento?: string;
   prioridade: string;
-  artista: { nome: string };
+  artista?: { nome: string; id?: string };
+  artista_id?: string;
 }
 
 interface Artista {
@@ -20,16 +24,21 @@ interface Artista {
 }
 
 export default function Projetos() {
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [artistas, setArtistas] = useState<Artista[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState<string | null>(null);
+  const [projetoToDelete, setProjetoToDelete] = useState<Projeto | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState({
     nome: '',
+    tipo: '',
     artista_id: '',
-    fase: 'ideia',
+    fase: 'planejamento',
     progresso: 0,
     prioridade: 'media',
     prazo: ''
@@ -39,12 +48,34 @@ export default function Projetos() {
     loadData();
   }, []);
 
+  // Fechar menu de ações ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      // Não fechar se o clique foi dentro do menu ou no botão que abre o menu
+      if (showActionsMenu && !target.closest('.actions-menu-container') && !target.closest('.actions-menu-button')) {
+        setShowActionsMenu(null);
+      }
+    };
+
+    if (showActionsMenu) {
+      // Usar um pequeno delay para não fechar imediatamente após abrir
+      setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+      }, 100);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showActionsMenu]);
+
   const loadData = async () => {
     try {
+      setLoading(true);
       const [projetosRes, artistasRes] = await Promise.all([
         supabase
           .from('projetos')
-          .select('id, nome, fase, progresso, prazo, prioridade, artista:artista_id(nome)')
+          .select('id, nome, tipo, fase, progresso, prioridade, data_inicio, previsao_lancamento, artista_id, artista:artista_id(id, nome)')
           .order('created_at', { ascending: false }),
         supabase
           .from('artistas')
@@ -53,8 +84,18 @@ export default function Projetos() {
           .order('nome')
       ]);
 
-      if (projetosRes.data) setProjetos(projetosRes.data as any);
-      if (artistasRes.data) setArtistas(artistasRes.data);
+      if (projetosRes.error) {
+        console.error('Erro ao carregar projetos:', projetosRes.error);
+      } else {
+        console.log('Projetos carregados:', projetosRes.data?.length || 0);
+        setProjetos(projetosRes.data as any || []);
+      }
+
+      if (artistasRes.error) {
+        console.error('Erro ao carregar artistas:', artistasRes.error);
+      } else {
+        setArtistas(artistasRes.data || []);
+      }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
@@ -64,30 +105,147 @@ export default function Projetos() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validar campos obrigatórios com mensagens específicas
+    if (!formData.nome || !formData.nome.trim()) {
+      alert('Por favor, preencha o nome do projeto.');
+      return;
+    }
+    
+    if (!formData.artista_id || formData.artista_id.trim() === '') {
+      alert('Por favor, selecione um artista responsável.');
+      return;
+    }
+    
+    if (!formData.tipo || formData.tipo.trim() === '') {
+      alert('Por favor, selecione o tipo do projeto.');
+      return;
+    }
+    
+    if (!formData.fase || formData.fase.trim() === '') {
+      alert('Por favor, selecione o status do projeto.');
+      return;
+    }
+    
     try {
-      const { error } = await supabase
+      // Preparar dados para inserção
+      const dadosParaInserir: any = {
+        nome: formData.nome.trim(),
+        titulo: formData.nome.trim(), // A tabela também requer titulo
+        tipo: formData.tipo.trim(),
+        artista_id: formData.artista_id.trim(),
+        fase: formData.fase.trim(),
+        progresso: formData.progresso || 0,
+        prioridade: formData.prioridade || 'media'
+      };
+      
+      // Adicionar datas apenas se preenchidas e válidas
+      if (formData.prazo && formData.prazo.trim()) {
+        const dataLancamento = new Date(formData.prazo);
+        if (!isNaN(dataLancamento.getTime())) {
+          dadosParaInserir.previsao_lancamento = formData.prazo;
+        }
+      }
+      
+      // Validar que todos os campos obrigatórios estão presentes
+      const camposObrigatorios = ['nome', 'tipo', 'artista_id', 'fase'];
+      const camposFaltando = camposObrigatorios.filter(campo => !dadosParaInserir[campo]);
+      
+      if (camposFaltando.length > 0) {
+        alert(`Erro: Os seguintes campos são obrigatórios e não foram preenchidos: ${camposFaltando.join(', ')}`);
+        console.error('Campos faltando:', camposFaltando);
+        console.error('Dados completos:', dadosParaInserir);
+        return;
+      }
+      
+      console.log('=== DEBUG: Criando Projeto ===');
+      console.log('FormData completo:', formData);
+      console.log('Dados sendo enviados:', dadosParaInserir);
+      console.log('Validação: Todos os campos obrigatórios estão presentes');
+      console.log('Nome:', dadosParaInserir.nome, '- Tipo:', typeof dadosParaInserir.nome);
+      console.log('Tipo:', dadosParaInserir.tipo, '- Tipo:', typeof dadosParaInserir.tipo);
+      console.log('Artista ID:', dadosParaInserir.artista_id, '- Tipo:', typeof dadosParaInserir.artista_id);
+      console.log('Fase:', dadosParaInserir.fase, '- Tipo:', typeof dadosParaInserir.fase);
+      
+      // Verificar se artista_id é um UUID válido
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (dadosParaInserir.artista_id && !uuidRegex.test(dadosParaInserir.artista_id)) {
+        console.warn('⚠️ Artista ID não parece ser um UUID válido:', dadosParaInserir.artista_id);
+      }
+      
+      // Forçar atualização do cache fazendo um select primeiro
+      await supabase.from('projetos').select('nome, fase').limit(0);
+      
+      const { data, error } = await supabase
         .from('projetos')
-        .insert([formData]);
+        .insert([dadosParaInserir])
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro detalhado:', error);
+        console.error('Dados que tentaram ser inseridos:', dadosParaInserir);
+        throw error;
+      }
+
+      console.log('Projeto criado com sucesso:', data);
 
       setShowModal(false);
       setFormData({
         nome: '',
+        tipo: '',
         artista_id: '',
-        fase: 'ideia',
+        fase: 'planejamento',
         progresso: 0,
         prioridade: 'media',
         prazo: ''
       });
-      loadData();
-    } catch (error) {
+      
+      // Recarregar dados após criar projeto
+      await loadData();
+    } catch (error: any) {
       console.error('Erro ao criar projeto:', error);
-      alert('Erro ao criar projeto. Tente novamente.');
+      console.error('Detalhes completos do erro:', JSON.stringify(error, null, 2));
+      console.error('FormData atual:', formData);
+      
+      // Mensagem de erro mais específica
+      let errorMessage = 'Erro ao criar projeto. Tente novamente.';
+      
+      if (error) {
+        // Log completo do erro
+        console.log('Código do erro:', error.code);
+        console.log('Mensagem do erro:', error.message);
+        console.log('Detalhes:', error.details);
+        console.log('Hint:', error.hint);
+        
+        if (error.message) {
+          if (error.message.includes('foreign key') || error.message.includes('violates foreign key')) {
+            errorMessage = 'Erro: Artista selecionado não é válido. Verifique se o artista existe no banco de dados.';
+          } else if (error.message.includes('check constraint') || error.message.includes('violates check constraint')) {
+            errorMessage = 'Erro: Algum valor não está nos formatos permitidos.\n\nVerifique:\n- Tipo: deve ser "single", "ep" ou "album"\n- Fase: deve ser uma das fases válidas\n- Prioridade: deve ser "alta", "media" ou "baixa"';
+          } else if (error.message.includes('null value') || error.message.includes('violates not-null constraint') || error.message.includes('null constraint')) {
+            // Tentar identificar qual campo está faltando
+            let campoFaltando = 'algum campo';
+            if (error.message.includes('nome')) campoFaltando = 'nome';
+            else if (error.message.includes('tipo')) campoFaltando = 'tipo';
+            else if (error.message.includes('artista_id') || error.message.includes('artista')) campoFaltando = 'artista responsável';
+            else if (error.message.includes('fase')) campoFaltando = 'fase/status';
+            
+            errorMessage = `Erro: O campo "${campoFaltando}" é obrigatório e não foi preenchido corretamente.\n\nVerifique se todos os campos foram preenchidos antes de criar o projeto.`;
+          } else if (error.message.includes('PGRST204') || error.message.includes('Could not find')) {
+            errorMessage = `Erro: Coluna não encontrada no banco.\n\nCache pode não ter atualizado. Aguarde alguns segundos e tente novamente.\n\nDetalhes: ${error.message}`;
+          } else {
+            errorMessage = `Erro: ${error.message}\n\nVerifique o console do navegador (F12) para mais detalhes.`;
+          }
+        } else if (error.code) {
+          errorMessage = `Erro ${error.code}: ${error.message || 'Erro desconhecido'}\n\nVerifique o console do navegador (F12) para mais detalhes.`;
+        }
+      }
+      
+      alert(errorMessage);
     }
   };
 
-  const phases = ['ideia', 'producao', 'gravacao', 'mixagem', 'masterizacao', 'aprovacao', 'agendamento', 'publicacao'];
+  const phases = ['planejamento', 'gravando', 'em_edicao', 'mixagem', 'masterizacao', 'finalizado', 'lancado'];
 
   const filteredProjetos = projetos.filter(projeto =>
     projeto.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -96,14 +254,13 @@ export default function Projetos() {
 
   const getPhaseColor = (phase: string) => {
     const colors: Record<string, string> = {
-      'ideia': 'bg-gray-500/20 text-gray-400',
-      'producao': 'bg-blue-500/20 text-blue-400',
-      'gravacao': 'bg-purple-500/20 text-purple-400',
+      'planejamento': 'bg-gray-500/20 text-gray-400',
+      'gravando': 'bg-blue-500/20 text-blue-400',
+      'em_edicao': 'bg-purple-500/20 text-purple-400',
       'mixagem': 'bg-yellow-500/20 text-yellow-400',
       'masterizacao': 'bg-orange-500/20 text-orange-400',
-      'aprovacao': 'bg-pink-500/20 text-pink-400',
-      'agendamento': 'bg-primary-teal/20 text-primary-teal',
-      'publicacao': 'bg-green-500/20 text-green-400',
+      'finalizado': 'bg-green-500/20 text-green-400',
+      'lancado': 'bg-primary-teal/20 text-primary-teal',
     };
     return colors[phase] || 'bg-gray-500/20 text-gray-400';
   };
@@ -119,16 +276,46 @@ export default function Projetos() {
 
   const getPhaseLabel = (phase: string) => {
     const labels: Record<string, string> = {
-      'ideia': 'Ideia',
-      'producao': 'Produção',
-      'gravacao': 'Gravação',
+      'planejamento': 'Planejamento',
+      'gravando': 'Gravando',
+      'em_edicao': 'Em Edição',
       'mixagem': 'Mixagem',
       'masterizacao': 'Masterização',
-      'aprovacao': 'Aprovação',
-      'agendamento': 'Agendamento',
-      'publicacao': 'Publicação'
+      'finalizado': 'Finalizado',
+      'lancado': 'Lançado'
     };
     return labels[phase] || phase;
+  };
+
+  const handleDeleteClick = (projeto: Projeto) => {
+    setProjetoToDelete(projeto);
+    setShowDeleteConfirm(true);
+    setShowActionsMenu(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!projetoToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('projetos')
+        .delete()
+        .eq('id', projetoToDelete.id);
+
+      if (error) throw error;
+
+      setShowDeleteConfirm(false);
+      setProjetoToDelete(null);
+      await loadData();
+    } catch (error) {
+      console.error('Erro ao deletar projeto:', error);
+      alert('Erro ao deletar projeto. Tente novamente.');
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setProjetoToDelete(null);
   };
 
   if (loading) {
@@ -214,7 +401,11 @@ export default function Projetos() {
                 </thead>
                 <tbody>
                   {filteredProjetos.map((projeto) => (
-                    <tr key={projeto.id} className="border-b border-dark-border hover:bg-dark-hover transition-smooth cursor-pointer">
+                    <tr 
+                      key={projeto.id} 
+                      className="border-b border-dark-border hover:bg-dark-hover transition-smooth"
+                      onClick={() => navigate(`/projetos/${projeto.id}`)}
+                    >
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center">
@@ -246,12 +437,74 @@ export default function Projetos() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-400 whitespace-nowrap">
-                        {projeto.prazo ? new Date(projeto.prazo).toLocaleDateString('pt-BR') : '-'}
+                        {projeto.previsao_lancamento ? new Date(projeto.previsao_lancamento).toLocaleDateString('pt-BR') : '-'}
                       </td>
-                      <td className="px-6 py-4">
-                        <button className="p-2 hover:bg-dark-bg rounded-lg transition-smooth cursor-pointer">
-                          <i className="ri-more-2-fill text-gray-400"></i>
-                        </button>
+                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="relative actions-menu-container">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              const newMenuState = showActionsMenu === projeto.id ? null : projeto.id;
+                              console.log('Toggle menu:', newMenuState);
+                              setShowActionsMenu(newMenuState);
+                            }}
+                            className="actions-menu-button p-2 hover:bg-dark-bg rounded-lg transition-smooth cursor-pointer"
+                            type="button"
+                          >
+                            <i className="ri-more-2-fill text-gray-400"></i>
+                          </button>
+                          
+                          {showActionsMenu === projeto.id && (
+                            <div 
+                              className="absolute right-0 bottom-full mb-2 w-48 bg-dark-card border border-dark-border rounded-lg shadow-lg z-50 actions-menu-container"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  console.log('Ver detalhes:', projeto.id);
+                                  setShowActionsMenu(null);
+                                  navigate(`/projetos/${projeto.id}`);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2 rounded-t-lg"
+                              >
+                                <i className="ri-eye-line"></i>
+                                Ver Detalhes
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  console.log('Editar:', projeto.id);
+                                  setShowActionsMenu(null);
+                                  navigate(`/projetos/${projeto.id}`);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2"
+                              >
+                                <i className="ri-edit-line"></i>
+                                Editar
+                              </button>
+                              <div className="border-t border-dark-border"></div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  console.log('Excluir:', projeto.id);
+                                  handleDeleteClick(projeto);
+                                }}
+                                className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-smooth cursor-pointer flex items-center gap-2 rounded-b-lg"
+                              >
+                                <i className="ri-delete-bin-line"></i>
+                                Excluir
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -295,7 +548,7 @@ export default function Projetos() {
                                 {projeto.prioridade.charAt(0).toUpperCase() + projeto.prioridade.slice(1)}
                               </span>
                               <span className="text-xs text-gray-500">
-                                {projeto.prazo ? new Date(projeto.prazo).toLocaleDateString('pt-BR') : '-'}
+                                {projeto.previsao_lancamento ? new Date(projeto.previsao_lancamento).toLocaleDateString('pt-BR') : '-'}
                               </span>
                             </div>
                           </div>
@@ -330,15 +583,37 @@ export default function Projetos() {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Nome do Projeto</label>
+                  <label htmlFor="nome-projeto-input" className="block text-sm font-medium text-gray-400 mb-2">Nome do Projeto</label>
                   <input
+                    id="nome-projeto-input"
                     type="text"
                     required
+                    autoFocus
                     value={formData.nome}
-                    onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setFormData({ ...formData, nome: e.target.value });
+                    }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
                     className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
                     placeholder="Ex: Novo Single - Verão 2024"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Tipo do Projeto</label>
+                  <select
+                    required
+                    value={formData.tipo}
+                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  >
+                    <option value="">Selecione o tipo</option>
+                    <option value="single">Single</option>
+                    <option value="ep">EP</option>
+                    <option value="album">Álbum</option>
+                  </select>
                 </div>
 
                 <div>
@@ -408,6 +683,42 @@ export default function Projetos() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Confirmação de Exclusão */}
+        {showDeleteConfirm && projetoToDelete && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <i className="ri-alert-line text-2xl text-red-400"></i>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Confirmar Exclusão</h2>
+                  <p className="text-sm text-gray-400">Esta ação não pode ser desfeita</p>
+                </div>
+              </div>
+              
+              <p className="text-white mb-6">
+                Tem certeza que deseja excluir o projeto <strong>"{projetoToDelete.nome}"</strong>?
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDeleteCancel}
+                  className="flex-1 px-4 py-2 bg-dark-bg border border-dark-border text-white font-medium rounded-lg hover:bg-dark-hover transition-smooth"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  className="flex-1 px-4 py-2 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-smooth"
+                >
+                  Excluir
+                </button>
+              </div>
             </div>
           </div>
         )}

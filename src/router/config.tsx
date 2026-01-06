@@ -8,6 +8,7 @@ import Dashboard from "../pages/dashboard/page";
 import Artistas from "../pages/artistas/page";
 import ArtistaDetalhes from "../pages/artistas/Detalhes";
 import Projetos from "../pages/projetos/page";
+import ProjetoDetalhes from "../pages/projetos/Detalhes";
 import Orcamentos from "../pages/orcamentos/page";
 import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
@@ -49,6 +50,10 @@ const routes: RouteObject[] = [
   {
     path: "/projetos",
     element: <Projetos />,
+  },
+  {
+    path: "/projetos/:id",
+    element: <ProjetoDetalhes />,
   },
   {
     path: "/orcamentos",

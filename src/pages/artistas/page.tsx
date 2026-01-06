@@ -20,6 +20,15 @@ export default function Artistas() {
   const [artistas, setArtistas] = useState<Artista[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importType, setImportType] = useState<'csv' | 'json' | 'supabase' | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
+  const [supabaseTableName, setSupabaseTableName] = useState('artistas');
+  const [showActionsMenu, setShowActionsMenu] = useState<string | null>(null);
+  const [artistaToDelete, setArtistaToDelete] = useState<Artista | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     nome: '',
@@ -73,6 +82,37 @@ export default function Artistas() {
       console.error('Erro ao criar artista:', error);
       alert('Erro ao criar artista. Tente novamente.');
     }
+  };
+
+  const handleDeleteClick = (artista: Artista) => {
+    setArtistaToDelete(artista);
+    setShowDeleteConfirm(true);
+    setShowActionsMenu(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!artistaToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('artistas')
+        .delete()
+        .eq('id', artistaToDelete.id);
+
+      if (error) throw error;
+
+      setShowDeleteConfirm(false);
+      setArtistaToDelete(null);
+      loadArtistas();
+    } catch (error) {
+      console.error('Erro ao deletar artista:', error);
+      alert('Erro ao deletar artista. Tente novamente.');
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setArtistaToDelete(null);
   };
 
   const filteredArtistas = artistas.filter(artista => {
@@ -154,7 +194,16 @@ export default function Artistas() {
         {/* Artists Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredArtistas.map((artista) => (
-            <div key={artista.id} className="bg-dark-card border border-dark-border rounded-xl p-6 hover:border-primary-teal transition-smooth cursor-pointer">
+            <div 
+              key={artista.id} 
+              className="bg-dark-card border border-dark-border rounded-xl p-6 hover:border-primary-teal transition-smooth"
+              onClick={() => {
+                // Fechar menu de ações se clicar fora dele
+                if (showActionsMenu !== artista.id) {
+                  setShowActionsMenu(null);
+                }
+              }}
+            >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center">
@@ -196,16 +245,58 @@ export default function Artistas() {
                 )}
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 relative">
                 <button 
                   onClick={() => navigate(`/artistas/${artista.id}`)}
                   className="flex-1 px-4 py-2 bg-dark-bg hover:bg-dark-hover text-white text-sm rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                 >
                   Ver Detalhes
                 </button>
-                <button className="px-4 py-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer">
-                  <i className="ri-more-2-fill"></i>
-                </button>
+                <div className="relative">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowActionsMenu(showActionsMenu === artista.id ? null : artista.id);
+                    }}
+                    className="px-4 py-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                    title="Mais opções"
+                  >
+                    <i className="ri-more-2-fill"></i>
+                  </button>
+                  
+                  {showActionsMenu === artista.id && (
+                    <div className="absolute right-0 bottom-full mb-2 w-48 bg-dark-card border border-dark-border rounded-lg shadow-lg z-10">
+                      <button
+                        onClick={() => {
+                          navigate(`/artistas/${artista.id}`);
+                          setShowActionsMenu(null);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2 rounded-t-lg"
+                      >
+                        <i className="ri-eye-line"></i>
+                        Ver Detalhes
+                      </button>
+                      <button
+                        onClick={() => {
+                          navigate(`/artistas/${artista.id}`);
+                          setShowActionsMenu(null);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2"
+                      >
+                        <i className="ri-edit-line"></i>
+                        Editar
+                      </button>
+                      <div className="border-t border-dark-border"></div>
+                      <button
+                        onClick={() => handleDeleteClick(artista)}
+                        className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-smooth cursor-pointer flex items-center gap-2 rounded-b-lg"
+                      >
+                        <i className="ri-delete-bin-line"></i>
+                        Excluir
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -215,6 +306,245 @@ export default function Artistas() {
           <div className="text-center py-12">
             <i className="ri-user-star-line text-6xl text-gray-600 mb-4"></i>
             <p className="text-gray-400">Nenhum artista encontrado</p>
+          </div>
+        )}
+
+        {/* Modal Importar Artistas */}
+        {showImportModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-white">Importar Artistas</h2>
+                <button 
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportType(null);
+                    setImportError(null);
+                    setImportSuccess(null);
+                  }}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+
+              {!importType ? (
+                <div className="space-y-4">
+                  <p className="text-gray-400 mb-6">Escolha o método de importação:</p>
+                  
+                  <button
+                    onClick={() => setImportType('csv')}
+                    className="w-full p-4 bg-dark-bg border border-dark-border rounded-lg hover:border-primary-teal transition-smooth cursor-pointer text-left flex items-center gap-4"
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-primary-teal/20 flex items-center justify-center">
+                      <i className="ri-file-text-line text-2xl text-primary-teal"></i>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-white font-medium mb-1">Importar de CSV</h3>
+                      <p className="text-sm text-gray-400">Faça upload de um arquivo CSV com os dados dos artistas</p>
+                    </div>
+                    <i className="ri-arrow-right-s-line text-gray-400 text-xl"></i>
+                  </button>
+
+                  <button
+                    onClick={() => setImportType('json')}
+                    className="w-full p-4 bg-dark-bg border border-dark-border rounded-lg hover:border-primary-teal transition-smooth cursor-pointer text-left flex items-center gap-4"
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-primary-teal/20 flex items-center justify-center">
+                      <i className="ri-code-s-slash-line text-2xl text-primary-teal"></i>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-white font-medium mb-1">Importar de JSON</h3>
+                      <p className="text-sm text-gray-400">Faça upload de um arquivo JSON com os dados dos artistas</p>
+                    </div>
+                    <i className="ri-arrow-right-s-line text-gray-400 text-xl"></i>
+                  </button>
+
+                  <button
+                    onClick={() => setImportType('supabase')}
+                    className="w-full p-4 bg-dark-bg border border-dark-border rounded-lg hover:border-primary-teal transition-smooth cursor-pointer text-left flex items-center gap-4"
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-primary-teal/20 flex items-center justify-center">
+                      <i className="ri-database-2-line text-2xl text-primary-teal"></i>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-white font-medium mb-1">Importar do Supabase</h3>
+                      <p className="text-sm text-gray-400">Importar de outra tabela no mesmo banco Supabase</p>
+                    </div>
+                    <i className="ri-arrow-right-s-line text-gray-400 text-xl"></i>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <button
+                    onClick={() => {
+                      setImportType(null);
+                      setImportError(null);
+                      setImportSuccess(null);
+                    }}
+                    className="flex items-center gap-2 text-gray-400 hover:text-white transition-smooth cursor-pointer mb-4"
+                  >
+                    <i className="ri-arrow-left-line"></i>
+                    <span>Voltar</span>
+                  </button>
+
+                  {importType === 'csv' && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">Arquivo CSV</label>
+                        <input
+                          type="file"
+                          accept=".csv"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFileImport(file);
+                          }}
+                          className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                        />
+                      </div>
+                      <div className="bg-dark-bg border border-dark-border rounded-lg p-4">
+                        <p className="text-sm text-gray-400 mb-2">Formato esperado (CSV):</p>
+                        <code className="text-xs text-gray-500 block mb-3">
+                          nome,gênero,contato_email,contato_telefone,status,observacoes_internas
+                        </code>
+                        <button
+                          onClick={downloadTemplate}
+                          className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer flex items-center gap-2"
+                        >
+                          <i className="ri-download-line"></i>
+                          Baixar template CSV
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {importType === 'json' && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">Arquivo JSON</label>
+                        <input
+                          type="file"
+                          accept=".json"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFileImport(file);
+                          }}
+                          className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                        />
+                      </div>
+                      <div className="bg-dark-bg border border-dark-border rounded-lg p-4">
+                        <p className="text-sm text-gray-400 mb-2">Formato esperado (JSON):</p>
+                        <code className="text-xs text-gray-500 block">
+                          {`[\n  {\n    "nome": "Nome do Artista",\n    "genero": "Pop",\n    "contato_email": "email@exemplo.com",\n    "contato_telefone": "(11) 99999-9999",\n    "status": "ativo"\n  }\n]`}
+                        </code>
+                      </div>
+                    </div>
+                  )}
+
+                  {importType === 'supabase' && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">Nome da Tabela</label>
+                        <input
+                          type="text"
+                          value={supabaseTableName}
+                          onChange={(e) => setSupabaseTableName(e.target.value)}
+                          placeholder="Ex: artistas, artists, performers"
+                          className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                        />
+                        <p className="text-xs text-gray-500 mt-2">
+                          Digite o nome da tabela no Supabase que contém os artistas do site da CEU Music
+                        </p>
+                      </div>
+                      <button
+                        onClick={importFromSupabase}
+                        disabled={importLoading || !supabaseTableName}
+                        className="w-full px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {importLoading ? (
+                          <>
+                            <i className="ri-loader-4-line animate-spin"></i>
+                            Importando...
+                          </>
+                        ) : (
+                          <>
+                            <i className="ri-download-line"></i>
+                            Importar da Tabela
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {importLoading && (
+                    <div className="text-center py-4">
+                      <i className="ri-loader-4-line text-4xl text-primary-teal animate-spin mb-2"></i>
+                      <p className="text-gray-400">Processando importação...</p>
+                    </div>
+                  )}
+
+                  {importError && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <i className="ri-error-warning-line text-red-400 text-xl"></i>
+                        <div className="flex-1">
+                          <p className="text-red-400 font-medium mb-1">Erro na importação</p>
+                          <p className="text-sm text-red-300">{importError}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {importSuccess && (
+                    <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <i className="ri-checkbox-circle-line text-green-400 text-xl"></i>
+                        <div className="flex-1">
+                          <p className="text-green-400 font-medium mb-1">Importação concluída!</p>
+                          <p className="text-sm text-green-300">{importSuccess}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Confirmação de Exclusão */}
+        {showDeleteConfirm && artistaToDelete && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <i className="ri-alert-line text-2xl text-red-400"></i>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Confirmar Exclusão</h2>
+                  <p className="text-sm text-gray-400">Esta ação não pode ser desfeita</p>
+                </div>
+              </div>
+              
+              <p className="text-white mb-6">
+                Tem certeza que deseja excluir o artista <strong>"{artistaToDelete.nome}"</strong>?
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDeleteCancel}
+                  className="flex-1 px-4 py-2 bg-dark-bg border border-dark-border text-white font-medium rounded-lg hover:bg-dark-hover transition-smooth"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  className="flex-1 px-4 py-2 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-smooth"
+                >
+                  Excluir
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
