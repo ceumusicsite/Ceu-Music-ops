@@ -25,13 +25,6 @@ export default function Sidebar() {
     user && item.roles.includes(user.role)
   );
 
-  // Debug: verificar se usuário está carregado
-  if (!loading && !user) {
-    console.warn('Sidebar: Usuário não está logado');
-  } else if (user) {
-    console.log('Sidebar: Usuário logado:', { name: user.name, role: user.role, visibleItems: visibleMenuItems.length });
-  }
-
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-dark-card border-r border-dark-border flex flex-col z-50">
       {/* Logo */}
