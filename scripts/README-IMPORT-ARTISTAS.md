@@ -90,3 +90,6 @@ node scripts/import-artistas.js caminho/para/artistas.json
 🎉 Importação concluída! Os artistas estão disponíveis no sistema.
 ```
 
+
+
+

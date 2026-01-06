@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import { supabase } from '../../lib/supabase';
 
@@ -8,12 +7,9 @@ type ViewMode = 'list' | 'kanban';
 interface Projeto {
   id: string;
   nome: string;
-  tipo: string;
-  artista_id: string;
   fase: string;
   progresso: number;
-  data_inicio?: string;
-  previsao_lancamento?: string;
+  prazo: string;
   prioridade: string;
   artista: { nome: string };
 }
@@ -24,7 +20,6 @@ interface Artista {
 }
 
 export default function Projetos() {
-  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [projetos, setProjetos] = useState<Projeto[]>([]);
@@ -33,13 +28,11 @@ export default function Projetos() {
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
     nome: '',
-    tipo: 'single',
     artista_id: '',
-    fase: 'planejamento',
+    fase: 'ideia',
     progresso: 0,
     prioridade: 'media',
-    data_inicio: '',
-    previsao_lancamento: ''
+    prazo: ''
   });
 
   useEffect(() => {
@@ -51,7 +44,7 @@ export default function Projetos() {
       const [projetosRes, artistasRes] = await Promise.all([
         supabase
           .from('projetos')
-          .select('id, nome, tipo, fase, progresso, data_inicio, previsao_lancamento, prioridade, artista:artista_id(nome)')
+          .select('id, nome, fase, progresso, prazo, prioridade, artista:artista_id(nome)')
           .order('created_at', { ascending: false }),
         supabase
           .from('artistas')
@@ -165,13 +158,11 @@ export default function Projetos() {
       setShowModal(false);
       setFormData({
         nome: '',
-        tipo: 'single',
         artista_id: '',
-        fase: 'planejamento',
+        fase: 'ideia',
         progresso: 0,
         prioridade: 'media',
-        data_inicio: '',
-        previsao_lancamento: ''
+        prazo: ''
       });
       loadData();
     } catch (error: any) {
@@ -217,7 +208,7 @@ export default function Projetos() {
     }
   };
 
-  const phases = ['planejamento', 'gravando', 'em_edicao', 'mixagem', 'masterizacao', 'finalizado', 'lancado'];
+  const phases = ['ideia', 'producao', 'gravacao', 'mixagem', 'masterizacao', 'aprovacao', 'agendamento', 'publicacao'];
 
   const filteredProjetos = projetos.filter(projeto =>
     projeto.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -226,13 +217,14 @@ export default function Projetos() {
 
   const getPhaseColor = (phase: string) => {
     const colors: Record<string, string> = {
-      'planejamento': 'bg-gray-500/20 text-gray-400',
-      'gravando': 'bg-purple-500/20 text-purple-400',
-      'em_edicao': 'bg-blue-500/20 text-blue-400',
+      'ideia': 'bg-gray-500/20 text-gray-400',
+      'producao': 'bg-blue-500/20 text-blue-400',
+      'gravacao': 'bg-purple-500/20 text-purple-400',
       'mixagem': 'bg-yellow-500/20 text-yellow-400',
       'masterizacao': 'bg-orange-500/20 text-orange-400',
-      'finalizado': 'bg-primary-teal/20 text-primary-teal',
-      'lancado': 'bg-green-500/20 text-green-400',
+      'aprovacao': 'bg-pink-500/20 text-pink-400',
+      'agendamento': 'bg-primary-teal/20 text-primary-teal',
+      'publicacao': 'bg-green-500/20 text-green-400',
     };
     return colors[phase] || 'bg-gray-500/20 text-gray-400';
   };
@@ -248,24 +240,16 @@ export default function Projetos() {
 
   const getPhaseLabel = (phase: string) => {
     const labels: Record<string, string> = {
-      'planejamento': 'Planejamento',
-      'gravando': 'Gravando',
-      'em_edicao': 'Em edição',
+      'ideia': 'Ideia',
+      'producao': 'Produção',
+      'gravacao': 'Gravação',
       'mixagem': 'Mixagem',
       'masterizacao': 'Masterização',
-      'finalizado': 'Finalizado',
-      'lancado': 'Lançado'
+      'aprovacao': 'Aprovação',
+      'agendamento': 'Agendamento',
+      'publicacao': 'Publicação'
     };
     return labels[phase] || phase;
-  };
-
-  const getTipoLabel = (tipo: string) => {
-    const labels: Record<string, string> = {
-      'single': 'Single',
-      'ep': 'EP',
-      'album': 'Álbum'
-    };
-    return labels[tipo] || tipo;
   };
 
   if (loading) {
@@ -341,22 +325,17 @@ export default function Projetos() {
                 <thead className="bg-dark-bg border-b border-dark-border">
                   <tr>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Projeto</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Tipo</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Artista</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Status</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Fase</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Progresso</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Data Início</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Previsão Lançamento</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Prioridade</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Prazo</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredProjetos.map((projeto) => (
-                    <tr 
-                      key={projeto.id} 
-                      onClick={() => navigate(`/projetos/${projeto.id}`)}
-                      className="border-b border-dark-border hover:bg-dark-hover transition-smooth cursor-pointer"
-                    >
+                    <tr key={projeto.id} className="border-b border-dark-border hover:bg-dark-hover transition-smooth cursor-pointer">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center">
@@ -364,11 +343,6 @@ export default function Projetos() {
                           </div>
                           <span className="text-sm font-medium text-white">{projeto.nome}</span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="px-2 py-1 bg-primary-teal/20 text-primary-teal text-xs font-medium rounded whitespace-nowrap">
-                          {getTipoLabel(projeto.tipo || 'single')}
-                        </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-400">{projeto.artista?.nome || 'Sem artista'}</td>
                       <td className="px-6 py-4">
@@ -387,18 +361,17 @@ export default function Projetos() {
                           <span className="text-xs text-gray-400 whitespace-nowrap">{projeto.progresso}%</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-400 whitespace-nowrap">
-                        {projeto.data_inicio ? new Date(projeto.data_inicio).toLocaleDateString('pt-BR') : '-'}
+                      <td className="px-6 py-4">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getPriorityColor(projeto.prioridade)}`}>
+                          {projeto.prioridade.charAt(0).toUpperCase() + projeto.prioridade.slice(1)}
+                        </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-400 whitespace-nowrap">
-                        {projeto.previsao_lancamento ? new Date(projeto.previsao_lancamento).toLocaleDateString('pt-BR') : '-'}
+                        {projeto.prazo ? new Date(projeto.prazo).toLocaleDateString('pt-BR') : '-'}
                       </td>
-                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
-                        <button 
-                          onClick={() => navigate(`/projetos/${projeto.id}`)}
-                          className="p-2 hover:bg-dark-bg rounded-lg transition-smooth cursor-pointer"
-                        >
-                          <i className="ri-arrow-right-line text-gray-400 hover:text-primary-teal"></i>
+                      <td className="px-6 py-4">
+                        <button className="p-2 hover:bg-dark-bg rounded-lg transition-smooth cursor-pointer">
+                          <i className="ri-more-2-fill text-gray-400"></i>
                         </button>
                       </td>
                     </tr>
@@ -426,11 +399,7 @@ export default function Projetos() {
                       </div>
                       <div className="space-y-3">
                         {phaseProjetos.map((projeto) => (
-                          <div 
-                            key={projeto.id} 
-                            onClick={() => navigate(`/projetos/${projeto.id}`)}
-                            className="p-4 bg-dark-bg rounded-lg hover:bg-dark-hover transition-smooth cursor-pointer"
-                          >
+                          <div key={projeto.id} className="p-4 bg-dark-bg rounded-lg hover:bg-dark-hover transition-smooth cursor-pointer">
                             <h4 className="text-sm font-medium text-white mb-2">{projeto.nome}</h4>
                             <p className="text-xs text-gray-400 mb-3">{projeto.artista?.nome || 'Sem artista'}</p>
                             <div className="flex items-center gap-2 mb-3">
@@ -442,12 +411,12 @@ export default function Projetos() {
                               </div>
                               <span className="text-xs text-gray-400 whitespace-nowrap">{projeto.progresso}%</span>
                             </div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="px-2 py-1 bg-primary-teal/20 text-primary-teal text-xs font-medium rounded whitespace-nowrap">
-                                {getTipoLabel(projeto.tipo || 'single')}
+                            <div className="flex items-center justify-between">
+                              <span className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${getPriorityColor(projeto.prioridade)}`}>
+                                {projeto.prioridade.charAt(0).toUpperCase() + projeto.prioridade.slice(1)}
                               </span>
                               <span className="text-xs text-gray-500">
-                                {projeto.previsao_lancamento ? new Date(projeto.previsao_lancamento).toLocaleDateString('pt-BR') : '-'}
+                                {projeto.prazo ? new Date(projeto.prazo).toLocaleDateString('pt-BR') : '-'}
                               </span>
                             </div>
                           </div>
@@ -501,21 +470,7 @@ export default function Projetos() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Tipo do Projeto</label>
-                  <select
-                    required
-                    value={formData.tipo}
-                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                  >
-                    <option value="single">Single</option>
-                    <option value="ep">EP</option>
-                    <option value="album">Álbum</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Artista Responsável</label>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Artista</label>
                   <select
                     required
                     value={formData.artista_id}
@@ -530,9 +485,8 @@ export default function Projetos() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Status do Projeto</label>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Fase Inicial</label>
                   <select
-                    required
                     value={formData.fase}
                     onChange={(e) => setFormData({ ...formData, fase: e.target.value })}
                     className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
@@ -543,26 +497,27 @@ export default function Projetos() {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Data de Início</label>
-                    <input
-                      type="date"
-                      value={formData.data_inicio}
-                      onChange={(e) => setFormData({ ...formData, data_inicio: e.target.value })}
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Prioridade</label>
+                  <select
+                    value={formData.prioridade}
+                    onChange={(e) => setFormData({ ...formData, prioridade: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  >
+                    <option value="baixa">Baixa</option>
+                    <option value="media">Média</option>
+                    <option value="alta">Alta</option>
+                  </select>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Previsão de Lançamento</label>
-                    <input
-                      type="date"
-                      value={formData.previsao_lancamento}
-                      onChange={(e) => setFormData({ ...formData, previsao_lancamento: e.target.value })}
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Prazo</label>
+                  <input
+                    type="date"
+                    value={formData.prazo}
+                    onChange={(e) => setFormData({ ...formData, prazo: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  />
                 </div>
 
                 <div className="flex gap-3 pt-4">

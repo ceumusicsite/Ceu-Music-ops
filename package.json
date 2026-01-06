@@ -41,7 +41,8 @@
     "preview": "vite preview",
     "type-check": "tsc --noEmit --project tsconfig.app.json",
     "import-artistas": "node scripts/import-artistas.js",
-    "add-artistas-ceu": "node scripts/add-artistas-ceu.js"
+    "add-artistas-ceu": "node scripts/add-artistas-ceu.js",
+    "diagnostico-orcamentos": "node scripts/diagnostico-orcamentos.js"
   },
   "type": "module",
   "version": "0.0.0"

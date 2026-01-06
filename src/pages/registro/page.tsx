@@ -9,7 +9,6 @@ export default function Registro() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,7 +39,7 @@ export default function Registro() {
             id: data.user.id,
             name: nome || email.split('@')[0],
             email: email,
-            role: 'producao',
+            role: 'admin',
             avatar: null
           }], {
             onConflict: 'id'
@@ -50,20 +49,10 @@ export default function Registro() {
           throw profileError;
         }
 
-        // Se uma sessão foi retornada, fazer login automático
-        if (data.session) {
-          setSuccess(true);
-          setTimeout(() => {
-            navigate('/dashboard');
-          }, 1500);
-        } else {
-          // Se não há sessão, o email precisa ser confirmado
-          setNeedsEmailConfirmation(true);
-          setSuccess(true);
-          setTimeout(() => {
-            navigate('/login');
-          }, 5000);
-        }
+        setSuccess(true);
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
       }
     } catch (err: any) {
       console.error('Erro ao criar usuário:', err);
@@ -97,22 +86,9 @@ export default function Registro() {
             </div>
           )}
 
-          {success && !needsEmailConfirmation && (
+          {success && (
             <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm">
-              Usuário criado com sucesso! Redirecionando para o dashboard...
-            </div>
-          )}
-
-          {success && needsEmailConfirmation && (
-            <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-yellow-400 text-sm">
-              <p className="font-semibold mb-2">Usuário criado com sucesso!</p>
-              <p className="text-xs">
-                Um e-mail de confirmação foi enviado para <strong>{email}</strong>.
-                Verifique sua caixa de entrada e clique no link para confirmar sua conta antes de fazer login.
-              </p>
-              <p className="text-xs mt-2 text-yellow-300">
-                Você será redirecionado para a página de login em alguns segundos...
-              </p>
+              Usuário criado com sucesso! Redirecionando para login...
             </div>
           )}
           
