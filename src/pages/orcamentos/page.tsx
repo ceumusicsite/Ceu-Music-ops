@@ -32,7 +32,7 @@ interface Projeto {
 }
 
 export default function Orcamentos() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -385,7 +385,7 @@ export default function Orcamentos() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        {orc.status === 'pendente' && (
+                        {orc.status === 'pendente' && hasPermission(['admin']) && (
                           <>
                             <button 
                               onClick={() => handleAprovar(orc.id)}
@@ -754,7 +754,7 @@ export default function Orcamentos() {
 
                 {/* Ações do Modal */}
                 <div className="flex gap-3 pt-6 border-t border-dark-border">
-                  {orcamentoSelecionado.status === 'pendente' && (
+                  {orcamentoSelecionado.status === 'pendente' && hasPermission(['admin']) && (
                     <>
                       <button
                         onClick={() => {

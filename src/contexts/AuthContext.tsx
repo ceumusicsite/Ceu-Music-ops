@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 
-export type UserRole = 'admin' | 'executivo' | 'ar' | 'producao' | 'financeiro' | 'viewer';
+export type UserRole = 'admin' | 'operador' | 'executivo' | 'ar' | 'producao' | 'financeiro' | 'viewer';
 
 export interface User {
   id: string;
