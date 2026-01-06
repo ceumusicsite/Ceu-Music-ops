@@ -123,3 +123,5 @@ CREATE POLICY "Usuários autenticados podem atualizar orcamentos"
 
 checkSchema().catch(console.error);
 
+
+

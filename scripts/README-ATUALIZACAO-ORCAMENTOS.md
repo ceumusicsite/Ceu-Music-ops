@@ -57,3 +57,5 @@ USING (bucket_id = 'orcamentos');
 
 Após executar o SQL e configurar o storage, tente criar um novo orçamento no sistema. O erro 400 não deve mais aparecer.
 
+
+

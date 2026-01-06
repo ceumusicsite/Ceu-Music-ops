@@ -66,3 +66,5 @@ CHECK (tipo IN ('producao', 'clipe', 'capa', 'midia', 'mixagem', 'masterizacao',
 - ✅ Carregamento de projetos tornado resiliente
 - ✅ Função `getTipoLabel()` criada para exibição
 
+
+

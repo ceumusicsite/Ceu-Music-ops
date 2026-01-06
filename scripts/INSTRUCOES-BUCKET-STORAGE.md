@@ -120,3 +120,5 @@ Após criar o bucket e configurar as políticas:
 - Verifique se a política de SELECT foi criada
 - Confirme que o `comprovante_url` está sendo salvo no banco de dados
 
+
+

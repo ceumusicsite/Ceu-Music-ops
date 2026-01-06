@@ -167,3 +167,5 @@ async function diagnosticar() {
 
 diagnosticar().catch(console.error);
 
+
+

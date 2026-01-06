@@ -85,3 +85,5 @@ CREATE POLICY "Usuários autenticados podem atualizar artistas"
 checkSchema().catch(console.error);
 
 
+
+
