@@ -2,331 +2,233 @@ import { useState, useEffect } from 'react';
 import MainLayout from '../../components/layout/MainLayout';
 import { supabase } from '../../lib/supabase';
 
-type FilterTab = 'todos' | 'pendente' | 'pago' | 'parcial' | 'atrasado';
-
-interface Orcamento {
-  id: string;
-  titulo: string;
-  tipo: string;
-  descricao: string;
-  valor: number;
-  status: string;
-  recuperavel: boolean;
-  artista_id: string | null;
-  projeto_id: string | null;
-  data_vencimento: string | null;
-  status_pagamento: string | null;
-  comprovante_url: string | null;
-  created_at: string;
-}
-
-interface Artista {
-  id: string;
-  nome: string;
-}
-
-interface Projeto {
-  id: string;
-  nome: string;
-}
+type FilterTab = 'todos' | 'pendente' | 'pago' | 'atrasado';
 
 export default function Financeiro() {
   const [activeTab, setActiveTab] = useState<FilterTab>('todos');
   const [searchTerm, setSearchTerm] = useState('');
-  const [orcamentos, setOrcamentos] = useState<Orcamento[]>([]);
-  const [artistas, setArtistas] = useState<Artista[]>([]);
-  const [projetos, setProjetos] = useState<Projeto[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [pagamentos, setPagamentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [showComprovanteModal, setShowComprovanteModal] = useState(false);
-  const [selectedOrcamento, setSelectedOrcamento] = useState<Orcamento | null>(null);
-  const [comprovanteFile, setComprovanteFile] = useState<File | null>(null);
+  
+  const [formData, setFormData] = useState({
+    description: '',
+    value: '',
+    dueDate: '',
+    budget: '',
+    installment: '1/1',
+  });
 
   useEffect(() => {
-    loadData();
+    loadPagamentos();
   }, []);
 
-  const loadData = async () => {
+  const loadPagamentos = async () => {
     try {
       setLoading(true);
-      
-      // Buscar orçamentos aprovados
-      const { data: orcamentosData, error: orcamentosError } = await supabase
-        .from('orcamentos')
+      const { data, error } = await supabase
+        .from('pagamentos')
         .select('*')
-        .eq('status', 'aprovado')
-        .order('created_at', { ascending: false });
+        .order('due_date', { ascending: false });
 
-      if (orcamentosError) {
-        console.error('Erro ao buscar orçamentos:', orcamentosError);
-        throw orcamentosError;
+      if (error) throw error;
+
+      if (data) {
+        setPagamentos(data);
       }
-
-      // Buscar artistas (não bloqueia se falhar)
-      const { data: artistasData, error: artistasError } = await supabase
-        .from('artistas')
-        .select('id, nome');
-
-      if (artistasError) {
-        console.error('Aviso: Erro ao buscar artistas:', artistasError);
-      }
-
-      // Buscar projetos (não bloqueia se falhar)
-      const { data: projetosData, error: projetosError } = await supabase
-        .from('projetos')
-        .select('*')
-        .limit(100);
-
-      if (projetosError) {
-        console.error('Aviso: Erro ao buscar projetos:', projetosError);
-      }
-
-      setOrcamentos(orcamentosData || []);
-      setArtistas(artistasData || []);
-      setProjetos(projetosData || []);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
-      alert('Erro ao carregar dados financeiros. Tente novamente.');
+      console.error('Erro ao carregar pagamentos:', error);
+      // Se a tabela não existir, usar dados mockados
+      setPagamentos([
+        { 
+          id: 1, 
+          description: 'Produção Musical - Artista A', 
+          value: 15000, 
+          status: 'pago',
+          dueDate: '2024-01-20',
+          paidDate: '2024-01-18',
+          budget: 'ORÇ-001',
+          installment: '1/1',
+          receipt: true
+        },
+        { 
+          id: 2, 
+          description: 'Clipe Oficial - Artista B', 
+          value: 17500, 
+          status: 'pendente',
+          dueDate: '2024-01-25',
+          paidDate: null,
+          budget: 'ORÇ-002',
+          installment: '1/2',
+          receipt: false
+        },
+        { 
+          id: 3, 
+          description: 'Clipe Oficial - Artista B', 
+          value: 17500, 
+          status: 'pendente',
+          dueDate: '2024-02-25',
+          paidDate: null,
+          budget: 'ORÇ-002',
+          installment: '2/2',
+          receipt: false
+        },
+        { 
+          id: 4, 
+          description: 'Masterização - Artista C', 
+          value: 8000, 
+          status: 'pago',
+          dueDate: '2024-01-15',
+          paidDate: '2024-01-14',
+          budget: 'ORÇ-003',
+          installment: '1/1',
+          receipt: true
+        },
+        { 
+          id: 5, 
+          description: 'Arte de Capa - Artista D', 
+          value: 3500, 
+          status: 'atrasado',
+          dueDate: '2024-01-10',
+          paidDate: null,
+          budget: 'ORÇ-004',
+          installment: '1/1',
+          receipt: false
+        },
+      ]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleMarcarComoPago = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('orcamentos')
-        .update({ 
-          status_pagamento: 'pago'
-        })
-        .eq('id', id);
+  const pagamentosMock = [
+    { 
+      id: 1, 
+      description: 'Produção Musical - Artista A', 
+      value: 15000, 
+      status: 'pago',
+      dueDate: '2024-01-20',
+      paidDate: '2024-01-18',
+      budget: 'ORÇ-001',
+      installment: '1/1',
+      receipt: true
+    },
+    { 
+      id: 2, 
+      description: 'Clipe Oficial - Artista B', 
+      value: 17500, 
+      status: 'pendente',
+      dueDate: '2024-01-25',
+      paidDate: null,
+      budget: 'ORÇ-002',
+      installment: '1/2',
+      receipt: false
+    },
+    { 
+      id: 3, 
+      description: 'Clipe Oficial - Artista B', 
+      value: 17500, 
+      status: 'pendente',
+      dueDate: '2024-02-25',
+      paidDate: null,
+      budget: 'ORÇ-002',
+      installment: '2/2',
+      receipt: false
+    },
+    { 
+      id: 4, 
+      description: 'Masterização - Artista C', 
+      value: 8000, 
+      status: 'pago',
+      dueDate: '2024-01-15',
+      paidDate: '2024-01-14',
+      budget: 'ORÇ-003',
+      installment: '1/1',
+      receipt: true
+    },
+    { 
+      id: 5, 
+      description: 'Arte de Capa - Artista D', 
+      value: 3500, 
+      status: 'atrasado',
+      dueDate: '2024-01-10',
+      paidDate: null,
+      budget: 'ORÇ-004',
+      installment: '1/1',
+      receipt: false
+    },
+  ];
 
-      if (error) throw error;
-      
-      alert('Pagamento marcado como pago com sucesso!');
-      loadData();
-    } catch (error) {
-      console.error('Erro ao marcar como pago:', error);
-      alert('Erro ao atualizar status. Tente novamente.');
-    }
-  };
+  const pagamentosToDisplay = pagamentos.length > 0 ? pagamentos : pagamentosMock;
 
-  const handleUploadComprovante = async () => {
-    if (!comprovanteFile || !selectedOrcamento) return;
-
-    try {
-      setUploading(true);
-      
-      // Upload do arquivo
-      const fileExt = comprovanteFile.name.split('.').pop();
-      const fileName = `${selectedOrcamento.id}-${Date.now()}.${fileExt}`;
-      const filePath = `comprovantes/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('orcamentos')
-        .upload(filePath, comprovanteFile);
-
-      if (uploadError) throw uploadError;
-
-      // Obter URL pública
-      const { data: { publicUrl } } = supabase.storage
-        .from('orcamentos')
-        .getPublicUrl(filePath);
-
-      // Atualizar orçamento com a URL do comprovante
-      const { error: updateError } = await supabase
-        .from('orcamentos')
-        .update({ 
-          comprovante_url: publicUrl,
-          status_pagamento: 'pago'
-        })
-        .eq('id', selectedOrcamento.id);
-
-      if (updateError) throw updateError;
-
-      alert('Comprovante enviado com sucesso!');
-      setShowComprovanteModal(false);
-      setSelectedOrcamento(null);
-      setComprovanteFile(null);
-      loadData();
-    } catch (error) {
-      console.error('Erro ao fazer upload:', error);
-      alert('Erro ao enviar comprovante. Verifique se o bucket "orcamentos" está configurado no Supabase Storage.');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleExportarRelatorio = () => {
-    try {
-      // Preparar dados para exportação
-      const dadosExportacao = filteredOrcamentos.map(orc => {
-        const statusAtual = isAtrasado(orc) ? 'atrasado' : (orc.status_pagamento || 'pendente');
-        
-        return {
-          'Título': orc.titulo || '',
-          'Descrição': orc.descricao || '',
-          'Tipo': getTipoLabel(orc.tipo),
-          'Valor': `R$ ${orc.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-          'Artista': getArtistaName(orc.artista_id),
-          'Projeto': getProjetoName(orc.projeto_id),
-          'Vencimento': orc.data_vencimento ? new Date(orc.data_vencimento).toLocaleDateString('pt-BR') : '-',
-          'Status Pagamento': getStatusLabel(statusAtual),
-          'Recuperável': orc.recuperavel ? 'Sim' : 'Não',
-          'Comprovante': orc.comprovante_url ? 'Sim' : 'Não',
-          'Data Criação': new Date(orc.created_at).toLocaleDateString('pt-BR')
-        };
-      });
-
-      // Converter para CSV
-      const headers = Object.keys(dadosExportacao[0] || {});
-      const csvContent = [
-        headers.join(';'),
-        ...dadosExportacao.map(row => 
-          headers.map(header => {
-            const value = row[header as keyof typeof row];
-            // Escapar valores que contenham ponto e vírgula ou aspas
-            return typeof value === 'string' && (value.includes(';') || value.includes('"'))
-              ? `"${value.replace(/"/g, '""')}"`
-              : value;
-          }).join(';')
-        )
-      ].join('\n');
-
-      // Adicionar estatísticas no início do arquivo
-      const estatisticas = [
-        'RELATÓRIO FINANCEIRO',
-        `Data de Geração: ${new Date().toLocaleString('pt-BR')}`,
-        '',
-        'RESUMO:',
-        `Total Pago: R$ ${totalPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-        `Total Pendente: R$ ${totalPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-        `Total Atrasado: R$ ${totalAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-        `Total Parcial: R$ ${totalParcial.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-        `Total Geral: R$ ${(totalPago + totalPendente + totalAtrasado + totalParcial).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-        '',
-        'DETALHAMENTO:',
-        ''
-      ].join('\n');
-
-      const csvFinal = estatisticas + csvContent;
-
-      // Criar blob e fazer download
-      const blob = new Blob(['\ufeff' + csvFinal], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      
-      link.setAttribute('href', url);
-      link.setAttribute('download', `relatorio-financeiro-${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      alert('Relatório exportado com sucesso!');
-    } catch (error) {
-      console.error('Erro ao exportar relatório:', error);
-      alert('Erro ao exportar relatório. Tente novamente.');
-    }
-  };
-
-  const getArtistaName = (artistaId: string | null) => {
-    if (!artistaId) return '-';
-    const artista = artistas.find(a => a.id === artistaId);
-    return artista?.nome || '-';
-  };
-
-  const getProjetoName = (projetoId: string | null) => {
-    if (!projetoId) return '-';
-    const projeto = projetos.find(p => p.id === projetoId);
-    return projeto?.nome || '-';
-  };
-
-  const getTipoLabel = (tipo: string) => {
-    const labels: Record<string, string> = {
-      'producao': 'Produção',
-      'marketing': 'Marketing',
-      'shows': 'Shows',
-      'direitos': 'Direitos',
-      'equipamentos': 'Equipamentos',
-      'outros': 'Outros',
-    };
-    return labels[tipo] || tipo;
-  };
-
-  const getStatusColor = (status: string | null) => {
-    const colors: Record<string, string> = {
-      'pendente': 'bg-yellow-500/20 text-yellow-400',
-      'pago': 'bg-green-500/20 text-green-400',
-      'parcial': 'bg-blue-500/20 text-blue-400',
-      'atrasado': 'bg-red-500/20 text-red-400',
-    };
-    return colors[status || 'pendente'] || 'bg-gray-500/20 text-gray-400';
-  };
-
-  const getStatusLabel = (status: string | null) => {
-    const labels: Record<string, string> = {
-      'pendente': 'Pendente',
-      'pago': 'Pago',
-      'parcial': 'Parcial',
-      'atrasado': 'Atrasado',
-    };
-    return labels[status || 'pendente'] || 'Pendente';
-  };
-
-  const isAtrasado = (orc: Orcamento) => {
-    if (!orc.data_vencimento || orc.status_pagamento === 'pago') return false;
-    return new Date(orc.data_vencimento) < new Date();
-  };
-
-  const filteredOrcamentos = orcamentos.filter(orc => {
-    const matchesSearch = 
-      orc.titulo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      orc.descricao?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      getArtistaName(orc.artista_id).toLowerCase().includes(searchTerm.toLowerCase());
-    
-    let statusToCheck = orc.status_pagamento || 'pendente';
-    if (isAtrasado(orc)) statusToCheck = 'atrasado';
-    
-    const matchesTab = activeTab === 'todos' || statusToCheck === activeTab;
+  const filteredPagamentos = pagamentosToDisplay.filter(pag => {
+    const matchesSearch = pag.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         pag.budget.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesTab = activeTab === 'todos' || pag.status === activeTab;
     return matchesSearch && matchesTab;
   });
 
-  const totalPendente = orcamentos
-    .filter(o => (o.status_pagamento === 'pendente' || !o.status_pagamento) && !isAtrasado(o))
-    .reduce((sum, o) => sum + o.valor, 0);
-  
-  const totalPago = orcamentos
-    .filter(o => o.status_pagamento === 'pago')
-    .reduce((sum, o) => sum + o.valor, 0);
-  
-  const totalAtrasado = orcamentos
-    .filter(o => isAtrasado(o))
-    .reduce((sum, o) => sum + o.valor, 0);
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      'pendente': 'bg-yellow-500/20 text-yellow-400',
+      'pago': 'bg-green-500/20 text-green-400',
+      'atrasado': 'bg-red-500/20 text-red-400',
+    };
+    return colors[status] || 'bg-gray-500/20 text-gray-400';
+  };
 
-  const totalParcial = orcamentos
-    .filter(o => o.status_pagamento === 'parcial')
-    .reduce((sum, o) => sum + o.valor, 0);
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      'pendente': 'Pendente',
+      'pago': 'Pago',
+      'atrasado': 'Atrasado',
+    };
+    return labels[status] || status;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const pagamentoData = {
+        descricao: formData.description,
+        valor: parseFloat(formData.value),
+        data_vencimento: formData.dueDate,
+        orcamento: formData.budget,
+        parcela: formData.installment,
+        status: 'pendente',
+      };
+
+      const { error } = await supabase
+        .from('pagamentos')
+        .insert([pagamentoData]);
+
+      if (error) throw error;
+
+      await loadPagamentos();
+      
+      setShowModal(false);
+      setFormData({
+        description: '',
+        value: '',
+        dueDate: '',
+        budget: '',
+        installment: '1/1',
+      });
+    } catch (error: any) {
+      console.error('Erro ao criar pagamento:', error);
+      alert('Erro ao criar pagamento. Verifique o console para mais detalhes.');
+    }
+  };
+
+  const totalPendente = pagamentosToDisplay.filter(p => (p.status === 'pendente' || p.status === 'Pendente')).reduce((sum, p) => sum + (p.value || p.valor || 0), 0);
+  const totalPago = pagamentosToDisplay.filter(p => (p.status === 'pago' || p.status === 'Pago')).reduce((sum, p) => sum + (p.value || p.valor || 0), 0);
+  const totalAtrasado = pagamentosToDisplay.filter(p => (p.status === 'atrasado' || p.status === 'Atrasado')).reduce((sum, p) => sum + (p.value || p.valor || 0), 0);
 
   const stats = [
-    { label: 'Total Pago', value: `R$ ${totalPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: 'ri-check-double-line', color: 'from-green-500 to-green-700' },
-    { label: 'Total Pendente', value: `R$ ${totalPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: 'ri-time-line', color: 'from-yellow-500 to-yellow-700' },
-    { label: 'Total Atrasado', value: `R$ ${totalAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: 'ri-alert-line', color: 'from-red-500 to-red-700' },
+    { label: 'Total Pago', value: `R$ ${totalPago.toLocaleString('pt-BR')}`, icon: 'ri-check-double-line', color: 'from-green-500 to-green-700' },
+    { label: 'Total Pendente', value: `R$ ${totalPendente.toLocaleString('pt-BR')}`, icon: 'ri-time-line', color: 'from-yellow-500 to-yellow-700' },
+    { label: 'Total Atrasado', value: `R$ ${totalAtrasado.toLocaleString('pt-BR')}`, icon: 'ri-alert-line', color: 'from-red-500 to-red-700' },
   ];
-
-  if (loading) {
-    return (
-      <MainLayout>
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <i className="ri-loader-4-line text-6xl text-primary-teal animate-spin mb-4"></i>
-            <p className="text-gray-400">Carregando dados financeiros...</p>
-          </div>
-        </div>
-      </MainLayout>
-    );
-  }
 
   return (
     <MainLayout>
@@ -337,13 +239,19 @@ export default function Financeiro() {
             <h1 className="text-3xl font-bold text-white mb-2">Financeiro</h1>
             <p className="text-gray-400">Controle de pagamentos e comprovantes</p>
           </div>
-          <button 
-            onClick={handleExportarRelatorio}
-            className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
-          >
-            <i className="ri-download-line text-xl"></i>
-            Exportar Relatório
-          </button>
+          <div className="flex gap-3">
+            <button 
+              onClick={() => setShowModal(true)}
+              className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
+            >
+              <i className="ri-add-line text-xl"></i>
+              Novo Pagamento
+            </button>
+            <button className="px-6 py-3 bg-dark-bg border border-dark-border text-white font-medium rounded-lg hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap">
+              <i className="ri-download-line text-xl"></i>
+              Exportar Relatório
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -375,7 +283,7 @@ export default function Financeiro() {
               />
             </div>
             <div className="flex gap-2">
-              {(['todos', 'pendente', 'pago', 'parcial', 'atrasado'] as FilterTab[]).map((tab) => (
+              {(['todos', 'pendente', 'pago', 'atrasado'] as FilterTab[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -398,194 +306,165 @@ export default function Financeiro() {
             <table className="w-full">
               <thead className="bg-dark-bg border-b border-dark-border">
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Título</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Tipo</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Artista/Projeto</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Orçamento</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Descrição</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Parcela</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Valor</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Vencimento</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Pagamento</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Status</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredOrcamentos.map((orc) => {
-                  const statusAtual = isAtrasado(orc) ? 'atrasado' : (orc.status_pagamento || 'pendente');
-                  
-                  return (
-                    <tr key={orc.id} className="border-b border-dark-border hover:bg-dark-hover transition-smooth">
+                {filteredPagamentos.map((pag) => (
+                  <tr key={pag.id} className="border-b border-dark-border hover:bg-dark-hover transition-smooth">
                     <td className="px-6 py-4">
-                        <div>
-                          <p className="text-sm font-medium text-white">{orc.titulo}</p>
-                          <p className="text-xs text-gray-400 mt-1">{orc.descricao?.substring(0, 50)}...</p>
-                        </div>
+                      <span className="text-sm font-medium text-primary-teal">{pag.budget}</span>
                     </td>
+                    <td className="px-6 py-4 text-sm text-white">{pag.description}</td>
                     <td className="px-6 py-4">
-                        <span className="px-3 py-1 bg-primary-teal/20 text-primary-teal text-xs rounded-full whitespace-nowrap">
-                          {getTipoLabel(orc.tipo)}
+                      <span className="px-3 py-1 bg-dark-bg text-gray-400 text-xs rounded-full whitespace-nowrap">
+                        {pag.installment}
                       </span>
                     </td>
-                      <td className="px-6 py-4 text-sm text-gray-400">
-                        <div>
-                          {orc.artista_id && (
-                            <div className="flex items-center gap-1">
-                              <i className="ri-user-line text-xs"></i>
-                              <span>{getArtistaName(orc.artista_id)}</span>
-                            </div>
-                          )}
-                          {orc.projeto_id && (
-                            <div className="flex items-center gap-1">
-                              <i className="ri-folder-line text-xs"></i>
-                              <span>{getProjetoName(orc.projeto_id)}</span>
-                            </div>
-                          )}
-                          {!orc.artista_id && !orc.projeto_id && '-'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div>
-                          <p className="text-sm font-semibold text-white whitespace-nowrap">
-                            R$ {orc.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </p>
-                          {orc.recuperavel && (
-                            <span className="inline-flex items-center gap-1 text-xs text-yellow-400 mt-1">
-                              <i className="ri-alert-line"></i>
-                              Recuperável
-                            </span>
-                          )}
-                        </div>
+                    <td className="px-6 py-4 text-sm font-semibold text-white whitespace-nowrap">
+                      R$ {pag.value.toLocaleString('pt-BR')}
                     </td>
+                    <td className="px-6 py-4 text-sm text-gray-400 whitespace-nowrap">{pag.dueDate}</td>
                     <td className="px-6 py-4 text-sm text-gray-400 whitespace-nowrap">
-                        {orc.data_vencimento 
-                          ? new Date(orc.data_vencimento).toLocaleDateString('pt-BR')
-                          : '-'
-                        }
+                      {pag.paidDate || '-'}
                     </td>
                     <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusColor(statusAtual)}`}>
-                          {getStatusLabel(statusAtual)}
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusColor(pag.status)}`}>
+                        {getStatusLabel(pag.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                          {statusAtual !== 'pago' && (
-                            <button 
-                              onClick={() => handleMarcarComoPago(orc.id)}
-                              className="p-2 hover:bg-green-500/20 text-green-400 rounded-lg transition-smooth cursor-pointer" 
-                              title="Marcar como pago"
-                            >
+                        {pag.status !== 'pago' && (
+                          <button className="p-2 hover:bg-green-500/20 text-green-400 rounded-lg transition-smooth cursor-pointer" title="Marcar como pago">
                             <i className="ri-check-line text-lg"></i>
                           </button>
                         )}
-                          {orc.comprovante_url && (
-                            <a
-                              href={orc.comprovante_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-2 hover:bg-primary-teal/20 text-primary-teal rounded-lg transition-smooth cursor-pointer" 
-                              title="Ver comprovante"
-                            >
+                        {pag.receipt && (
+                          <button className="p-2 hover:bg-primary-teal/20 text-primary-teal rounded-lg transition-smooth cursor-pointer" title="Ver comprovante">
                             <i className="ri-file-text-line text-lg"></i>
-                            </a>
-                          )}
-                          {!orc.comprovante_url && (
-                            <button 
-                              onClick={() => {
-                                setSelectedOrcamento(orc);
-                                setShowComprovanteModal(true);
-                              }}
-                              className="p-2 hover:bg-yellow-500/20 text-yellow-400 rounded-lg transition-smooth cursor-pointer" 
-                              title="Upload comprovante"
-                            >
+                          </button>
+                        )}
+                        {!pag.receipt && pag.status === 'pago' && (
+                          <button className="p-2 hover:bg-yellow-500/20 text-yellow-400 rounded-lg transition-smooth cursor-pointer" title="Upload comprovante">
                             <i className="ri-upload-line text-lg"></i>
                           </button>
                         )}
                       </div>
                     </td>
                   </tr>
-                  );
-                })}
+                ))}
               </tbody>
             </table>
           </div>
         </div>
 
-        {filteredOrcamentos.length === 0 && (
+        {filteredPagamentos.length === 0 && (
           <div className="text-center py-12">
             <i className="ri-money-dollar-circle-line text-6xl text-gray-600 mb-4"></i>
             <p className="text-gray-400">Nenhum pagamento encontrado</p>
           </div>
         )}
 
-        {/* Modal Upload Comprovante */}
-        {showComprovanteModal && selectedOrcamento && (
+        {/* Modal Novo Pagamento */}
+        {showModal && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <div className="bg-dark-card border border-dark-border rounded-xl p-8 w-full max-w-md">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white">Upload Comprovante</h2>
+                <h2 className="text-xl font-semibold text-white">Novo Pagamento</h2>
                 <button 
-                  onClick={() => {
-                    setShowComprovanteModal(false);
-                    setSelectedOrcamento(null);
-                    setComprovanteFile(null);
-                  }}
+                  onClick={() => setShowModal(false)}
                   className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
                 >
                   <i className="ri-close-line text-2xl"></i>
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <p className="text-sm text-gray-400 mb-2">Orçamento:</p>
-                  <p className="text-white font-medium">{selectedOrcamento.titulo}</p>
-                  <p className="text-xl font-bold text-primary-teal mt-1">
-                    R$ {selectedOrcamento.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </p>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Descrição</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                    placeholder="Ex: Produção Musical - Artista A"
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">
-                    Selecione o Comprovante
-                  </label>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Valor (R$)</label>
                   <input
-                    type="file"
-                    id="comprovante-upload"
-                    accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={(e) => setComprovanteFile(e.target.files?.[0] || null)}
-                    className="hidden"
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={formData.value}
+                    onChange={(e) => setFormData({ ...formData, value: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                    placeholder="0.00"
                   />
-                  <label
-                    htmlFor="comprovante-upload"
-                    className="flex items-center justify-center gap-3 w-full px-4 py-6 bg-dark-bg border-2 border-dashed border-dark-border rounded-lg hover:border-primary-teal transition-smooth cursor-pointer"
-                  >
-                    <i className="ri-upload-2-line text-2xl"></i>
-                    <span className="text-sm">
-                      {comprovanteFile ? comprovanteFile.name : 'Clique para selecionar'}
-                    </span>
-                  </label>
-                  <p className="text-xs text-gray-500 mt-2">Formatos: PDF, JPG, PNG (máx. 10MB)</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Data de Vencimento</label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.dueDate}
+                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Orçamento</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.budget}
+                    onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                    placeholder="Ex: ORÇ-001"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Parcela</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.installment}
+                    onChange={(e) => setFormData({ ...formData, installment: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                    placeholder="Ex: 1/1 ou 1/3"
+                  />
                 </div>
 
                 <div className="flex gap-3 pt-4">
                   <button
-                    onClick={() => {
-                      setShowComprovanteModal(false);
-                      setSelectedOrcamento(null);
-                      setComprovanteFile(null);
-                    }}
-                    className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                   >
                     Cancelar
                   </button>
                   <button
-                    onClick={handleUploadComprovante}
-                    disabled={!comprovanteFile || uploading}
-                    className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    type="submit"
+                    className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
                   >
-                    {uploading ? 'Enviando...' : 'Enviar'}
+                    Criar Pagamento
                   </button>
                 </div>
-              </div>
+              </form>
             </div>
           </div>
         )}

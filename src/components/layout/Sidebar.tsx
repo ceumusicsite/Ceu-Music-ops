@@ -1,25 +1,18 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const menuItems = [
-  { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro'] },
-  { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'executivo', 'ar', 'producao'] },
-  { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'executivo', 'ar', 'producao'] },
-  { path: '/orcamentos', icon: 'ri-file-list-3-line', label: 'Orçamentos', roles: ['admin', 'operador', 'executivo', 'ar', 'financeiro'] },
-  { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'executivo', 'financeiro'] },
-  { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'executivo', 'ar', 'producao'] },
-  { path: '/documentos', icon: 'ri-file-line', label: 'Documentos', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro'] },
+  { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro', 'operador'] },
+  { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
+  { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
+  { path: '/orcamentos', icon: 'ri-file-list-3-line', label: 'Orçamentos', roles: ['admin', 'executivo', 'ar', 'financeiro', 'operador'] },
+  { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'executivo', 'financeiro', 'operador'] },
+  { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
 ];
 
 export default function Sidebar() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { user, logout } = useAuth();
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
-  };
 
   const visibleMenuItems = menuItems.filter(item => 
     user && item.roles.includes(user.role)
@@ -44,29 +37,23 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-3">
-        {visibleMenuItems.length > 0 ? (
-          visibleMenuItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-smooth cursor-pointer ${
-                  isActive
-                    ? 'bg-gradient-primary text-white'
-                    : 'text-gray-400 hover:bg-dark-hover hover:text-white'
-                }`}
-              >
-                <i className={`${item.icon} text-xl w-6 h-6 flex items-center justify-center`}></i>
-                <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
-              </Link>
-            );
-          })
-        ) : (
-          <div className="px-4 py-3 text-gray-500 text-sm">
-            {user ? `Carregando menu... (Role: ${user.role})` : 'Faça login para ver o menu'}
-          </div>
-        )}
+        {visibleMenuItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-smooth cursor-pointer ${
+                isActive
+                  ? 'bg-gradient-primary text-white'
+                  : 'text-gray-400 hover:bg-dark-hover hover:text-white'
+              }`}
+            >
+              <i className={`${item.icon} text-xl w-6 h-6 flex items-center justify-center`}></i>
+              <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
 
       {/* User Profile */}
@@ -81,7 +68,7 @@ export default function Sidebar() {
           </div>
         </div>
         <button
-          onClick={handleLogout}
+          onClick={logout}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-dark-hover hover:bg-red-600/20 text-gray-400 hover:text-red-400 rounded-lg transition-smooth cursor-pointer"
         >
           <i className="ri-logout-box-line text-lg"></i>

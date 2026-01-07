@@ -8,11 +8,10 @@ import Dashboard from "../pages/dashboard/page";
 import Artistas from "../pages/artistas/page";
 import ArtistaDetalhes from "../pages/artistas/Detalhes";
 import Projetos from "../pages/projetos/page";
-import ProjetoDetalhes from "../pages/projetos/Detalhes";
 import Orcamentos from "../pages/orcamentos/page";
 import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
-import Documentos from "../pages/documentos/page";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 const routes: RouteObject[] = [
   {
@@ -37,39 +36,31 @@ const routes: RouteObject[] = [
   },
   {
     path: "/dashboard",
-    element: <Dashboard />,
+    element: <ProtectedRoute><Dashboard /></ProtectedRoute>,
   },
   {
     path: "/artistas",
-    element: <Artistas />,
+    element: <ProtectedRoute><Artistas /></ProtectedRoute>,
   },
   {
     path: "/artistas/:id",
-    element: <ArtistaDetalhes />,
+    element: <ProtectedRoute><ArtistaDetalhes /></ProtectedRoute>,
   },
   {
     path: "/projetos",
-    element: <Projetos />,
-  },
-  {
-    path: "/projetos/:id",
-    element: <ProjetoDetalhes />,
+    element: <ProtectedRoute><Projetos /></ProtectedRoute>,
   },
   {
     path: "/orcamentos",
-    element: <Orcamentos />,
+    element: <ProtectedRoute><Orcamentos /></ProtectedRoute>,
   },
   {
     path: "/financeiro",
-    element: <Financeiro />,
+    element: <ProtectedRoute><Financeiro /></ProtectedRoute>,
   },
   {
     path: "/lancamentos",
-    element: <Lancamentos />,
-  },
-  {
-    path: "/documentos",
-    element: <Documentos />,
+    element: <ProtectedRoute><Lancamentos /></ProtectedRoute>,
   },
   {
     path: "*",

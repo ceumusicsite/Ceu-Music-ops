@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 
-export type UserRole = 'admin' | 'operador' | 'executivo' | 'ar' | 'producao' | 'financeiro' | 'viewer';
+export type UserRole = 'admin' | 'executivo' | 'ar' | 'producao' | 'financeiro' | 'viewer' | 'operador';
 
 export interface User {
   id: string;
@@ -120,6 +120,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    // Redirecionar para login após logout
+    window.location.href = '/login';
   };
 
   const hasPermission = (requiredRoles: UserRole[]) => {
