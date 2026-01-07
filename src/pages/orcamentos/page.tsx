@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -6,6 +7,7 @@ import { supabase } from '../../lib/supabase';
 type FilterStatus = 'todos' | 'pendente' | 'aprovado' | 'recusado';
 
 export default function Orcamentos() {
+  const navigate = useNavigate();
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -312,6 +314,25 @@ export default function Orcamentos() {
   const handleVisualizar = (orcamento: any) => {
     setSelectedOrcamento(orcamento);
     setShowViewModal(true);
+  };
+
+  const handleCriarPagamento = (orcamento: any) => {
+    // Navegar para financeiro com dados do orçamento pré-preenchidos
+    navigate('/financeiro', {
+      state: {
+        fromOrcamento: true,
+        orcamentoData: {
+          orcamentoId: orcamento.id,
+          description: orcamento.description || orcamento.descricao || '',
+          value: orcamento.value || orcamento.valor || '',
+          budget: `ORÇ-${String(orcamento.id).substring(0, 8)}`,
+          artistaId: orcamento.artista_id || '',
+          valorOrcado: orcamento.value || orcamento.valor || '',
+          descricaoDetalhada: `Pagamento relacionado ao orçamento: ${orcamento.description || orcamento.descricao || ''}`,
+          categoriaFinanceira: orcamento.type || orcamento.tipo || '',
+        }
+      }
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -630,6 +651,15 @@ export default function Orcamentos() {
                         >
                           <i className="ri-eye-line text-gray-400 text-lg"></i>
                         </button>
+                        {orc.status === 'aprovado' && (
+                          <button 
+                            onClick={() => handleCriarPagamento(orc)}
+                            className="p-2 hover:bg-primary-teal/20 text-primary-teal rounded-lg transition-smooth cursor-pointer"
+                            title="Criar Pagamento"
+                          >
+                            <i className="ri-money-dollar-circle-line text-lg"></i>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1125,6 +1155,39 @@ export default function Orcamentos() {
                     </div>
                   </div>
                 )}
+
+                {/* Ações */}
+                <div className="bg-dark-bg/50 border border-dark-border rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <i className="ri-tools-line text-primary-teal"></i>
+                    Ações
+                  </h3>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => handleCriarPagamento(selectedOrcamento)}
+                      className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2"
+                    >
+                      <i className="ri-money-dollar-circle-line text-xl"></i>
+                      Criar Pagamento
+                    </button>
+                    
+                    {selectedOrcamento.status === 'aprovado' && (
+                      <button
+                        onClick={() => {
+                          navigate('/financeiro', {
+                            state: {
+                              filterByOrcamento: selectedOrcamento.id
+                            }
+                          });
+                        }}
+                        className="px-6 py-3 bg-dark-bg border border-dark-border text-white font-medium rounded-lg hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2"
+                      >
+                        <i className="ri-file-list-3-line text-xl"></i>
+                        Ver Pagamentos Relacionados
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-6 mt-6 border-t border-dark-border">
