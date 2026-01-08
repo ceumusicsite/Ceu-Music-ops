@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import { supabase } from '../../lib/supabase';
+import { produtoresMock } from '../../data/produtores-mock';
 
 type ViewMode = 'list' | 'kanban';
 
@@ -38,6 +39,8 @@ export default function Projetos() {
     nome: '',
     tipo: '',
     artista_id: '',
+    produtor_id: '',
+    responsavel_videoclipe: '',
     fase: 'planejamento',
     progresso: 0,
     prioridade: 'media',
@@ -194,6 +197,8 @@ export default function Projetos() {
         nome: '',
         tipo: '',
         artista_id: '',
+        produtor_id: '',
+        responsavel_videoclipe: '',
         fase: 'planejamento',
         progresso: 0,
         prioridade: 'media',
@@ -629,6 +634,31 @@ export default function Projetos() {
                       <option key={artista.id} value={artista.id}>{artista.nome}</option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Produtor</label>
+                  <select
+                    value={formData.produtor_id}
+                    onChange={(e) => setFormData({ ...formData, produtor_id: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  >
+                    <option value="">Selecione um produtor</option>
+                    {produtoresMock.map((produtor) => (
+                      <option key={produtor.id} value={produtor.id}>{produtor.nome}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Responsável pelo Videoclipe</label>
+                  <input
+                    type="text"
+                    value={formData.responsavel_videoclipe}
+                    onChange={(e) => setFormData({ ...formData, responsavel_videoclipe: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                    placeholder="Nome do responsável pelo videoclipe"
+                  />
                 </div>
 
                 <div>

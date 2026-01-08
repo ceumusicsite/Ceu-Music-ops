@@ -8,6 +8,8 @@ import Dashboard from "../pages/dashboard/page";
 import Artistas from "../pages/artistas/page";
 import ArtistaDetalhes from "../pages/artistas/Detalhes";
 import Projetos from "../pages/projetos/page";
+import Produtores from "../pages/produtores/page";
+import Fornecedores from "../pages/fornecedores/page";
 import Orcamentos from "../pages/orcamentos/page";
 import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
@@ -50,6 +52,14 @@ const routes: RouteObject[] = [
   {
     path: "/projetos",
     element: <ProtectedRoute><Projetos /></ProtectedRoute>,
+  },
+  {
+    path: "/produtores",
+    element: <ProtectedRoute><Produtores /></ProtectedRoute>,
+  },
+  {
+    path: "/fornecedores",
+    element: <ProtectedRoute><Fornecedores /></ProtectedRoute>,
   },
   {
     path: "/orcamentos",
