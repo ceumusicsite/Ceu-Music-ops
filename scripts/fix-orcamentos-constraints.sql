@@ -16,3 +16,5 @@ SELECT
 FROM pg_constraint
 WHERE conrelid = 'orcamentos'::regclass;
 
+
+

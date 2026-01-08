@@ -58,3 +58,5 @@ Após executar o SQL:
 
 Se a tabela já existir com algumas colunas, o script usará `ADD COLUMN IF NOT EXISTS` para adicionar apenas as colunas que faltam, sem afetar os dados existentes.
 
+
+

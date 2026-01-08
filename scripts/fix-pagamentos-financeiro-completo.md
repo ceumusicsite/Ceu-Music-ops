@@ -125,3 +125,5 @@ ORDER BY data_pagamento DESC;
 - ✅ As foreign keys só são criadas se as tabelas relacionadas (`artistas`, `projetos`, `orcamentos`) existirem
 - ✅ O script é **idempotente** - pode ser executado múltiplas vezes sem causar erros
 
+
+

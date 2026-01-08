@@ -232,3 +232,5 @@ COMMENT ON COLUMN pagamentos.projeto_id IS 'Referência ao projeto relacionado a
 COMMENT ON COLUMN pagamentos.descricao_detalhada IS 'Descrição detalhada para o extrato do artista';
 COMMENT ON COLUMN pagamentos.categoria_financeira IS 'Categoria financeira para agrupamento e relatórios';
 
+
+
