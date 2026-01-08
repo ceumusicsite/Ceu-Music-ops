@@ -5,6 +5,8 @@ const menuItems = [
   { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro', 'operador'] },
   { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
+  { path: '/produtores', icon: 'ri-headphone-line', label: 'Produtores', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
+  { path: '/fornecedores', icon: 'ri-store-line', label: 'Fornecedores', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro', 'operador'] },
   { path: '/orcamentos', icon: 'ri-file-list-3-line', label: 'Orçamentos', roles: ['admin', 'executivo', 'ar', 'financeiro', 'operador'] },
   { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'executivo', 'financeiro', 'operador'] },
   { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
