@@ -1,13 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import MainLayout from '../../components/layout/MainLayout';
 import { fornecedoresMock, type Fornecedor, type ServicoFornecedor } from '../../data/fornecedores-mock';
+import { supabase } from '../../lib/supabase';
 
 export default function FornecedoresPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategoria, setFilterCategoria] = useState('todos');
   const [showModal, setShowModal] = useState(false);
-  const [fornecedores, setFornecedores] = useState<Fornecedor[]>(fornecedoresMock);
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedFornecedor, setSelectedFornecedor] = useState<Fornecedor | null>(null);
+  const [editingFornecedor, setEditingFornecedor] = useState<Fornecedor | null>(null);
+  const [showActionsMenu, setShowActionsMenu] = useState<string | null>(null);
+  const [fornecedorToDelete, setFornecedorToDelete] = useState<Fornecedor | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formData, setFormData] = useState({
     nome: '',
     categoria: 'servico' as 'estudio' | 'equipamento' | 'servico' | 'outro',
@@ -25,6 +31,67 @@ export default function FornecedoresPage() {
   });
   const [servicos, setServicos] = useState<ServicoFornecedor[]>([]);
   const [novoServico, setNovoServico] = useState({ nome: '', descricao: '', preco_base: '' });
+
+  useEffect(() => {
+    loadFornecedores();
+  }, []);
+
+  const parseJsonField = (value: any, defaultValue: any = []): any => {
+    if (!value) return defaultValue;
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return defaultValue;
+      }
+    }
+    return defaultValue;
+  };
+
+  const loadFornecedores = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('fornecedores')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        // Se a tabela não existir, usar dados mock
+        console.warn('Tabela fornecedores não encontrada, usando dados mock:', error);
+        setFornecedores(fornecedoresMock);
+      } else {
+        // Converter dados do banco para o formato Fornecedor
+        const fornecedoresFormatados: Fornecedor[] = (data || []).map((f: any) => ({
+          id: f.id,
+          nome: f.nome,
+          categoria: f.categoria,
+          tipo_servico: f.tipo_servico,
+          status: f.status,
+          contato_email: f.contato_email,
+          contato_telefone: f.contato_telefone || undefined,
+          endereco: f.endereco || undefined,
+          cidade: f.cidade || undefined,
+          estado: f.estado || undefined,
+          cnpj: f.cnpj || undefined,
+          responsavel: f.responsavel || undefined,
+          website: f.website || undefined,
+          observacoes: f.observacoes || undefined,
+          projetos_utilizados: f.projetos_utilizados || 0,
+          avaliacao: f.avaliacao ? parseFloat(f.avaliacao) : undefined,
+          servicos: parseJsonField(f.servicos, []),
+          created_at: f.created_at || new Date().toISOString()
+        }));
+        setFornecedores(fornecedoresFormatados);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar fornecedores:', error);
+      // Em caso de erro, usar dados mock
+      setFornecedores(fornecedoresMock);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredFornecedores = fornecedores.filter(fornecedor => {
     const matchesSearch = 
@@ -94,41 +161,168 @@ export default function FornecedoresPage() {
     setServicos(servicos.filter(s => s.id !== id));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const novoFornecedor: Fornecedor = {
-      id: Date.now().toString(),
-      ...formData,
-      servicos: servicos.length > 0 ? servicos : undefined,
-      projetos_utilizados: 0,
-      avaliacao: undefined,
-      created_at: new Date().toISOString()
-    };
-
-    setFornecedores([...fornecedores, novoFornecedor]);
-    setShowModal(false);
+  const handleEditClick = (fornecedor: Fornecedor) => {
+    setEditingFornecedor(fornecedor);
     setFormData({
-      nome: '',
-      categoria: 'servico',
-      tipo_servico: '',
-      status: 'ativo',
-      contato_email: '',
-      contato_telefone: '',
-      endereco: '',
-      cidade: '',
-      estado: '',
-      cnpj: '',
-      responsavel: '',
-      website: '',
-      observacoes: ''
+      nome: fornecedor.nome,
+      categoria: fornecedor.categoria,
+      tipo_servico: fornecedor.tipo_servico,
+      status: fornecedor.status,
+      contato_email: fornecedor.contato_email,
+      contato_telefone: fornecedor.contato_telefone || '',
+      endereco: fornecedor.endereco || '',
+      cidade: fornecedor.cidade || '',
+      estado: fornecedor.estado || '',
+      cnpj: fornecedor.cnpj || '',
+      responsavel: fornecedor.responsavel || '',
+      website: fornecedor.website || '',
+      observacoes: fornecedor.observacoes || ''
     });
-    setServicos([]);
-    setNovoServico({ nome: '', descricao: '', preco_base: '' });
+    setServicos(fornecedor.servicos || []);
+    setShowModal(true);
+    setShowActionsMenu(null);
+  };
+
+  const handleDeleteClick = (fornecedor: Fornecedor) => {
+    setFornecedorToDelete(fornecedor);
+    setShowDeleteConfirm(true);
+    setShowActionsMenu(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!fornecedorToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('fornecedores')
+        .delete()
+        .eq('id', fornecedorToDelete.id);
+
+      if (error) throw error;
+
+      setShowDeleteConfirm(false);
+      setFornecedorToDelete(null);
+      loadFornecedores();
+    } catch (error) {
+      console.error('Erro ao deletar fornecedor:', error);
+      // Se der erro (tabela não existe), remover apenas do estado local
+      setFornecedores(fornecedores.filter(f => f.id !== fornecedorToDelete.id));
+      setShowDeleteConfirm(false);
+      setFornecedorToDelete(null);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setFornecedorToDelete(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const fornecedorData = {
+        nome: formData.nome,
+        categoria: formData.categoria,
+        tipo_servico: formData.tipo_servico,
+        status: formData.status,
+        contato_email: formData.contato_email,
+        contato_telefone: formData.contato_telefone || null,
+        endereco: formData.endereco || null,
+        cidade: formData.cidade || null,
+        estado: formData.estado || null,
+        cnpj: formData.cnpj || null,
+        responsavel: formData.responsavel || null,
+        website: formData.website || null,
+        observacoes: formData.observacoes || null,
+        servicos: servicos.length > 0 ? JSON.stringify(servicos) : null
+      };
+
+      if (editingFornecedor) {
+        // Editar fornecedor existente
+        const { error } = await supabase
+          .from('fornecedores')
+          .update(fornecedorData)
+          .eq('id', editingFornecedor.id);
+
+        if (error) throw error;
+      } else {
+        // Criar novo fornecedor
+        const { error } = await supabase
+          .from('fornecedores')
+          .insert([fornecedorData]);
+
+        if (error) throw error;
+      }
+
+      setShowModal(false);
+      setEditingFornecedor(null);
+      setFormData({
+        nome: '',
+        categoria: 'servico',
+        tipo_servico: '',
+        status: 'ativo',
+        contato_email: '',
+        contato_telefone: '',
+        endereco: '',
+        cidade: '',
+        estado: '',
+        cnpj: '',
+        responsavel: '',
+        website: '',
+        observacoes: ''
+      });
+      setServicos([]);
+      setNovoServico({ nome: '', descricao: '', preco_base: '' });
+      loadFornecedores();
+    } catch (error) {
+      console.error('Erro ao salvar fornecedor:', error);
+      // Se der erro (tabela não existe), atualizar apenas o estado local
+      if (editingFornecedor) {
+        const fornecedorAtualizado: Fornecedor = {
+          ...editingFornecedor,
+          ...formData,
+          servicos: servicos.length > 0 ? servicos : undefined
+        };
+        setFornecedores(fornecedores.map(f => 
+          f.id === editingFornecedor.id ? fornecedorAtualizado : f
+        ));
+      } else {
+        const novoFornecedor: Fornecedor = {
+          id: Date.now().toString(),
+          ...formData,
+          servicos: servicos.length > 0 ? servicos : undefined,
+          projetos_utilizados: 0,
+          avaliacao: undefined,
+          created_at: new Date().toISOString()
+        };
+        setFornecedores([...fornecedores, novoFornecedor]);
+      }
+      setShowModal(false);
+      setEditingFornecedor(null);
+      setFormData({
+        nome: '',
+        categoria: 'servico',
+        tipo_servico: '',
+        status: 'ativo',
+        contato_email: '',
+        contato_telefone: '',
+        endereco: '',
+        cidade: '',
+        estado: '',
+        cnpj: '',
+        responsavel: '',
+        website: '',
+        observacoes: ''
+      });
+      setServicos([]);
+      setNovoServico({ nome: '', descricao: '', preco_base: '' });
+      alert('Erro ao salvar fornecedor. Os dados foram salvos apenas localmente.');
+    }
   };
 
   const handleCloseModal = () => {
     setShowModal(false);
+    setEditingFornecedor(null);
     setFormData({
       nome: '',
       categoria: 'servico',
@@ -147,6 +341,41 @@ export default function FornecedoresPage() {
     setServicos([]);
     setNovoServico({ nome: '', descricao: '', preco_base: '' });
   };
+
+  const handleNewFornecedor = () => {
+    setEditingFornecedor(null);
+    setFormData({
+      nome: '',
+      categoria: 'servico',
+      tipo_servico: '',
+      status: 'ativo',
+      contato_email: '',
+      contato_telefone: '',
+      endereco: '',
+      cidade: '',
+      estado: '',
+      cnpj: '',
+      responsavel: '',
+      website: '',
+      observacoes: ''
+    });
+    setServicos([]);
+    setNovoServico({ nome: '', descricao: '', preco_base: '' });
+    setShowModal(true);
+  };
+
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="flex items-center justify-center h-screen">
+          <div className="text-center">
+            <i className="ri-loader-4-line text-4xl text-primary-teal animate-spin"></i>
+            <p className="text-gray-400 mt-4">Carregando fornecedores...</p>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -158,7 +387,7 @@ export default function FornecedoresPage() {
             <p className="text-gray-400">Gerencie os fornecedores da gravadora</p>
           </div>
           <button 
-            onClick={() => setShowModal(true)}
+            onClick={handleNewFornecedor}
             className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
           >
             <i className="ri-add-line text-xl"></i>
@@ -205,8 +434,14 @@ export default function FornecedoresPage() {
           {filteredFornecedores.map((fornecedor) => (
             <div 
               key={fornecedor.id} 
-              className="bg-dark-card border border-dark-border rounded-xl p-6 hover:border-primary-teal transition-smooth cursor-pointer"
-              onClick={() => setSelectedFornecedor(fornecedor)}
+              className="bg-dark-card border border-dark-border rounded-xl p-6 hover:border-primary-teal transition-smooth"
+              onClick={() => {
+                // Fechar menu de ações se clicar fora dele
+                if (showActionsMenu !== fornecedor.id) {
+                  setShowActionsMenu(null);
+                  setSelectedFornecedor(fornecedor);
+                }
+              }}
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-4">
@@ -250,18 +485,69 @@ export default function FornecedoresPage() {
 
               <div className="border-t border-dark-border pt-4">
                 <div className="flex items-center justify-between text-sm">
-                  {fornecedor.projetos_utilizados !== undefined && (
-                    <span className="text-gray-500">
-                      <i className="ri-folder-line mr-1"></i>
-                      {fornecedor.projetos_utilizados} projetos
-                    </span>
-                  )}
-                  {fornecedor.avaliacao !== undefined && (
-                    <div className="flex items-center gap-1">
-                      <i className="ri-star-fill text-yellow-400"></i>
-                      <span className="text-white font-medium">{fornecedor.avaliacao}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {fornecedor.projetos_utilizados !== undefined && (
+                      <span className="text-gray-500">
+                        <i className="ri-folder-line mr-1"></i>
+                        {fornecedor.projetos_utilizados} projetos
+                      </span>
+                    )}
+                    {fornecedor.avaliacao !== undefined && (
+                      <div className="flex items-center gap-1">
+                        <i className="ri-star-fill text-yellow-400"></i>
+                        <span className="text-white font-medium">{fornecedor.avaliacao}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowActionsMenu(showActionsMenu === fornecedor.id ? null : fornecedor.id);
+                      }}
+                      className="px-3 py-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                      title="Mais opções"
+                    >
+                      <i className="ri-more-2-fill"></i>
+                    </button>
+                    
+                    {showActionsMenu === fornecedor.id && (
+                      <div className="absolute right-0 bottom-full mb-2 w-48 bg-dark-card border border-dark-border rounded-lg shadow-lg z-10">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedFornecedor(fornecedor);
+                            setShowActionsMenu(null);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2 rounded-t-lg"
+                        >
+                          <i className="ri-eye-line"></i>
+                          Ver Detalhes
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditClick(fornecedor);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2"
+                        >
+                          <i className="ri-edit-line"></i>
+                          Editar
+                        </button>
+                        <div className="border-t border-dark-border"></div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(fornecedor);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-smooth cursor-pointer flex items-center gap-2 rounded-b-lg"
+                        >
+                          <i className="ri-delete-bin-line"></i>
+                          Excluir
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -415,12 +701,50 @@ export default function FornecedoresPage() {
           </div>
         )}
 
-        {/* Modal Novo Fornecedor */}
+        {/* Modal de Confirmação de Exclusão */}
+        {showDeleteConfirm && fornecedorToDelete && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                  <i className="ri-alert-line text-2xl text-red-400"></i>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Confirmar Exclusão</h2>
+                  <p className="text-sm text-gray-400">Esta ação não pode ser desfeita</p>
+                </div>
+              </div>
+              
+              <p className="text-white mb-6">
+                Tem certeza que deseja excluir o fornecedor <strong>"{fornecedorToDelete.nome}"</strong>?
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDeleteCancel}
+                  className="flex-1 px-4 py-2 bg-dark-bg border border-dark-border text-white font-medium rounded-lg hover:bg-dark-hover transition-smooth cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  className="flex-1 px-4 py-2 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-smooth cursor-pointer"
+                >
+                  Excluir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Novo/Editar Fornecedor */}
         {showModal && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
             <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-white">Novo Fornecedor</h2>
+                <h2 className="text-xl font-semibold text-white">
+                  {editingFornecedor ? 'Editar Fornecedor' : 'Novo Fornecedor'}
+                </h2>
                 <button 
                   onClick={handleCloseModal}
                   className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
@@ -706,7 +1030,7 @@ export default function FornecedoresPage() {
                     type="submit"
                     className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
                   >
-                    Criar Fornecedor
+                    {editingFornecedor ? 'Salvar Alterações' : 'Criar Fornecedor'}
                   </button>
                 </div>
               </form>
