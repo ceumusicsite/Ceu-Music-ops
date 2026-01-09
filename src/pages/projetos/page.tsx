@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import { supabase } from '../../lib/supabase';
-import { produtoresMock } from '../../data/produtores-mock';
 
 type ViewMode = 'list' | 'kanban';
 
@@ -31,21 +30,9 @@ export default function Projetos() {
   const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [artistas, setArtistas] = useState<Artista[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState<string | null>(null);
   const [projetoToDelete, setProjetoToDelete] = useState<Projeto | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [formData, setFormData] = useState({
-    nome: '',
-    tipo: '',
-    artista_id: '',
-    produtor_id: '',
-    responsavel_videoclipe: '',
-    fase: 'planejamento',
-    progresso: 0,
-    prioridade: 'media',
-    prazo: ''
-  });
 
   useEffect(() => {
     loadData();
@@ -106,151 +93,8 @@ export default function Projetos() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validar campos obrigatórios com mensagens específicas
-    if (!formData.nome || !formData.nome.trim()) {
-      alert('Por favor, preencha o nome do projeto.');
-      return;
-    }
-    
-    if (!formData.artista_id || formData.artista_id.trim() === '') {
-      alert('Por favor, selecione um artista responsável.');
-      return;
-    }
-    
-    if (!formData.tipo || formData.tipo.trim() === '') {
-      alert('Por favor, selecione o tipo do projeto.');
-      return;
-    }
-    
-    if (!formData.fase || formData.fase.trim() === '') {
-      alert('Por favor, selecione o status do projeto.');
-      return;
-    }
-    
-    try {
-      // Preparar dados para inserção
-      const dadosParaInserir: any = {
-        nome: formData.nome.trim(),
-        titulo: formData.nome.trim(), // A tabela também requer titulo
-        tipo: formData.tipo.trim(),
-        artista_id: formData.artista_id.trim(),
-        fase: formData.fase.trim(),
-        progresso: formData.progresso || 0,
-        prioridade: formData.prioridade || 'media'
-      };
-      
-      // Adicionar datas apenas se preenchidas e válidas
-      if (formData.prazo && formData.prazo.trim()) {
-        const dataLancamento = new Date(formData.prazo);
-        if (!isNaN(dataLancamento.getTime())) {
-          dadosParaInserir.previsao_lancamento = formData.prazo;
-        }
-      }
-      
-      // Validar que todos os campos obrigatórios estão presentes
-      const camposObrigatorios = ['nome', 'tipo', 'artista_id', 'fase'];
-      const camposFaltando = camposObrigatorios.filter(campo => !dadosParaInserir[campo]);
-      
-      if (camposFaltando.length > 0) {
-        alert(`Erro: Os seguintes campos são obrigatórios e não foram preenchidos: ${camposFaltando.join(', ')}`);
-        console.error('Campos faltando:', camposFaltando);
-        console.error('Dados completos:', dadosParaInserir);
-        return;
-      }
-      
-      console.log('=== DEBUG: Criando Projeto ===');
-      console.log('FormData completo:', formData);
-      console.log('Dados sendo enviados:', dadosParaInserir);
-      console.log('Validação: Todos os campos obrigatórios estão presentes');
-      console.log('Nome:', dadosParaInserir.nome, '- Tipo:', typeof dadosParaInserir.nome);
-      console.log('Tipo:', dadosParaInserir.tipo, '- Tipo:', typeof dadosParaInserir.tipo);
-      console.log('Artista ID:', dadosParaInserir.artista_id, '- Tipo:', typeof dadosParaInserir.artista_id);
-      console.log('Fase:', dadosParaInserir.fase, '- Tipo:', typeof dadosParaInserir.fase);
-      
-      // Verificar se artista_id é um UUID válido
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (dadosParaInserir.artista_id && !uuidRegex.test(dadosParaInserir.artista_id)) {
-        console.warn('⚠️ Artista ID não parece ser um UUID válido:', dadosParaInserir.artista_id);
-      }
-      
-      // Forçar atualização do cache fazendo um select primeiro
-      await supabase.from('projetos').select('nome, fase').limit(0);
-      
-      const { data, error } = await supabase
-        .from('projetos')
-        .insert([dadosParaInserir])
-        .select();
 
-      if (error) {
-        console.error('Erro detalhado:', error);
-        console.error('Dados que tentaram ser inseridos:', dadosParaInserir);
-        throw error;
-      }
-
-      console.log('Projeto criado com sucesso:', data);
-
-      setShowModal(false);
-      setFormData({
-        nome: '',
-        tipo: '',
-        artista_id: '',
-        produtor_id: '',
-        responsavel_videoclipe: '',
-        fase: 'planejamento',
-        progresso: 0,
-        prioridade: 'media',
-        prazo: ''
-      });
-      
-      // Recarregar dados após criar projeto
-      await loadData();
-    } catch (error: any) {
-      console.error('Erro ao criar projeto:', error);
-      console.error('Detalhes completos do erro:', JSON.stringify(error, null, 2));
-      console.error('FormData atual:', formData);
-      
-      // Mensagem de erro mais específica
-      let errorMessage = 'Erro ao criar projeto. Tente novamente.';
-      
-      if (error) {
-        // Log completo do erro
-        console.log('Código do erro:', error.code);
-        console.log('Mensagem do erro:', error.message);
-        console.log('Detalhes:', error.details);
-        console.log('Hint:', error.hint);
-        
-        if (error.message) {
-          if (error.message.includes('foreign key') || error.message.includes('violates foreign key')) {
-            errorMessage = 'Erro: Artista selecionado não é válido. Verifique se o artista existe no banco de dados.';
-          } else if (error.message.includes('check constraint') || error.message.includes('violates check constraint')) {
-            errorMessage = 'Erro: Algum valor não está nos formatos permitidos.\n\nVerifique:\n- Tipo: deve ser "single", "ep" ou "album"\n- Fase: deve ser uma das fases válidas\n- Prioridade: deve ser "alta", "media" ou "baixa"';
-          } else if (error.message.includes('null value') || error.message.includes('violates not-null constraint') || error.message.includes('null constraint')) {
-            // Tentar identificar qual campo está faltando
-            let campoFaltando = 'algum campo';
-            if (error.message.includes('nome')) campoFaltando = 'nome';
-            else if (error.message.includes('tipo')) campoFaltando = 'tipo';
-            else if (error.message.includes('artista_id') || error.message.includes('artista')) campoFaltando = 'artista responsável';
-            else if (error.message.includes('fase')) campoFaltando = 'fase/status';
-            
-            errorMessage = `Erro: O campo "${campoFaltando}" é obrigatório e não foi preenchido corretamente.\n\nVerifique se todos os campos foram preenchidos antes de criar o projeto.`;
-          } else if (error.message.includes('PGRST204') || error.message.includes('Could not find')) {
-            errorMessage = `Erro: Coluna não encontrada no banco.\n\nCache pode não ter atualizado. Aguarde alguns segundos e tente novamente.\n\nDetalhes: ${error.message}`;
-          } else {
-            errorMessage = `Erro: ${error.message}\n\nVerifique o console do navegador (F12) para mais detalhes.`;
-          }
-        } else if (error.code) {
-          errorMessage = `Erro ${error.code}: ${error.message || 'Erro desconhecido'}\n\nVerifique o console do navegador (F12) para mais detalhes.`;
-        }
-      }
-      
-      alert(errorMessage);
-    }
-  };
-
-  const phases = ['planejamento', 'gravando', 'em_edicao', 'mixagem', 'masterizacao', 'finalizado', 'lancado'];
+  const phases = ['planejamento', 'gravando', 'em_edicao', 'mixagem', 'masterizacao', 'finalizado', 'em_fase_lancamento', 'lancado'];
 
   const filteredProjetos = projetos.filter(projeto =>
     projeto.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -265,6 +109,7 @@ export default function Projetos() {
       'mixagem': 'bg-yellow-500/20 text-yellow-400',
       'masterizacao': 'bg-orange-500/20 text-orange-400',
       'finalizado': 'bg-green-500/20 text-green-400',
+      'em_fase_lancamento': 'bg-indigo-500/20 text-indigo-400',
       'lancado': 'bg-primary-teal/20 text-primary-teal',
     };
     return colors[phase] || 'bg-gray-500/20 text-gray-400';
@@ -287,6 +132,7 @@ export default function Projetos() {
       'mixagem': 'Mixagem',
       'masterizacao': 'Masterização',
       'finalizado': 'Finalizado',
+      'em_fase_lancamento': 'Em fase de lançamento',
       'lancado': 'Lançado'
     };
     return labels[phase] || phase;
@@ -346,7 +192,7 @@ export default function Projetos() {
             <p className="text-gray-400">Gerencie todos os projetos musicais</p>
           </div>
           <button 
-            onClick={() => setShowModal(true)}
+            onClick={() => navigate('/projetos/novo')}
             className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
           >
             <i className="ri-add-line text-xl"></i>
@@ -568,151 +414,6 @@ export default function Projetos() {
                   </div>
                 );
               })}
-            </div>
-          </div>
-        )}
-
-        {/* Modal Novo Projeto */}
-        {showModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-white">Novo Projeto</h2>
-                <button 
-                  onClick={() => setShowModal(false)}
-                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
-                >
-                  <i className="ri-close-line text-2xl"></i>
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label htmlFor="nome-projeto-input" className="block text-sm font-medium text-gray-400 mb-2">Nome do Projeto</label>
-                  <input
-                    id="nome-projeto-input"
-                    type="text"
-                    required
-                    autoFocus
-                    value={formData.nome}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      setFormData({ ...formData, nome: e.target.value });
-                    }}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                    placeholder="Ex: Novo Single - Verão 2024"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Tipo do Projeto</label>
-                  <select
-                    required
-                    value={formData.tipo}
-                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                  >
-                    <option value="">Selecione o tipo</option>
-                    <option value="single">Single</option>
-                    <option value="ep">EP</option>
-                    <option value="album">Álbum</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Artista</label>
-                  <select
-                    required
-                    value={formData.artista_id}
-                    onChange={(e) => setFormData({ ...formData, artista_id: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                  >
-                    <option value="">Selecione um artista</option>
-                    {artistas.map((artista) => (
-                      <option key={artista.id} value={artista.id}>{artista.nome}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Produtor</label>
-                  <select
-                    value={formData.produtor_id}
-                    onChange={(e) => setFormData({ ...formData, produtor_id: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                  >
-                    <option value="">Selecione um produtor</option>
-                    {produtoresMock.map((produtor) => (
-                      <option key={produtor.id} value={produtor.id}>{produtor.nome}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Responsável pelo Videoclipe</label>
-                  <input
-                    type="text"
-                    value={formData.responsavel_videoclipe}
-                    onChange={(e) => setFormData({ ...formData, responsavel_videoclipe: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                    placeholder="Nome do responsável pelo videoclipe"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Fase Inicial</label>
-                  <select
-                    value={formData.fase}
-                    onChange={(e) => setFormData({ ...formData, fase: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                  >
-                    {phases.map((phase) => (
-                      <option key={phase} value={phase}>{getPhaseLabel(phase)}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Prioridade</label>
-                  <select
-                    value={formData.prioridade}
-                    onChange={(e) => setFormData({ ...formData, prioridade: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                  >
-                    <option value="baixa">Baixa</option>
-                    <option value="media">Média</option>
-                    <option value="alta">Alta</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Prazo</label>
-                  <input
-                    type="date"
-                    value={formData.prazo}
-                    onChange={(e) => setFormData({ ...formData, prazo: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowModal(false)}
-                    className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
-                  >
-                    Criar Projeto
-                  </button>
-                </div>
-              </form>
             </div>
           </div>
         )}
