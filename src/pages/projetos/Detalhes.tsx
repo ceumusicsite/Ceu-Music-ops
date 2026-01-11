@@ -819,28 +819,26 @@ export default function ProjetoDetalhes() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Lista de Faixas */}
-          <div className="lg:col-span-2">
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-white">Controle de Gravação</h2>
-                <button
-                  onClick={() => {
-                    setEditingFaixa(null);
-                    setFaixaFormData({
-                      nome: '',
-                      status: 'pendente' as Faixa['status'],
-                      o_que_falta_gravar: ''
-                    });
-                    setShowFaixaModal(true);
-                  }}
-                  className="px-4 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
-                >
-                  <i className="ri-add-line"></i>
-                  Nova Faixa
-                </button>
-              </div>
+        {/* Lista de Faixas */}
+        <div className="bg-dark-card border border-dark-border rounded-xl p-6 mb-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-white">Controle de Gravação</h2>
+            <button
+              onClick={() => {
+                setEditingFaixa(null);
+                setFaixaFormData({
+                  nome: '',
+                  status: 'pendente' as Faixa['status'],
+                  o_que_falta_gravar: ''
+                });
+                setShowFaixaModal(true);
+              }}
+              className="px-4 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
+            >
+              <i className="ri-add-line"></i>
+              Nova Faixa
+            </button>
+          </div>
 
               {faixas.length === 0 ? (
                 <div className="text-center py-12">
@@ -937,12 +935,12 @@ export default function ProjetoDetalhes() {
 
                         {/* Conteúdo Expandido */}
                         {isExpanded && (
-                          <div className="border-t border-dark-border p-4 space-y-4">
+                          <div className="border-t border-dark-border p-5 space-y-5 bg-dark-card/50">
                             {/* Seção Lançamento */}
-                            <div className="bg-dark-card border border-dark-border rounded-lg p-4">
-                              <div className="flex items-center justify-between mb-3">
-                                <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-                                  <i className="ri-calendar-event-line text-primary-teal"></i>
+                            <div className="bg-dark-card border border-dark-border rounded-lg p-5">
+                              <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-base font-semibold text-white flex items-center gap-2">
+                                  <i className="ri-calendar-event-line text-primary-teal text-lg"></i>
                                   Informações de Lançamento
                                 </h4>
                                 <button
@@ -950,57 +948,72 @@ export default function ProjetoDetalhes() {
                                     setSelectedFaixaForModal(faixa);
                                     setShowLancamentoModal(true);
                                   }}
-                                  className="px-3 py-1 bg-primary-teal/20 text-primary-teal text-xs rounded-lg hover:bg-primary-teal/30 transition-smooth cursor-pointer"
+                                  className="px-3 py-1.5 bg-primary-teal/20 text-primary-teal text-xs font-medium rounded-lg hover:bg-primary-teal/30 transition-smooth cursor-pointer flex items-center gap-1.5"
                                 >
-                                  <i className="ri-edit-line mr-1"></i>
+                                  <i className="ri-edit-line"></i>
                                   Editar
                                 </button>
                               </div>
-                              <div className="grid grid-cols-2 gap-3 text-sm">
-                                <div>
-                                  <span className="text-gray-400">Data de Lançamento:</span>
-                                  <span className="text-white ml-2">{faixa.data_lancamento ? new Date(faixa.data_lancamento).toLocaleDateString('pt-BR') : 'Não informado'}</span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="flex flex-col">
+                                  <span className="text-xs text-gray-400 mb-1">Data de Lançamento</span>
+                                  <span className="text-sm text-white font-medium">
+                                    {faixa.data_lancamento ? new Date(faixa.data_lancamento).toLocaleDateString('pt-BR') : 'Não informado'}
+                                  </span>
                                 </div>
                                 {faixa.link_spotify && (
-                                  <div>
-                                    <a href={faixa.link_spotify} target="_blank" rel="noopener noreferrer" className="text-primary-teal hover:underline flex items-center gap-1">
-                                      <i className="ri-spotify-line"></i>
-                                      Spotify
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">Spotify</span>
+                                    <a href={faixa.link_spotify} target="_blank" rel="noopener noreferrer" className="text-primary-teal hover:text-primary-brown transition-smooth text-sm font-medium flex items-center gap-1.5 w-fit">
+                                      <i className="ri-spotify-line text-base"></i>
+                                      Abrir no Spotify
+                                      <i className="ri-external-link-line text-xs"></i>
                                     </a>
                                   </div>
                                 )}
                                 {faixa.link_youtube && (
-                                  <div>
-                                    <a href={faixa.link_youtube} target="_blank" rel="noopener noreferrer" className="text-red-400 hover:underline flex items-center gap-1">
-                                      <i className="ri-youtube-line"></i>
-                                      YouTube
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">YouTube</span>
+                                    <a href={faixa.link_youtube} target="_blank" rel="noopener noreferrer" className="text-red-400 hover:text-red-300 transition-smooth text-sm font-medium flex items-center gap-1.5 w-fit">
+                                      <i className="ri-youtube-line text-base"></i>
+                                      Abrir no YouTube
+                                      <i className="ri-external-link-line text-xs"></i>
                                     </a>
                                   </div>
                                 )}
                                 {faixa.link_apple_music && (
-                                  <div>
-                                    <a href={faixa.link_apple_music} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:underline flex items-center gap-1">
-                                      <i className="ri-apple-line"></i>
-                                      Apple Music
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">Apple Music</span>
+                                    <a href={faixa.link_apple_music} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300 transition-smooth text-sm font-medium flex items-center gap-1.5 w-fit">
+                                      <i className="ri-apple-line text-base"></i>
+                                      Abrir no Apple Music
+                                      <i className="ri-external-link-line text-xs"></i>
                                     </a>
                                   </div>
                                 )}
                                 {faixa.link_deezer && (
-                                  <div>
-                                    <a href={faixa.link_deezer} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline flex items-center gap-1">
-                                      <i className="ri-music-line"></i>
-                                      Deezer
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">Deezer</span>
+                                    <a href={faixa.link_deezer} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 transition-smooth text-sm font-medium flex items-center gap-1.5 w-fit">
+                                      <i className="ri-music-line text-base"></i>
+                                      Abrir no Deezer
+                                      <i className="ri-external-link-line text-xs"></i>
                                     </a>
+                                  </div>
+                                )}
+                                {!faixa.data_lancamento && !faixa.link_spotify && !faixa.link_youtube && !faixa.link_apple_music && !faixa.link_deezer && (
+                                  <div className="col-span-2">
+                                    <p className="text-xs text-gray-500 italic text-center py-2">Nenhuma informação de lançamento cadastrada</p>
                                   </div>
                                 )}
                               </div>
                             </div>
 
                             {/* Seção Ficha Técnica */}
-                            <div className="bg-dark-card border border-dark-border rounded-lg p-4">
-                              <div className="flex items-center justify-between mb-3">
-                                <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-                                  <i className="ri-file-text-line text-primary-teal"></i>
+                            <div className="bg-dark-card border border-dark-border rounded-lg p-5">
+                              <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-base font-semibold text-white flex items-center gap-2">
+                                  <i className="ri-file-text-line text-primary-teal text-lg"></i>
                                   Ficha Técnica
                                 </h4>
                                 <button
@@ -1008,63 +1021,74 @@ export default function ProjetoDetalhes() {
                                     setSelectedFaixaForModal(faixa);
                                     setShowFichaTecnicaModal(true);
                                   }}
-                                  className="px-3 py-1 bg-primary-teal/20 text-primary-teal text-xs rounded-lg hover:bg-primary-teal/30 transition-smooth cursor-pointer"
+                                  className="px-3 py-1.5 bg-primary-teal/20 text-primary-teal text-xs font-medium rounded-lg hover:bg-primary-teal/30 transition-smooth cursor-pointer flex items-center gap-1.5"
                                 >
-                                  <i className="ri-edit-line mr-1"></i>
+                                  <i className="ri-edit-line"></i>
                                   Editar
                                 </button>
                               </div>
-                              <div className="grid grid-cols-2 gap-3 text-xs">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {faixa.compositores && faixa.compositores.length > 0 && (
-                                  <div>
-                                    <span className="text-gray-400">Compositores:</span>
-                                    <span className="text-white ml-2">{faixa.compositores.join(', ')}</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">Compositores</span>
+                                    <span className="text-sm text-white">{faixa.compositores.join(', ')}</span>
                                   </div>
                                 )}
                                 {faixa.letristas && faixa.letristas.length > 0 && (
-                                  <div>
-                                    <span className="text-gray-400">Letristas:</span>
-                                    <span className="text-white ml-2">{faixa.letristas.join(', ')}</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">Letristas</span>
+                                    <span className="text-sm text-white">{faixa.letristas.join(', ')}</span>
                                   </div>
                                 )}
                                 {faixa.produtores_musicais && faixa.produtores_musicais.length > 0 && (
-                                  <div>
-                                    <span className="text-gray-400">Produtores:</span>
-                                    <span className="text-white ml-2">{faixa.produtores_musicais.join(', ')}</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">Produtores Musicais</span>
+                                    <span className="text-sm text-white">{faixa.produtores_musicais.join(', ')}</span>
                                   </div>
                                 )}
                                 {faixa.mixagem && (
-                                  <div>
-                                    <span className="text-gray-400">Mixagem:</span>
-                                    <span className="text-white ml-2">{faixa.mixagem}</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">Mixagem</span>
+                                    <span className="text-sm text-white">{faixa.mixagem}</span>
                                   </div>
                                 )}
                                 {faixa.masterizacao && (
-                                  <div>
-                                    <span className="text-gray-400">Masterização:</span>
-                                    <span className="text-white ml-2">{faixa.masterizacao}</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">Masterização</span>
+                                    <span className="text-sm text-white">{faixa.masterizacao}</span>
                                   </div>
                                 )}
                                 {faixa.genero && (
-                                  <div>
-                                    <span className="text-gray-400">Gênero:</span>
-                                    <span className="text-white ml-2">{faixa.genero}</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">Gênero</span>
+                                    <span className="text-sm text-white">{faixa.genero}</span>
                                   </div>
                                 )}
                                 {faixa.bpm && (
-                                  <div>
-                                    <span className="text-gray-400">BPM:</span>
-                                    <span className="text-white ml-2">{faixa.bpm}</span>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">BPM</span>
+                                    <span className="text-sm text-white">{faixa.bpm}</span>
+                                  </div>
+                                )}
+                                {faixa.tonalidade && (
+                                  <div className="flex flex-col">
+                                    <span className="text-xs text-gray-400 mb-1">Tonalidade</span>
+                                    <span className="text-sm text-white">{faixa.tonalidade}</span>
+                                  </div>
+                                )}
+                                {!faixa.compositores?.length && !faixa.letristas?.length && !faixa.produtores_musicais?.length && !faixa.mixagem && !faixa.masterizacao && !faixa.genero && !faixa.bpm && !faixa.tonalidade && (
+                                  <div className="col-span-2">
+                                    <p className="text-xs text-gray-500 italic text-center py-2">Nenhuma informação da ficha técnica cadastrada</p>
                                   </div>
                                 )}
                               </div>
                             </div>
 
                             {/* Seção Áudio e Vídeo */}
-                            <div className="bg-dark-card border border-dark-border rounded-lg p-4">
-                              <div className="flex items-center justify-between mb-3">
-                                <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-                                  <i className="ri-music-2-line text-primary-teal"></i>
+                            <div className="bg-dark-card border border-dark-border rounded-lg p-5">
+                              <div className="flex items-center justify-between mb-4">
+                                <h4 className="text-base font-semibold text-white flex items-center gap-2">
+                                  <i className="ri-music-2-line text-primary-teal text-lg"></i>
                                   Áudio e Vídeo
                                 </h4>
                                 <button
@@ -1072,44 +1096,72 @@ export default function ProjetoDetalhes() {
                                     setSelectedFaixaForModal(faixa);
                                     setShowAudioVideoModal(true);
                                   }}
-                                  className="px-3 py-1 bg-primary-teal/20 text-primary-teal text-xs rounded-lg hover:bg-primary-teal/30 transition-smooth cursor-pointer"
+                                  className="px-3 py-1.5 bg-primary-teal/20 text-primary-teal text-xs font-medium rounded-lg hover:bg-primary-teal/30 transition-smooth cursor-pointer flex items-center gap-1.5"
                                 >
-                                  <i className="ri-add-line mr-1"></i>
+                                  <i className="ri-add-line"></i>
                                   Adicionar
                                 </button>
                               </div>
                               {faixa.audio_video && faixa.audio_video.length > 0 ? (
-                                <div className="space-y-2">
+                                <div className="space-y-2.5">
                                   {faixa.audio_video.map((av) => (
-                                    <div key={av.id} className="flex items-center justify-between p-2 bg-dark-bg border border-dark-border rounded">
-                                      <div className="flex items-center gap-2">
-                                        <i className={`ri-${av.tipo === 'audio' ? 'music-2-line' : 'video-line'} text-primary-teal`}></i>
-                                        <span className="text-white text-xs">{av.versao || `${av.tipo} - ${av.formato}`}</span>
-                                        {av.descricao && <span className="text-gray-400 text-xs">({av.descricao})</span>}
+                                    <div key={av.id} className="flex items-center justify-between p-3 bg-dark-bg border border-dark-border rounded-lg hover:border-primary-teal/50 transition-smooth">
+                                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                          av.tipo === 'audio' ? 'bg-primary-teal/20' : 'bg-purple-500/20'
+                                        }`}>
+                                          <i className={`ri-${av.tipo === 'audio' ? 'music-2-line' : 'video-line'} ${
+                                            av.tipo === 'audio' ? 'text-primary-teal' : 'text-purple-400'
+                                          } text-lg`}></i>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-sm text-white font-medium">{av.versao || `${av.tipo === 'audio' ? 'Áudio' : 'Vídeo'} - ${av.formato === 'arquivo' ? 'Arquivo' : 'Link'}`}</span>
+                                            {av.descricao && (
+                                              <span className="text-xs text-gray-400">• {av.descricao}</span>
+                                            )}
+                                          </div>
+                                          {av.arquivo_nome && (
+                                            <p className="text-xs text-gray-500 mt-1 truncate">{av.arquivo_nome}</p>
+                                          )}
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-2 flex-shrink-0 ml-3">
                                         {av.formato === 'link' && av.link_url && (
-                                          <a href={av.link_url} target="_blank" rel="noopener noreferrer" className="text-primary-teal hover:underline text-xs">
-                                            <i className="ri-external-link-line"></i>
+                                          <a 
+                                            href={av.link_url} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
+                                            title="Abrir link"
+                                          >
+                                            <i className="ri-external-link-line text-base"></i>
                                           </a>
                                         )}
                                         {av.formato === 'arquivo' && av.arquivo_url && (
-                                          <a href={av.arquivo_url} target="_blank" rel="noopener noreferrer" className="text-primary-teal hover:underline text-xs">
-                                            <i className="ri-download-line"></i>
+                                          <a 
+                                            href={av.arquivo_url} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
+                                            title="Baixar arquivo"
+                                          >
+                                            <i className="ri-download-line text-base"></i>
                                           </a>
                                         )}
                                         <button
                                           onClick={() => handleDeleteAudioVideo(av.id)}
-                                          className="text-red-400 hover:text-red-300 text-xs"
+                                          className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded-lg transition-smooth"
+                                          title="Excluir"
                                         >
-                                          <i className="ri-delete-bin-line"></i>
+                                          <i className="ri-delete-bin-line text-base"></i>
                                         </button>
                                       </div>
                                     </div>
                                   ))}
                                 </div>
                               ) : (
-                                <p className="text-xs text-gray-500 italic">Nenhum áudio ou vídeo cadastrado</p>
+                                <p className="text-xs text-gray-500 italic text-center py-4">Nenhum áudio ou vídeo cadastrado</p>
                               )}
                             </div>
                           </div>
@@ -1119,14 +1171,13 @@ export default function ProjetoDetalhes() {
                   })}
                 </div>
               )}
-            </div>
-          </div>
+        </div>
 
-          {/* Informações de Gravação */}
-          <div className="space-y-6">
+        {/* Informações de Gravação */}
+        <div className="space-y-6 mb-6">
             <div className="bg-dark-card border border-dark-border rounded-xl p-6">
               <h2 className="text-xl font-semibold text-white mb-6">Informações de Gravação</h2>
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-2">Estúdio Utilizado</label>
                   {editandoEstudio ? (
@@ -1254,7 +1305,7 @@ export default function ProjetoDetalhes() {
             </div>
 
             {/* Fornecedores e Profissionais */}
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6 mb-6">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6">
               <h2 className="text-xl font-semibold text-white mb-6">Fornecedores e Profissionais</h2>
               <div className="space-y-4">
                 {projeto.fornecedor_audio_id && (
@@ -1400,12 +1451,11 @@ export default function ProjetoDetalhes() {
               )}
             </div>
           </div>
-        </div>
 
         {/* Seção de Referências */}
         <div className="bg-dark-card border border-dark-border rounded-xl p-6 mb-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-white">Referências</h2>
+            <h2 className="text-xl font-semibold text-white">Referências do Projeto</h2>
             <button
               onClick={() => {
                 setSelectedFaixaForReferencia(null);
@@ -1475,7 +1525,7 @@ export default function ProjetoDetalhes() {
         {/* Seção de Anexos */}
         <div className="bg-dark-card border border-dark-border rounded-xl p-6 mb-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-white">Anexos</h2>
+            <h2 className="text-xl font-semibold text-white">Anexos do Projeto</h2>
             <button
               onClick={() => {
                 setSelectedFaixaForAnexo(null);
