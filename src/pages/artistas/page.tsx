@@ -32,7 +32,7 @@ export default function Artistas() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     nome: '',
-    genero: '',
+    genero: 'gospel', // Todos os artistas da CEU são gospel
     status: 'ativo',
     contato_email: '',
     contato_telefone: '',
@@ -71,7 +71,7 @@ export default function Artistas() {
       setShowModal(false);
       setFormData({
         nome: '',
-        genero: '',
+        genero: 'gospel', // Todos os artistas da CEU são gospel
         status: 'ativo',
         contato_email: '',
         contato_telefone: '',
@@ -116,8 +116,7 @@ export default function Artistas() {
   };
 
   const filteredArtistas = artistas.filter(artista => {
-    const matchesSearch = artista.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         artista.genero.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = artista.nome.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'todos' || artista.status.toLowerCase() === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -164,7 +163,7 @@ export default function Artistas() {
               <i className="ri-search-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg"></i>
               <input
                 type="text"
-                placeholder="Buscar por nome ou gênero..."
+                placeholder="Buscar por nome..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
@@ -400,8 +399,11 @@ export default function Artistas() {
                       <div className="bg-dark-bg border border-dark-border rounded-lg p-4">
                         <p className="text-sm text-gray-400 mb-2">Formato esperado (CSV):</p>
                         <code className="text-xs text-gray-500 block mb-3">
-                          nome,gênero,contato_email,contato_telefone,status,observacoes_internas
+                          nome,contato_email,contato_telefone,status,observacoes_internas
                         </code>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Nota: O gênero será automaticamente definido como "gospel" para todos os artistas.
+                        </p>
                         <button
                           onClick={downloadTemplate}
                           className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer flex items-center gap-2"
@@ -430,8 +432,11 @@ export default function Artistas() {
                       <div className="bg-dark-bg border border-dark-border rounded-lg p-4">
                         <p className="text-sm text-gray-400 mb-2">Formato esperado (JSON):</p>
                         <code className="text-xs text-gray-500 block">
-                          {`[\n  {\n    "nome": "Nome do Artista",\n    "genero": "Pop",\n    "contato_email": "email@exemplo.com",\n    "contato_telefone": "(11) 99999-9999",\n    "status": "ativo"\n  }\n]`}
+                          {`[\n  {\n    "nome": "Nome do Artista",\n    "contato_email": "email@exemplo.com",\n    "contato_telefone": "(11) 99999-9999",\n    "status": "ativo"\n  }\n]`}
                         </code>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Nota: O gênero será automaticamente definido como "gospel" para todos os artistas.
+                        </p>
                       </div>
                     </div>
                   )}
@@ -567,18 +572,6 @@ export default function Artistas() {
                     onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                     className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
                     placeholder="Digite o nome do artista"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Gênero Musical</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.genero}
-                    onChange={(e) => setFormData({ ...formData, genero: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                    placeholder="Ex: Pop, Rock, Hip Hop"
                   />
                 </div>
 

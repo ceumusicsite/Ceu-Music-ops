@@ -67,7 +67,7 @@ export default function ArtistaDetalhes() {
         setArtista(artistaData);
         setFormData({
           nome: artistaData.nome || '',
-          genero: artistaData.genero || '',
+          genero: 'gospel', // Todos os artistas da CEU são gospel
           status: artistaData.status || 'ativo',
           contato_email: artistaData.contato_email || '',
           contato_telefone: artistaData.contato_telefone || '',
@@ -124,7 +124,7 @@ export default function ArtistaDetalhes() {
         .from('artistas')
         .update({
           nome: formData.nome,
-          genero: formData.genero,
+          genero: 'gospel', // Todos os artistas da CEU são gospel
           status: formData.status,
           contato_email: formData.contato_email,
           contato_telefone: formData.contato_telefone,
@@ -360,23 +360,6 @@ export default function ArtistaDetalhes() {
                     <div className="flex items-center gap-3 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg">
                       <i className="ri-phone-line text-primary-teal"></i>
                       <span className="text-white">{artista.contato_telefone || 'Não informado'}</span>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Gênero Musical</label>
-                  {editMode ? (
-                    <input
-                      type="text"
-                      value={formData.genero}
-                      onChange={(e) => setFormData({ ...formData, genero: e.target.value })}
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                      placeholder="Ex: Pop, Rock, Hip Hop"
-                    />
-                  ) : (
-                    <div className="flex items-center gap-3 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg">
-                      <i className="ri-music-2-line text-primary-teal"></i>
-                      <span className="text-white">{artista.genero}</span>
                     </div>
                   )}
                 </div>

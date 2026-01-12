@@ -123,27 +123,20 @@ export default function Documentos() {
 
       setUploading(true);
 
-      // Upload do arquivo para Supabase Storage
-      const fileExt = formData.arquivo.name.split('.').pop();
-      const fileName = `documentos/${Date.now()}_${formData.arquivo.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('documentos')
-        .upload(fileName, formData.arquivo);
-
-      if (uploadError) throw uploadError;
-
-      // Obter URL pública
-      const { data: urlData } = supabase.storage
-        .from('documentos')
-        .getPublicUrl(fileName);
+      // Upload do arquivo para Cloudflare R2
+      const { storageService, R2_BUCKETS } = await import('../../services/storage');
+      const result = await storageService.upload(formData.arquivo, {
+        bucket: R2_BUCKETS.DOCUMENTOS,
+        folder: 'documentos',
+        makePublic: true,
+      });
 
       // Preparar dados do documento
       const documentoData: any = {
         titulo: formData.titulo.trim(),
         tipo: formData.tipo,
         status: formData.status || 'ativo',
-        arquivo_url: urlData.publicUrl,
+        arquivo_url: result.url,
         arquivo_nome: formData.arquivo.name,
       };
 

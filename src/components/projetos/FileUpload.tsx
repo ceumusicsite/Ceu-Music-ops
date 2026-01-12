@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { supabase } from '../../lib/supabase';
+import { storageService, R2_BUCKETS } from '../../services/storage';
 
 interface FileUploadProps {
   bucket: string;
@@ -11,6 +11,7 @@ interface FileUploadProps {
   label?: string;
   className?: string;
   multiple?: boolean;
+  makePublic?: boolean;
 }
 
 export default function FileUpload({
@@ -23,6 +24,7 @@ export default function FileUpload({
   label = 'Selecionar arquivo',
   className = '',
   multiple = false,
+  makePublic = true,
 }: FileUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -57,23 +59,25 @@ export default function FileUpload({
     try {
       setUploading(true);
 
-      // Gerar nome único para o arquivo
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${folder ? `${folder}/` : ''}${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      // Mapear bucket para R2 bucket se necessário
+      let r2Bucket = bucket;
+      if (bucket === 'documentos') {
+        r2Bucket = R2_BUCKETS.DOCUMENTOS;
+      } else if (bucket === 'projetos-anexos' || bucket === 'anexos') {
+        r2Bucket = R2_BUCKETS.ANEXOS;
+      } else if (bucket === 'comprovantes') {
+        r2Bucket = R2_BUCKETS.COMPROVANTES;
+      }
 
-      // Upload para Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, file);
+      // Upload usando serviço unificado (R2 por padrão)
+      const result = await storageService.upload(file, {
+        bucket: r2Bucket,
+        folder: folder,
+        contentType: file.type,
+        makePublic: makePublic,
+      });
 
-      if (uploadError) throw uploadError;
-
-      // Obter URL pública
-      const { data: urlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(fileName);
-
-      onUploadComplete(urlData.publicUrl, file.name);
+      onUploadComplete(result.url, file.name);
       
       // Limpar preview e input
       setPreview(null);

@@ -386,25 +386,18 @@ export default function Financeiro() {
     try {
       setUploading(true);
       
-      // Upload para Supabase Storage
-      const fileExt = file.name.split('.').pop();
-      const fileName = `comprovantes/${selectedPagamento.id}_${Date.now()}.${fileExt}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('comprovantes')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      // Obter URL pública
-      const { data } = supabase.storage
-        .from('comprovantes')
-        .getPublicUrl(fileName);
+      // Upload para Cloudflare R2
+      const { storageService, R2_BUCKETS } = await import('../../services/storage');
+      const result = await storageService.upload(file, {
+        bucket: R2_BUCKETS.COMPROVANTES,
+        folder: 'comprovantes',
+        makePublic: true,
+      });
 
       // Atualizar pagamento com URL do comprovante
       const { error: updateError } = await supabase
         .from('pagamentos')
-        .update({ comprovante_url: data.publicUrl })
+        .update({ comprovante_url: result.url })
         .eq('id', selectedPagamento.id);
 
       if (updateError) throw updateError;
