@@ -192,11 +192,11 @@ export default function Artistas() {
         </div>
 
         {/* Artists Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredArtistas.map((artista) => (
             <div 
               key={artista.id} 
-              className="bg-dark-card border border-dark-border rounded-xl p-6 hover:border-primary-teal transition-smooth"
+              className="bg-dark-card border border-dark-border rounded-xl overflow-hidden hover:border-primary-teal transition-smooth flex flex-col"
               onClick={() => {
                 // Fechar menu de ações se clicar fora dele
                 if (showActionsMenu !== artista.id) {
@@ -204,51 +204,41 @@ export default function Artistas() {
                 }
               }}
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center">
-                    <span className="text-2xl font-bold text-white">{getInitials(artista.nome)}</span>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-white mb-1">{artista.nome}</h3>
-                    <p className="text-sm text-gray-400">{artista.genero}</p>
-                  </div>
+              {/* Área da Foto */}
+              <div className="w-full py-8 px-6 bg-dark-bg flex items-center justify-center">
+                <div className="w-52 h-64 rounded-xl bg-gradient-primary flex items-center justify-center shadow-xl">
+                  <span className="text-5xl font-bold text-white">{getInitials(artista.nome)}</span>
                 </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                  artista.status === 'ativo' 
-                    ? 'bg-green-500/20 text-green-400' 
-                    : artista.status === 'em_producao'
-                    ? 'bg-blue-500/20 text-blue-400'
-                    : artista.status === 'pausa'
-                    ? 'bg-yellow-500/20 text-yellow-400'
-                    : artista.status === 'finalizado'
-                    ? 'bg-gray-500/20 text-gray-400'
-                    : 'bg-gray-500/20 text-gray-400'
-                }`}>
-                  {artista.status === 'em_producao' ? 'Em Produção' :
-                   artista.status === 'pausa' ? 'Pausa' :
-                   artista.status === 'finalizado' ? 'Finalizado' :
-                   artista.status.charAt(0).toUpperCase() + artista.status.slice(1)}
-                </span>
               </div>
 
-              <div className="space-y-3 mb-4">
-                <div className="flex items-center gap-2 text-sm text-gray-400">
-                  <i className="ri-mail-line text-primary-teal"></i>
+              {/* Informações do Artista */}
+              <div className="px-6 py-7 space-y-4 flex-1">
+                {/* Nome do Artista */}
+                <h3 className="text-lg font-semibold text-white mb-2">{artista.nome}</h3>
+                
+                {/* Email */}
+                <div className="flex items-center gap-3 text-base text-white">
+                  <i className="ri-mail-line text-primary-teal text-xl"></i>
                   <span className="truncate">{artista.contato_email}</span>
                 </div>
+                
+                {/* Telefone */}
                 {artista.contato_telefone && (
-                  <div className="flex items-center gap-2 text-sm text-gray-400">
-                    <i className="ri-phone-line text-primary-teal"></i>
+                  <div className="flex items-center gap-3 text-base text-white">
+                    <i className="ri-phone-line text-primary-teal text-xl"></i>
                     <span>{artista.contato_telefone}</span>
                   </div>
                 )}
               </div>
 
-              <div className="flex gap-2 relative">
+              {/* Botões */}
+              <div className="px-6 pb-6 flex gap-3 relative">
                 <button 
-                  onClick={() => navigate(`/artistas/${artista.id}`)}
-                  className="flex-1 px-4 py-2 bg-dark-bg hover:bg-dark-hover text-white text-sm rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/artistas/${artista.id}`);
+                  }}
+                  className="flex-1 px-5 py-3 bg-dark-bg hover:bg-dark-hover text-white text-base font-medium rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                 >
                   Ver Detalhes
                 </button>
@@ -258,16 +248,17 @@ export default function Artistas() {
                       e.stopPropagation();
                       setShowActionsMenu(showActionsMenu === artista.id ? null : artista.id);
                     }}
-                    className="px-4 py-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                    className="w-12 h-12 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer flex items-center justify-center"
                     title="Mais opções"
                   >
-                    <i className="ri-more-2-fill"></i>
+                    <i className="ri-more-2-fill text-xl"></i>
                   </button>
                   
                   {showActionsMenu === artista.id && (
                     <div className="absolute right-0 bottom-full mb-2 w-48 bg-dark-card border border-dark-border rounded-lg shadow-lg z-10">
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           navigate(`/artistas/${artista.id}`);
                           setShowActionsMenu(null);
                         }}
@@ -277,7 +268,8 @@ export default function Artistas() {
                         Ver Detalhes
                       </button>
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           navigate(`/artistas/${artista.id}`);
                           setShowActionsMenu(null);
                         }}
@@ -288,7 +280,10 @@ export default function Artistas() {
                       </button>
                       <div className="border-t border-dark-border"></div>
                       <button
-                        onClick={() => handleDeleteClick(artista)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClick(artista);
+                        }}
                         className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-smooth cursor-pointer flex items-center gap-2 rounded-b-lg"
                       >
                         <i className="ri-delete-bin-line"></i>

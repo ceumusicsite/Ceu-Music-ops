@@ -51,6 +51,8 @@ export default function ArtistaDetalhes() {
 
   const loadArtistaData = async () => {
     try {
+      console.log('Carregando dados do artista com ID:', id);
+      
       // Carregar dados do artista
       const { data: artistaData, error: artistaError } = await supabase
         .from('artistas')
@@ -61,6 +63,7 @@ export default function ArtistaDetalhes() {
       if (artistaError) throw artistaError;
 
       if (artistaData) {
+        console.log('Artista carregado:', artistaData.nome);
         setArtista(artistaData);
         setFormData({
           nome: artistaData.nome || '',
@@ -74,14 +77,38 @@ export default function ArtistaDetalhes() {
       }
 
       // Carregar projetos do artista
+      console.log('Buscando projetos com artista_id:', id);
       const { data: projetosData, error: projetosError } = await supabase
         .from('projetos')
-        .select('id, nome, fase, progresso, prioridade, prazo, created_at')
+        .select('id, nome, fase, progresso, prioridade, previsao_lancamento, artista_id, created_at')
         .eq('artista_id', id)
         .order('created_at', { ascending: false });
 
-      if (projetosError) throw projetosError;
-      if (projetosData) setProjetos(projetosData);
+      if (projetosError) {
+        console.error('Erro ao carregar projetos:', projetosError);
+        throw projetosError;
+      }
+      
+      console.log('Projetos encontrados para o artista:', projetosData?.length || 0);
+      console.log('Dados dos projetos:', projetosData);
+      
+      // Verificar se há projetos sem artista_id para debug
+      if (projetosData && projetosData.length === 0) {
+        const { data: todosProjetos } = await supabase
+          .from('projetos')
+          .select('id, nome, artista_id')
+          .limit(5);
+        console.log('Amostra de projetos no banco (primeiros 5):', todosProjetos);
+      }
+      
+      if (projetosData) {
+        // Mapear previsao_lancamento para prazo para manter compatibilidade
+        const projetosMapeados = projetosData.map(projeto => ({
+          ...projeto,
+          prazo: projeto.previsao_lancamento
+        }));
+        setProjetos(projetosMapeados);
+      }
     } catch (error) {
       console.error('Erro ao carregar dados do artista:', error);
     } finally {
