@@ -122,3 +122,4 @@ Para arquivos já armazenados no Supabase:
 - [R2 S3 API Compatibility](https://developers.cloudflare.com/r2/api/s3/api/)
 - [AWS SDK for JavaScript v3](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/)
 
+

@@ -60,3 +60,7 @@ A tabela `produtores` possui os seguintes campos:
 
 Os campos `artistas_trabalhados` e `projetos` são armazenados como strings JSON no banco de dados, mas são convertidos para arrays no código da aplicação.
 
+
+
+
+

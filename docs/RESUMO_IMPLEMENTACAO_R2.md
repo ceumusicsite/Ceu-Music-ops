@@ -138,3 +138,4 @@ Se encontrar problemas:
 
 **Status**: ✅ Implementação completa e pronta para uso após configuração do R2
 
+

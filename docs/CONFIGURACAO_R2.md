@@ -137,3 +137,4 @@ Para mais informações:
 - [Documentação do Cloudflare R2](https://developers.cloudflare.com/r2/)
 - [R2 S3 API Compatibility](https://developers.cloudflare.com/r2/api/s3/api/)
 
+

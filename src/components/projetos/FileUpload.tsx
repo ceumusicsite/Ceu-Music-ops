@@ -24,7 +24,7 @@ export default function FileUpload({
   label = 'Selecionar arquivo',
   className = '',
   multiple = false,
-  makePublic = true,
+  makePublic = false, // Por padrão, usar signed URLs (mais seguro)
 }: FileUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);

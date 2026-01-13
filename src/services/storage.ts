@@ -127,3 +127,4 @@ export const storageService = new StorageService();
 // Exportar buckets para uso fácil
 export { R2_BUCKETS };
 
+

@@ -6,7 +6,8 @@ const accountId = import.meta.env.VITE_R2_ACCOUNT_ID;
 const accessKeyId = import.meta.env.VITE_R2_ACCESS_KEY_ID;
 const secretAccessKey = import.meta.env.VITE_R2_SECRET_ACCESS_KEY;
 const endpoint = import.meta.env.VITE_R2_ENDPOINT || `https://${accountId}.r2.cloudflarestorage.com`;
-const publicUrl = import.meta.env.VITE_R2_PUBLIC_URL || `https://pub-${accountId}.r2.dev`;
+// URL pública opcional - se não definida, sempre usará signed URLs
+const publicUrl = import.meta.env.VITE_R2_PUBLIC_URL;
 
 // Buckets padrão
 export const R2_BUCKETS = {
@@ -60,11 +61,14 @@ export async function uploadToR2(
     ? `${options.folder}/${timestamp}_${sanitizedName}`
     : `${timestamp}_${sanitizedName}`;
 
+  // Converter File para ArrayBuffer para compatibilidade com AWS SDK no navegador
+  const arrayBuffer = await file.arrayBuffer();
+  
   // Preparar comando de upload
   const command = new PutObjectCommand({
     Bucket: bucket,
     Key: key,
-    Body: file,
+    Body: new Uint8Array(arrayBuffer),
     ContentType: options.contentType || file.type || 'application/octet-stream',
     // Se makePublic for true, adicionar ACL (se o bucket permitir)
     // Nota: R2 não suporta ACL da mesma forma que S3, então usamos URLs públicas
@@ -75,13 +79,13 @@ export async function uploadToR2(
     await s3Client.send(command);
 
     // Gerar URL pública ou signed URL
-    let publicUrlFinal: string | undefined;
+    let publicUrlFinal: string;
     
-    if (options.makePublic) {
-      // Se o bucket for público, usar URL pública direta
+    if (options.makePublic && publicUrl) {
+      // Se o bucket for público e a URL pública estiver configurada, usar URL pública direta
       publicUrlFinal = `${publicUrl}/${bucket}/${key}`;
     } else {
-      // Gerar URL assinada (válida por 1 hora)
+      // Gerar URL assinada (válida por 1 hora) - mais seguro
       const getCommand = new GetObjectCommand({
         Bucket: bucket,
         Key: key,
@@ -90,7 +94,7 @@ export async function uploadToR2(
     }
 
     return {
-      url: publicUrlFinal || `${publicUrl}/${bucket}/${key}`,
+      url: publicUrlFinal,
       key: key,
       publicUrl: publicUrlFinal,
     };
@@ -158,8 +162,13 @@ export async function deleteFromR2(bucket: string, key: string): Promise<void> {
 
 /**
  * Obtém a URL pública de um arquivo (se o bucket for público)
+ * Se a URL pública não estiver configurada, retorna null
  */
-export function getPublicUrlR2(bucket: string, key: string): string {
+export function getPublicUrlR2(bucket: string, key: string): string | null {
+  if (!publicUrl) {
+    return null;
+  }
   return `${publicUrl}/${bucket}/${key}`;
 }
+
 

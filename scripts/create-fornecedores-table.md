@@ -88,3 +88,7 @@ O campo `servicos` é armazenado como string JSON no banco de dados, mas é conv
 - `idx_fornecedores_status`: Para filtragem por status
 - `idx_fornecedores_created_at`: Para ordenação por data de criação
 
+
+
+
+

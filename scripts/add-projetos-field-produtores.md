@@ -67,3 +67,7 @@ O campo é criado com valor padrão `'[]'` (array vazio), então produtores exis
 
 Se a tabela `produtores` ainda não existir, execute primeiro o script `create-produtores-table.sql` para criar a tabela completa.
 
+
+
+
+

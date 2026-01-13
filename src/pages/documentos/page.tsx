@@ -128,20 +128,35 @@ export default function Documentos() {
       const result = await storageService.upload(formData.arquivo, {
         bucket: R2_BUCKETS.DOCUMENTOS,
         folder: 'documentos',
-        makePublic: true,
+        makePublic: false, // Usar signed URLs (mais seguro)
       });
 
       // Preparar dados do documento
       const documentoData: any = {
+        nome: formData.titulo.trim(), // Campo obrigatório no banco
         titulo: formData.titulo.trim(),
         tipo: formData.tipo,
+        categoria: formData.tipo, // Campo obrigatório no banco (mesmo valor de tipo)
         status: formData.status || 'ativo',
         arquivo_url: result.url,
         arquivo_nome: formData.arquivo.name,
       };
 
-      if (formData.artista_id) documentoData.artista_id = formData.artista_id;
-      if (formData.projeto_id) documentoData.projeto_id = formData.projeto_id;
+      // Adicionar associações e tipo de associação
+      if (formData.artista_id && formData.projeto_id) {
+        documentoData.artista_id = formData.artista_id;
+        documentoData.projeto_id = formData.projeto_id;
+        documentoData.tipo_associacao = 'projeto'; // Priorizar projeto quando tem ambos
+      } else if (formData.artista_id) {
+        documentoData.artista_id = formData.artista_id;
+        documentoData.tipo_associacao = 'artista';
+      } else if (formData.projeto_id) {
+        documentoData.projeto_id = formData.projeto_id;
+        documentoData.tipo_associacao = 'projeto';
+      } else {
+        // Sem associação - não enviar tipo_associacao ou enviar null
+        documentoData.tipo_associacao = null;
+      }
       if (formData.data_inicio) documentoData.data_inicio = formData.data_inicio;
       if (formData.data_fim) documentoData.data_fim = formData.data_fim;
       if (formData.valor && formData.valor.trim()) {

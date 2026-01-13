@@ -391,7 +391,7 @@ export default function Financeiro() {
       const result = await storageService.upload(file, {
         bucket: R2_BUCKETS.COMPROVANTES,
         folder: 'comprovantes',
-        makePublic: true,
+        makePublic: false, // Usar signed URLs (mais seguro)
       });
 
       // Atualizar pagamento com URL do comprovante

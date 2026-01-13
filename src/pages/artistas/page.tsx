@@ -207,8 +207,8 @@ export default function Artistas() {
               <div className="w-full py-8 px-6 bg-dark-bg flex items-center justify-center">
                 <div className="w-52 h-64 rounded-xl bg-gradient-primary flex items-center justify-center shadow-xl">
                   <span className="text-5xl font-bold text-white">{getInitials(artista.nome)}</span>
+                  </div>
                 </div>
-              </div>
 
               {/* Informações do Artista */}
               <div className="px-6 py-7 space-y-4 flex-1">

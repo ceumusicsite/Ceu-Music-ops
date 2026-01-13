@@ -90,3 +90,7 @@ CREATE TRIGGER update_fornecedores_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_fornecedores_updated_at();
 
+
+
+
+
