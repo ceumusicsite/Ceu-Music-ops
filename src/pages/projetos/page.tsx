@@ -13,9 +13,18 @@ interface Projeto {
   progresso: number;
   prazo?: string;
   previsao_lancamento?: string;
+  data_lancamento?: string;
+  tipo_data_lancamento?: 'real' | 'prevista';
+  tem_pre_producao?: boolean | null;
   prioridade: string;
   artista?: { nome: string; id?: string };
   artista_id?: string;
+}
+
+interface Faixa {
+  id: string;
+  projeto_id: string;
+  status: 'pendente' | 'gravada' | 'em_mixagem' | 'masterizacao' | 'finalizada' | 'lancada';
 }
 
 interface Artista {
@@ -33,12 +42,13 @@ export default function Projetos() {
   const [showActionsMenu, setShowActionsMenu] = useState<string | null>(null);
   const [projetoToDelete, setProjetoToDelete] = useState<Projeto | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [openFaseDropdown, setOpenFaseDropdown] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  // Fechar menu de ações ao clicar fora
+  // Fechar menu de ações e dropdown de fase ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -46,9 +56,13 @@ export default function Projetos() {
       if (showActionsMenu && !target.closest('.actions-menu-container') && !target.closest('.actions-menu-button')) {
         setShowActionsMenu(null);
       }
+      // Não fechar se o clique foi dentro do dropdown de fase ou no botão que abre o dropdown
+      if (openFaseDropdown && !target.closest('.fase-dropdown-container') && !target.closest('.fase-dropdown-button')) {
+        setOpenFaseDropdown(null);
+      }
     };
 
-    if (showActionsMenu) {
+    if (showActionsMenu || openFaseDropdown) {
       // Usar um pequeno delay para não fechar imediatamente após abrir
       setTimeout(() => {
         document.addEventListener('mousedown', handleClickOutside);
@@ -57,35 +71,147 @@ export default function Projetos() {
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }
-  }, [showActionsMenu]);
+  }, [showActionsMenu, openFaseDropdown]);
+
+  // Função para calcular o progresso baseado na fase e status das faixas
+  // Cada fase tem uma porcentagem base e um intervalo para o progresso das faixas
+  const calcularProgresso = (fase: string, faixas: Faixa[]): number => {
+    // Define a porcentagem base e o intervalo de cada fase
+    const faseConfig: Record<string, { base: number; min: number; max: number; statusValidos: Faixa['status'][] }> = {
+      'planejamento': {
+        base: 0,
+        min: 0,
+        max: 12,
+        statusValidos: [] // Nenhum status conta, ainda está no planejamento
+      },
+      'gravando': {
+        base: 12,
+        min: 12,
+        max: 30,
+        statusValidos: ['gravada', 'em_mixagem', 'masterizacao', 'finalizada', 'lancada']
+      },
+      'em_edicao': {
+        base: 30,
+        min: 30,
+        max: 50,
+        statusValidos: ['gravada', 'em_mixagem', 'masterizacao', 'finalizada', 'lancada']
+      },
+      'mixagem': {
+        base: 50,
+        min: 50,
+        max: 70,
+        statusValidos: ['em_mixagem', 'masterizacao', 'finalizada', 'lancada']
+      },
+      'masterizacao': {
+        base: 70,
+        min: 70,
+        max: 85,
+        statusValidos: ['masterizacao', 'finalizada', 'lancada']
+      },
+      'finalizado': {
+        base: 85,
+        min: 85,
+        max: 95,
+        statusValidos: ['finalizada', 'lancada']
+      },
+      'em_fase_lancamento': {
+        base: 95,
+        min: 95,
+        max: 100,
+        statusValidos: ['finalizada', 'lancada']
+      },
+      'lancado': {
+        base: 100,
+        min: 100,
+        max: 100,
+        statusValidos: ['lancada']
+      }
+    };
+
+    const config = faseConfig[fase];
+    if (!config) return 0;
+
+    // Se não há faixas, retorna a porcentagem base da fase
+    if (faixas.length === 0) {
+      return config.base;
+    }
+
+    // Se a fase é "lançado", sempre retorna 100%
+    if (fase === 'lancado') {
+      return 100;
+    }
+
+    // Calcula a porcentagem de faixas completas para essa fase
+    const faixasCompletas = config.statusValidos.length > 0
+      ? faixas.filter(f => config.statusValidos.includes(f.status)).length
+      : 0;
+    
+    const porcentagemFaixas = faixasCompletas / faixas.length;
+
+    // Calcula o progresso dentro do intervalo da fase
+    // Por exemplo, se está em "gravando" (12-30%), e 50% das faixas foram gravadas:
+    // progresso = 12 + (30 - 12) * 0.5 = 12 + 9 = 21%
+    const intervalo = config.max - config.min;
+    const progressoDentroFase = porcentagemFaixas * intervalo;
+    const progressoFinal = config.min + progressoDentroFase;
+
+    return Math.round(Math.min(100, Math.max(0, progressoFinal)));
+  };
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [projetosRes, artistasRes] = await Promise.all([
+      const [projetosRes, artistasRes, faixasRes] = await Promise.all([
         supabase
           .from('projetos')
-          .select('id, nome, tipo, fase, progresso, prioridade, data_inicio, previsao_lancamento, artista_id, artista:artista_id(id, nome)')
+          .select('id, nome, tipo, fase, progresso, prioridade, data_inicio, previsao_lancamento, data_lancamento, tipo_data_lancamento, tem_pre_producao, artista_id, artista:artista_id(id, nome)')
           .order('created_at', { ascending: false }),
         supabase
           .from('artistas')
           .select('id, nome')
           .eq('status', 'ativo')
-          .order('nome')
+          .order('nome'),
+        supabase
+          .from('faixas')
+          .select('id, projeto_id, status')
       ]);
 
       if (projetosRes.error) {
         console.error('Erro ao carregar projetos:', projetosRes.error);
-      } else {
-        console.log('Projetos carregados:', projetosRes.data?.length || 0);
-        setProjetos(projetosRes.data as any || []);
       }
 
       if (artistasRes.error) {
         console.error('Erro ao carregar artistas:', artistasRes.error);
-      } else {
-        setArtistas(artistasRes.data || []);
       }
+
+      if (faixasRes.error) {
+        console.error('Erro ao carregar faixas:', faixasRes.error);
+      }
+
+      // Agrupar faixas por projeto
+      const faixasPorProjeto = new Map<string, Faixa[]>();
+      if (faixasRes.data) {
+        faixasRes.data.forEach((faixa: Faixa) => {
+          if (!faixasPorProjeto.has(faixa.projeto_id)) {
+            faixasPorProjeto.set(faixa.projeto_id, []);
+          }
+          faixasPorProjeto.get(faixa.projeto_id)!.push(faixa);
+        });
+      }
+
+      // Calcular progresso para cada projeto baseado na fase e faixas
+      const projetosComProgresso = (projetosRes.data || []).map((projeto: Projeto) => {
+        const faixasDoProjeto = faixasPorProjeto.get(projeto.id) || [];
+        const progressoCalculado = calcularProgresso(projeto.fase, faixasDoProjeto);
+        
+        return {
+          ...projeto,
+          progresso: progressoCalculado
+        };
+      });
+
+      setProjetos(projetosComProgresso);
+      setArtistas(artistasRes.data || []);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
@@ -95,6 +221,53 @@ export default function Projetos() {
 
 
   const phases = ['planejamento', 'gravando', 'em_edicao', 'mixagem', 'masterizacao', 'finalizado', 'em_fase_lancamento', 'lancado'];
+
+  const fases = [
+    { value: 'planejamento', label: 'Planejamento' },
+    { value: 'gravando', label: 'Gravando' },
+    { value: 'em_edicao', label: 'Em edição' },
+    { value: 'mixagem', label: 'Mixagem' },
+    { value: 'masterizacao', label: 'Masterização' },
+    { value: 'finalizado', label: 'Finalizado' },
+    { value: 'em_fase_lancamento', label: 'Em fase de lançamento' },
+    { value: 'lancado', label: 'Lançado' }
+  ];
+
+  const handleUpdateFase = async (projetoId: string, novaFase: string) => {
+    try {
+      // Buscar as faixas do projeto para calcular o novo progresso
+      const { data: faixasData, error: faixasError } = await supabase
+        .from('faixas')
+        .select('id, projeto_id, status')
+        .eq('projeto_id', projetoId);
+
+      if (faixasError && faixasError.code !== 'PGRST116') {
+        throw faixasError;
+      }
+
+      // Calcular o novo progresso baseado na nova fase
+      const faixasDoProjeto: Faixa[] = faixasData || [];
+      const novoProgresso = calcularProgresso(novaFase, faixasDoProjeto);
+
+      // Atualizar fase e progresso no banco de dados
+      const { error } = await supabase
+        .from('projetos')
+        .update({
+          fase: novaFase,
+          progresso: novoProgresso,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', projetoId);
+
+      if (error) throw error;
+
+      setOpenFaseDropdown(null);
+      await loadData();
+    } catch (error) {
+      console.error('Erro ao atualizar fase:', error);
+      alert('Erro ao atualizar fase. Tente novamente.');
+    }
+  };
 
   const filteredProjetos = projetos.filter(projeto =>
     projeto.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -246,7 +419,8 @@ export default function Projetos() {
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Fase</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Progresso</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Prioridade</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Prazo</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Data de Lançamento</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Pré-Produção</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-400">Ações</th>
                   </tr>
                 </thead>
@@ -266,10 +440,39 @@ export default function Projetos() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-400">{projeto.artista?.nome || 'Sem artista'}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getPhaseColor(projeto.fase)}`}>
-                          {getPhaseLabel(projeto.fase)}
-                        </span>
+                      <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="relative fase-dropdown-container">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenFaseDropdown(openFaseDropdown === projeto.id ? null : projeto.id);
+                            }}
+                            className={`fase-dropdown-button px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-smooth cursor-pointer flex items-center gap-2 ${getPhaseColor(projeto.fase)}`}
+                          >
+                            {getPhaseLabel(projeto.fase)}
+                            <i className={`ri-arrow-${openFaseDropdown === projeto.id ? 'up' : 'down'}-s-line text-xs`}></i>
+                          </button>
+                          {openFaseDropdown === projeto.id && (
+                            <div className="absolute top-full left-0 mt-2 bg-dark-card border border-dark-border rounded-lg shadow-xl z-50 min-w-[180px]">
+                              {fases.map((fase) => (
+                                <button
+                                  key={fase.value}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpdateFase(projeto.id, fase.value);
+                                  }}
+                                  className={`w-full text-left px-4 py-2 text-sm transition-smooth cursor-pointer first:rounded-t-lg last:rounded-b-lg ${
+                                    projeto.fase === fase.value
+                                      ? 'bg-blue-500/20 text-blue-400'
+                                      : 'text-gray-300 hover:bg-dark-hover hover:text-white'
+                                  }`}
+                                >
+                                  {fase.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -288,7 +491,30 @@ export default function Projetos() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-400 whitespace-nowrap">
-                        {projeto.previsao_lancamento ? new Date(projeto.previsao_lancamento).toLocaleDateString('pt-BR') : '-'}
+                        {projeto.data_lancamento ? (
+                          <div className="flex flex-col gap-1">
+                            <span>{new Date(projeto.data_lancamento).toLocaleDateString('pt-BR')}</span>
+                            <span className="text-xs text-gray-500">
+                              {projeto.tipo_data_lancamento === 'real' ? 'Data de Lançamento' : 'Data Prevista'}
+                            </span>
+                          </div>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {projeto.tem_pre_producao !== null && (
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                            projeto.tem_pre_producao 
+                              ? 'bg-purple-500/20 text-purple-400' 
+                              : 'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {projeto.tem_pre_producao ? 'Com Pré-Produção' : 'Sem Pré-Produção'}
+                          </span>
+                        )}
+                        {projeto.tem_pre_producao === null && (
+                          <span className="text-xs text-gray-500">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                         <div className="relative actions-menu-container">
@@ -382,8 +608,42 @@ export default function Projetos() {
                       </div>
                       <div className="space-y-3">
                         {phaseProjetos.map((projeto) => (
-                          <div key={projeto.id} className="p-4 bg-dark-bg rounded-lg hover:bg-dark-hover transition-smooth cursor-pointer">
-                            <h4 className="text-sm font-medium text-white mb-2">{projeto.nome}</h4>
+                          <div key={projeto.id} className="p-4 bg-dark-bg rounded-lg hover:bg-dark-hover transition-smooth">
+                            <div className="flex items-center justify-between mb-2">
+                              <h4 className="text-sm font-medium text-white">{projeto.nome}</h4>
+                              <div className="relative fase-dropdown-container" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenFaseDropdown(openFaseDropdown === projeto.id ? null : projeto.id);
+                                  }}
+                                  className={`fase-dropdown-button px-2 py-1 rounded text-xs font-medium whitespace-nowrap transition-smooth cursor-pointer flex items-center gap-1 ${getPhaseColor(projeto.fase)}`}
+                                >
+                                  {getPhaseLabel(projeto.fase)}
+                                  <i className={`ri-arrow-${openFaseDropdown === projeto.id ? 'up' : 'down'}-s-line text-xs`}></i>
+                                </button>
+                                {openFaseDropdown === projeto.id && (
+                                  <div className="absolute top-full right-0 mt-2 bg-dark-card border border-dark-border rounded-lg shadow-xl z-50 min-w-[180px]">
+                                    {fases.map((fase) => (
+                                      <button
+                                        key={fase.value}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleUpdateFase(projeto.id, fase.value);
+                                        }}
+                                        className={`w-full text-left px-4 py-2 text-sm transition-smooth cursor-pointer first:rounded-t-lg last:rounded-b-lg ${
+                                          projeto.fase === fase.value
+                                            ? 'bg-blue-500/20 text-blue-400'
+                                            : 'text-gray-300 hover:bg-dark-hover hover:text-white'
+                                        }`}
+                                      >
+                                        {fase.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                             <p className="text-xs text-gray-400 mb-3">{projeto.artista?.nome || 'Sem artista'}</p>
                             <div className="flex items-center gap-2 mb-3">
                               <div className="flex-1 h-1.5 bg-dark-border rounded-full overflow-hidden">
@@ -394,13 +654,34 @@ export default function Projetos() {
                               </div>
                               <span className="text-xs text-gray-400 whitespace-nowrap">{projeto.progresso}%</span>
                             </div>
-                            <div className="flex items-center justify-between">
-                              <span className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${getPriorityColor(projeto.prioridade)}`}>
-                                {projeto.prioridade.charAt(0).toUpperCase() + projeto.prioridade.slice(1)}
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {projeto.previsao_lancamento ? new Date(projeto.previsao_lancamento).toLocaleDateString('pt-BR') : '-'}
-                              </span>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${getPriorityColor(projeto.prioridade)}`}>
+                                  {projeto.prioridade.charAt(0).toUpperCase() + projeto.prioridade.slice(1)}
+                                </span>
+                              </div>
+                              {projeto.data_lancamento && (
+                                <div className="text-xs text-gray-400">
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <i className="ri-calendar-line"></i>
+                                    <span>{new Date(projeto.data_lancamento).toLocaleDateString('pt-BR')}</span>
+                                  </div>
+                                  <span className="text-gray-500">
+                                    {projeto.tipo_data_lancamento === 'real' ? 'Lançamento' : 'Prevista'}
+                                  </span>
+                                </div>
+                              )}
+                              {projeto.tem_pre_producao !== null && (
+                                <div className="text-xs">
+                                  <span className={`px-2 py-0.5 rounded whitespace-nowrap ${
+                                    projeto.tem_pre_producao 
+                                      ? 'bg-purple-500/20 text-purple-400' 
+                                      : 'bg-gray-500/20 text-gray-400'
+                                  }`}>
+                                    {projeto.tem_pre_producao ? 'Com Pré-Prod' : 'Sem Pré-Prod'}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))}

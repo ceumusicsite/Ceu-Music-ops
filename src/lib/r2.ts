@@ -32,6 +32,7 @@ export interface UploadOptions {
   folder?: string;
   contentType?: string;
   makePublic?: boolean;
+  customFileName?: string; // Nome customizado para o arquivo (sem extensão, será adicionada automaticamente)
 }
 
 export interface UploadResult {
@@ -55,11 +56,22 @@ export async function uploadToR2(
   
   // Gerar nome único para o arquivo
   const fileExt = file.name.split('.').pop();
-  const timestamp = Date.now();
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-  const key = options.folder 
-    ? `${options.folder}/${timestamp}_${sanitizedName}`
-    : `${timestamp}_${sanitizedName}`;
+  let key: string;
+  
+  if (options.customFileName) {
+    // Usar nome customizado se fornecido
+    const sanitizedCustomName = options.customFileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    key = options.folder 
+      ? `${options.folder}/${sanitizedCustomName}.${fileExt}`
+      : `${sanitizedCustomName}.${fileExt}`;
+  } else {
+    // Gerar nome único com timestamp
+    const timestamp = Date.now();
+    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    key = options.folder 
+      ? `${options.folder}/${timestamp}_${sanitizedName}`
+      : `${timestamp}_${sanitizedName}`;
+  }
 
   // Converter File para ArrayBuffer para compatibilidade com AWS SDK no navegador
   const arrayBuffer = await file.arrayBuffer();

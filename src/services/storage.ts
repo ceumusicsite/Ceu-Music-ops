@@ -8,6 +8,7 @@ const DEFAULT_STORAGE_PROVIDER: StorageProvider = (import.meta.env.VITE_STORAGE_
 
 export interface StorageUploadOptions extends UploadOptions {
   provider?: StorageProvider;
+  customFileName?: string; // Nome customizado para o arquivo
 }
 
 /**
@@ -42,6 +43,7 @@ export class StorageService {
       folder: options.folder,
       contentType: options.contentType,
       makePublic: options.makePublic,
+      customFileName: options.customFileName,
     });
   }
 

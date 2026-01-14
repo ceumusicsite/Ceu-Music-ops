@@ -12,6 +12,7 @@ interface FileUploadProps {
   className?: string;
   multiple?: boolean;
   makePublic?: boolean;
+  customFileName?: string; // Nome customizado para o arquivo
 }
 
 export default function FileUpload({
@@ -25,6 +26,7 @@ export default function FileUpload({
   className = '',
   multiple = false,
   makePublic = false, // Por padrão, usar signed URLs (mais seguro)
+  customFileName,
 }: FileUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -75,9 +77,12 @@ export default function FileUpload({
         folder: folder,
         contentType: file.type,
         makePublic: makePublic,
+        customFileName: customFileName,
       });
 
-      onUploadComplete(result.url, file.name);
+      // Usar nome customizado se fornecido, senão usar o nome original do arquivo
+      const finalFileName = customFileName ? `${customFileName}.${file.name.split('.').pop()}` : file.name;
+      onUploadComplete(result.url, finalFileName);
       
       // Limpar preview e input
       setPreview(null);

@@ -16,6 +16,9 @@ interface Projeto {
   progresso: number;
   data_inicio?: string;
   previsao_lancamento?: string;
+  data_lancamento?: string;
+  tipo_data_lancamento?: 'real' | 'prevista';
+  tem_pre_producao?: boolean;
   artista_id: string;
   artista?: { nome: string };
   estudio?: string;
@@ -128,6 +131,9 @@ export default function ProjetoDetalhes() {
   const [editandoObservacoes, setEditandoObservacoes] = useState(false);
   const [estudioTemp, setEstudioTemp] = useState('');
   const [observacoesTemp, setObservacoesTemp] = useState('');
+  const [tipoDataLancamento, setTipoDataLancamento] = useState<'real' | 'prevista'>('prevista');
+  const [dataLancamentoTemp, setDataLancamentoTemp] = useState('');
+  const [temPreProducao, setTemPreProducao] = useState<boolean | null>(null);
   const [faixaFormData, setFaixaFormData] = useState({
     nome: '',
     status: 'pendente' as Faixa['status'],
@@ -139,6 +145,7 @@ export default function ProjetoDetalhes() {
   const [showAudioVideoModal, setShowAudioVideoModal] = useState(false);
   const [selectedFaixaForModal, setSelectedFaixaForModal] = useState<Faixa | null>(null);
   const [audioVideoFormato, setAudioVideoFormato] = useState<'link' | 'arquivo'>('link');
+  const [audioVideoTipo, setAudioVideoTipo] = useState<'audio' | 'video' | ''>('');
 
   useEffect(() => {
     if (id) {
@@ -161,6 +168,7 @@ export default function ProjetoDetalhes() {
     };
   }, [showFaseDropdown]);
 
+
   const loadProjetoData = async () => {
     try {
       // Carregar dados do projeto
@@ -176,6 +184,9 @@ export default function ProjetoDetalhes() {
         setProjeto(projetoData);
         setEstudioTemp(projetoData.estudio || '');
         setObservacoesTemp(projetoData.observacoes_tecnicas || '');
+        setTipoDataLancamento(projetoData.tipo_data_lancamento || 'prevista');
+        setDataLancamentoTemp(projetoData.data_lancamento || projetoData.previsao_lancamento || '');
+        setTemPreProducao(projetoData.tem_pre_producao ?? null);
       }
 
       // Carregar faixas do projeto
@@ -299,6 +310,59 @@ export default function ProjetoDetalhes() {
     } catch (error) {
       console.error('Erro ao atualizar observações:', error);
       alert('Erro ao atualizar observações. Tente novamente.');
+    }
+  };
+
+  const handleUpdateDataLancamento = async () => {
+    if (!id) return;
+
+    try {
+      const updateData: any = {
+        tipo_data_lancamento: tipoDataLancamento,
+        updated_at: new Date().toISOString()
+      };
+
+      if (tipoDataLancamento === 'real') {
+        updateData.data_lancamento = dataLancamentoTemp || null;
+        updateData.previsao_lancamento = null;
+      } else {
+        updateData.previsao_lancamento = dataLancamentoTemp || null;
+        updateData.data_lancamento = null;
+      }
+
+      const { error } = await supabase
+        .from('projetos')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      loadProjetoData();
+    } catch (error) {
+      console.error('Erro ao atualizar data de lançamento:', error);
+      alert('Erro ao atualizar data de lançamento. Tente novamente.');
+    }
+  };
+
+  const handleUpdatePreProducao = async (temPreProducao: boolean) => {
+    if (!id) return;
+
+    try {
+      const { error } = await supabase
+        .from('projetos')
+        .update({
+          tem_pre_producao: temPreProducao,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setTemPreProducao(temPreProducao);
+      loadProjetoData();
+    } catch (error) {
+      console.error('Erro ao atualizar pré-produção:', error);
+      alert('Erro ao atualizar pré-produção. Tente novamente.');
     }
   };
 
@@ -459,14 +523,14 @@ export default function ProjetoDetalhes() {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      'pendente': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-      'gravada': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      'em_mixagem': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-      'masterizacao': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-      'finalizada': 'bg-green-500/20 text-green-400 border-green-500/30',
-      'lancada': 'bg-primary-teal/20 text-primary-teal border-primary-teal/30',
+      'pendente': 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+      'gravada': 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+      'em_mixagem': 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+      'masterizacao': 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+      'finalizada': 'bg-green-500/15 text-green-400 border-green-500/30',
+      'lancada': 'bg-primary-teal/15 text-primary-teal border-primary-teal/30',
     };
-    return colors[status] || 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+    return colors[status] || 'bg-gray-500/15 text-gray-400 border-gray-500/30';
   };
 
   const getStatusLabel = (status: string) => {
@@ -645,6 +709,8 @@ export default function ProjetoDetalhes() {
 
       setShowAudioVideoModal(false);
       setSelectedFaixaForModal(null);
+      setAudioVideoTipo('');
+      setAudioVideoFormato('link');
       loadProjetoData();
     } catch (error) {
       console.error('Erro ao salvar áudio/vídeo:', error);
@@ -889,15 +955,18 @@ export default function ProjetoDetalhes() {
                                           .eq('id', faixa.id)
                                           .then(() => loadProjetoData());
                                       }}
-                                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-smooth cursor-pointer ${getStatusColor(faixa.status)} bg-transparent`}
+                                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-smooth cursor-pointer ${getStatusColor(faixa.status)}`}
+                                      style={{
+                                        backgroundColor: 'rgba(17, 24, 39, 0.95)'
+                                      }}
                                       onClick={(e) => e.stopPropagation()}
                                     >
-                                      <option value="pendente">Pendente</option>
-                                      <option value="gravada">Gravada</option>
-                                      <option value="em_mixagem">Em Mixagem</option>
-                                      <option value="masterizacao">Masterização</option>
-                                      <option value="finalizada">Finalizada</option>
-                                      <option value="lancada">Lançada</option>
+                                      <option value="pendente" className="bg-dark-bg text-yellow-400">Pendente</option>
+                                      <option value="gravada" className="bg-dark-bg text-blue-400">Gravada</option>
+                                      <option value="em_mixagem" className="bg-dark-bg text-purple-400">Em Mixagem</option>
+                                      <option value="masterizacao" className="bg-dark-bg text-orange-400">Masterização</option>
+                                      <option value="finalizada" className="bg-dark-bg text-green-400">Finalizada</option>
+                                      <option value="lancada" className="bg-dark-bg text-primary-teal">Lançada</option>
                                     </select>
                                   </div>
                                   {faixa.status === 'pendente' && faixa.o_que_falta_gravar && (
@@ -906,10 +975,57 @@ export default function ProjetoDetalhes() {
                                       {faixa.o_que_falta_gravar}
                                     </span>
                                   )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedFaixaForModal(faixa);
+                                      setAudioVideoFormato('arquivo');
+                                      setShowAudioVideoModal(true);
+                                    }}
+                                    className="px-3 py-1 bg-primary-teal/20 text-primary-teal text-xs font-medium rounded hover:bg-primary-teal/30 transition-smooth cursor-pointer flex items-center gap-1.5"
+                                    title="Anexar áudio ou vídeo"
+                                  >
+                                    <i className="ri-attachment-line"></i>
+                                    Anexar Áudio/Vídeo
+                                  </button>
+                                  {faixa.audio_video && faixa.audio_video.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {faixa.audio_video.slice(0, 3).map((av, idx) => (
+                                        <span 
+                                          key={av.id || idx}
+                                          className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded flex items-center gap-1"
+                                        >
+                                          <i className={`ri-${av.tipo === 'audio' ? 'music-2-line' : 'video-line'}`}></i>
+                                          {av.versao === 'pre-producao' ? 'Pré-Prod' :
+                                           av.versao === 'pos-producao' ? 'Pós-Prod' :
+                                           av.versao === 'pos-gravacao' ? 'Pós-Grav' :
+                                           av.versao === 'mixagem' ? 'Mixagem' :
+                                           av.versao === 'masterizado' ? 'Master' :
+                                           av.tipo === 'audio' ? 'Áudio' : 'Vídeo'}
+                                        </span>
+                                      ))}
+                                      {faixa.audio_video.length > 3 && (
+                                        <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded">
+                                          +{faixa.audio_video.length - 3}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedFaixaForModal(faixa);
+                                  setAudioVideoFormato('arquivo');
+                                  setShowAudioVideoModal(true);
+                                }}
+                                className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
+                                title="Anexar áudio ou vídeo"
+                              >
+                                <i className="ri-attachment-line text-gray-400 hover:text-primary-teal"></i>
+                              </button>
                               <button
                                 onClick={() => toggleFaixaExpanded(faixa.id)}
                                 className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
@@ -1102,67 +1218,187 @@ export default function ProjetoDetalhes() {
                                   Adicionar
                                 </button>
                               </div>
-                              {faixa.audio_video && faixa.audio_video.length > 0 ? (
-                                <div className="space-y-2.5">
-                                  {faixa.audio_video.map((av) => (
-                                    <div key={av.id} className="flex items-center justify-between p-3 bg-dark-bg border border-dark-border rounded-lg hover:border-primary-teal/50 transition-smooth">
-                                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                          av.tipo === 'audio' ? 'bg-primary-teal/20' : 'bg-purple-500/20'
-                                        }`}>
-                                          <i className={`ri-${av.tipo === 'audio' ? 'music-2-line' : 'video-line'} ${
-                                            av.tipo === 'audio' ? 'text-primary-teal' : 'text-purple-400'
-                                          } text-lg`}></i>
+                              {(() => {
+                                // Buscar último áudio e último vídeo
+                                const ultimoAudio = faixa.audio_video?.filter(av => av.tipo === 'audio').sort((a, b) => 
+                                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                                )[0];
+                                
+                                const ultimoVideo = faixa.audio_video?.filter(av => av.tipo === 'video').sort((a, b) => 
+                                  new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                                )[0];
+
+                                // Verificar se há áudio masterizado
+                                const audioMasterizado = faixa.audio_video?.find(av => 
+                                  av.tipo === 'audio' && 
+                                  (av.versao === 'masterizado' ||
+                                   av.versao?.toLowerCase().includes('master') || 
+                                   av.versao?.toLowerCase().includes('masterizado') ||
+                                   av.descricao?.toLowerCase().includes('master') ||
+                                   av.descricao?.toLowerCase().includes('masterizado') ||
+                                   (faixa.status === 'masterizacao' || faixa.status === 'finalizada' || faixa.status === 'lancada'))
+                                );
+
+                                // Verificar se há vídeo masterizado (classificação "masterizado" ou "mixagem")
+                                // Considera apenas vídeos do tipo "arquivo", não links externos
+                                const videoMasterizado = faixa.audio_video?.find(av => 
+                                  av.tipo === 'video' && 
+                                  av.formato === 'arquivo' &&
+                                  (av.versao === 'masterizado' || 
+                                   av.versao === 'mixagem' ||
+                                   av.versao?.toLowerCase().includes('master') || 
+                                   av.versao?.toLowerCase().includes('masterizado') ||
+                                   av.descricao?.toLowerCase().includes('master') ||
+                                   av.descricao?.toLowerCase().includes('masterizado') ||
+                                   (faixa.status === 'masterizacao' || faixa.status === 'finalizada' || faixa.status === 'lancada'))
+                                );
+
+                                // Verificar se há vídeos do tipo arquivo (para saber se precisa verificar masterizado)
+                                const temVideoArquivo = faixa.audio_video?.some(av => av.tipo === 'video' && av.formato === 'arquivo');
+                                
+                                // Verificar se há áudio
+                                const temAudio = faixa.audio_video?.some(av => av.tipo === 'audio');
+
+                                if (faixa.audio_video && faixa.audio_video.length > 0) {
+                                  return (
+                                    <div className="space-y-2.5">
+                                      {/* Informação do último áudio */}
+                                      {ultimoAudio && (
+                                        <div className="p-3 bg-primary-teal/10 border border-primary-teal/30 rounded-lg">
+                                          <p className="text-xs text-gray-400 mb-1">Último Áudio:</p>
+                                          <p className="text-sm text-white font-medium">
+                                            {ultimoAudio.versao === 'pre-producao' ? 'Pré-Produção' :
+                                             ultimoAudio.versao === 'pos-gravacao' ? 'Pós-Gravação' :
+                                             ultimoAudio.versao === 'masterizado' ? 'Masterizado' :
+                                             ultimoAudio.versao || 'Áudio'}
+                                            {ultimoAudio.arquivo_nome && ` - ${ultimoAudio.arquivo_nome}`}
+                                            {ultimoAudio.formato === 'link' && ultimoAudio.link_url && ' (Link)'}
+                                          </p>
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm text-white font-medium">{av.versao || `${av.tipo === 'audio' ? 'Áudio' : 'Vídeo'} - ${av.formato === 'arquivo' ? 'Arquivo' : 'Link'}`}</span>
-                                            {av.descricao && (
-                                              <span className="text-xs text-gray-400">• {av.descricao}</span>
-                                            )}
+                                      )}
+                                      
+                                      {/* Informação do último vídeo */}
+                                      {ultimoVideo && (
+                                        <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                                          <p className="text-xs text-gray-400 mb-1">Último Vídeo:</p>
+                                          <p className="text-sm text-white font-medium">
+                                            {ultimoVideo.versao === 'pre-producao' ? 'Pré-Produção' :
+                                             ultimoVideo.versao === 'pos-producao' ? 'Pós-Produção' :
+                                             ultimoVideo.versao === 'mixagem' ? 'Mixagem' :
+                                             ultimoVideo.versao === 'masterizado' ? 'Masterizado' :
+                                             ultimoVideo.versao || 'Vídeo'}
+                                            {ultimoVideo.arquivo_nome && ` - ${ultimoVideo.arquivo_nome}`}
+                                            {ultimoVideo.formato === 'link' && ultimoVideo.link_url && ' (Link)'}
+                                          </p>
+                                        </div>
+                                      )}
+
+                                      {!audioMasterizado && (
+                                        <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                                          <p className="text-sm text-orange-400 flex items-center gap-2">
+                                            <i className="ri-alert-line"></i>
+                                            Sem áudio masterizado
+                                          </p>
+                                        </div>
+                                      )}
+                                      {temVideoArquivo && !videoMasterizado && (
+                                        <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                                          <p className="text-sm text-orange-400 flex items-center gap-2">
+                                            <i className="ri-alert-line"></i>
+                                            Sem vídeo masterizado
+                                          </p>
+                                        </div>
+                                      )}
+                                      {faixa.audio_video.map((av) => (
+                                        <div key={av.id} className="flex items-center justify-between p-3 bg-dark-bg border border-dark-border rounded-lg hover:border-primary-teal/50 transition-smooth">
+                                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                                              av.tipo === 'audio' ? 'bg-primary-teal/20' : 'bg-purple-500/20'
+                                            }`}>
+                                              <i className={`ri-${av.tipo === 'audio' ? 'music-2-line' : 'video-line'} ${
+                                                av.tipo === 'audio' ? 'text-primary-teal' : 'text-purple-400'
+                                              } text-lg`}></i>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-sm text-white font-medium">
+                                                  {av.versao === 'pre-producao' ? 'Pré-Produção' :
+                                                   av.versao === 'pos-producao' ? 'Pós-Produção' :
+                                                   av.versao === 'pos-gravacao' ? 'Pós-Gravação' :
+                                                   av.versao === 'mixagem' ? 'Mixagem' :
+                                                   av.versao === 'masterizado' ? 'Masterizado' :
+                                                   av.versao || `${av.tipo === 'audio' ? 'Áudio' : 'Vídeo'} - ${av.formato === 'arquivo' ? 'Arquivo' : 'Link'}`}
+                                                </span>
+                                                {av.descricao && (
+                                                  <span className="text-xs text-gray-400">• {av.descricao}</span>
+                                                )}
+                                              </div>
+                                              {av.arquivo_nome && (
+                                                <p className="text-xs text-gray-500 mt-1 truncate">{av.arquivo_nome}</p>
+                                              )}
+                                            </div>
                                           </div>
-                                          {av.arquivo_nome && (
-                                            <p className="text-xs text-gray-500 mt-1 truncate">{av.arquivo_nome}</p>
-                                          )}
+                                          <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                                            {av.formato === 'link' && av.link_url && (
+                                              <a 
+                                                href={av.link_url} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
+                                                title="Abrir link"
+                                              >
+                                                <i className="ri-external-link-line text-base"></i>
+                                              </a>
+                                            )}
+                                            {av.formato === 'arquivo' && av.arquivo_url && (
+                                              <a 
+                                                href={av.arquivo_url} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
+                                                title="Baixar arquivo"
+                                              >
+                                                <i className="ri-download-line text-base"></i>
+                                              </a>
+                                            )}
+                                            <button
+                                              onClick={() => handleDeleteAudioVideo(av.id)}
+                                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded-lg transition-smooth"
+                                              title="Excluir"
+                                            >
+                                              <i className="ri-delete-bin-line text-base"></i>
+                                            </button>
+                                          </div>
                                         </div>
-                                      </div>
-                                      <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                                        {av.formato === 'link' && av.link_url && (
-                                          <a 
-                                            href={av.link_url} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
-                                            className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
-                                            title="Abrir link"
-                                          >
-                                            <i className="ri-external-link-line text-base"></i>
-                                          </a>
+                                      ))}
+                                    </div>
+                                  );
+                                } else {
+                                  // Quando não há anexos, mostrar o que falta
+                                  const faltaAudio = !temAudio;
+                                  const faltaVideo = !faixa.audio_video?.some(av => av.tipo === 'video');
+                                  
+                                  return (
+                                    <div className="text-center py-8 space-y-2">
+                                      <p className="text-xs text-gray-500 italic mb-3">Nenhum áudio ou vídeo cadastrado</p>
+                                      <div className="space-y-2">
+                                        {faltaAudio && (
+                                          <p className="text-sm text-orange-400 flex items-center justify-center gap-2">
+                                            <i className="ri-alert-line"></i>
+                                            Falta áudio
+                                          </p>
                                         )}
-                                        {av.formato === 'arquivo' && av.arquivo_url && (
-                                          <a 
-                                            href={av.arquivo_url} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
-                                            className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
-                                            title="Baixar arquivo"
-                                          >
-                                            <i className="ri-download-line text-base"></i>
-                                          </a>
+                                        {faltaVideo && (
+                                          <p className="text-sm text-orange-400 flex items-center justify-center gap-2">
+                                            <i className="ri-alert-line"></i>
+                                            Falta vídeo
+                                          </p>
                                         )}
-                                        <button
-                                          onClick={() => handleDeleteAudioVideo(av.id)}
-                                          className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded-lg transition-smooth"
-                                          title="Excluir"
-                                        >
-                                          <i className="ri-delete-bin-line text-base"></i>
-                                        </button>
                                       </div>
                                     </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-xs text-gray-500 italic text-center py-4">Nenhum áudio ou vídeo cadastrado</p>
-                              )}
+                                  );
+                                }
+                              })()}
                             </div>
                           </div>
                         )}
@@ -1244,6 +1480,80 @@ export default function ProjetoDetalhes() {
                         <i className="ri-user-line text-primary-teal"></i>
                         <span className="text-white">
                           {produtoresMock.find(p => p.id === projeto.produtor_id)?.nome}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Data de Lançamento */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Data de Lançamento</label>
+                  <div className="space-y-3">
+                    <select
+                      value={tipoDataLancamento}
+                      onChange={(e) => {
+                        setTipoDataLancamento(e.target.value as 'real' | 'prevista');
+                      }}
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                    >
+                      <option value="prevista">Data Prevista de Lançamento</option>
+                      <option value="real">Data de Lançamento</option>
+                    </select>
+                    <div className="flex gap-2">
+                      <input
+                        type="date"
+                        value={dataLancamentoTemp}
+                        onChange={(e) => setDataLancamentoTemp(e.target.value)}
+                        className="flex-1 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                      />
+                      <button
+                        onClick={handleUpdateDataLancamento}
+                        className="px-4 py-3 bg-primary-teal text-white text-sm rounded-lg hover:opacity-90 transition-smooth cursor-pointer"
+                      >
+                        Salvar
+                      </button>
+                    </div>
+                    {(projeto.data_lancamento || projeto.previsao_lancamento) && (
+                      <div className="px-4 py-2 bg-dark-bg border border-dark-border rounded-lg">
+                        <div className="flex items-center gap-2 text-sm">
+                          <i className="ri-calendar-line text-primary-teal"></i>
+                          <span className="text-gray-400">
+                            {projeto.tipo_data_lancamento === 'real' ? 'Data de Lançamento:' : 'Data Prevista:'}
+                          </span>
+                          <span className="text-white">
+                            {new Date(projeto.data_lancamento || projeto.previsao_lancamento || '').toLocaleDateString('pt-BR')}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Pré-produção */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Pré-produção</label>
+                  <select
+                    value={temPreProducao === null ? '' : temPreProducao ? 'sim' : 'nao'}
+                    onChange={(e) => {
+                      if (e.target.value === 'sim') {
+                        handleUpdatePreProducao(true);
+                      } else if (e.target.value === 'nao') {
+                        handleUpdatePreProducao(false);
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  >
+                    <option value="">Selecione uma opção</option>
+                    <option value="sim">Com pré-produção</option>
+                    <option value="nao">Sem pré-produção</option>
+                  </select>
+                  {temPreProducao !== null && (
+                    <div className="mt-2 px-4 py-2 bg-dark-bg border border-dark-border rounded-lg">
+                      <div className="flex items-center gap-2 text-sm">
+                        <i className={`ri-${temPreProducao ? 'check' : 'close'}-line ${temPreProducao ? 'text-green-400' : 'text-red-400'}`}></i>
+                        <span className="text-white">
+                          {temPreProducao ? 'Com pré-produção' : 'Sem pré-produção'}
                         </span>
                       </div>
                     </div>
@@ -2080,6 +2390,8 @@ export default function ProjetoDetalhes() {
                   onClick={() => {
                     setShowAudioVideoModal(false);
                     setSelectedFaixaForModal(null);
+                    setAudioVideoTipo('');
+                    setAudioVideoFormato('link');
                   }}
                   className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
                 >
@@ -2109,9 +2421,45 @@ export default function ProjetoDetalhes() {
                   <label className="block text-sm font-medium text-gray-400 mb-2">Tipo</label>
                   <select
                     name="tipo"
+                    id="tipo-select"
                     required
+                    onChange={(e) => {
+                      const tipoSelect = e.target.value;
+                      setAudioVideoTipo(tipoSelect as 'audio' | 'video' | '');
+                      const versaoSelect = document.getElementById('versao-select') as HTMLSelectElement;
+                      const descricaoP = document.getElementById('classificacao-descricao');
+                      
+                      // Limpar opções anteriores
+                      if (versaoSelect) {
+                        versaoSelect.innerHTML = '<option value="">Selecione a classificação</option>';
+                      }
+                      
+                      if (tipoSelect === 'audio') {
+                        // Opções para áudio
+                        if (versaoSelect) {
+                          versaoSelect.innerHTML += '<option value="pre-producao">Pré-Produção</option>';
+                          versaoSelect.innerHTML += '<option value="pos-gravacao">Pós-Gravação</option>';
+                          versaoSelect.innerHTML += '<option value="masterizado">Masterizado</option>';
+                        }
+                        if (descricaoP) {
+                          descricaoP.textContent = 'Pré-Produção: Antes da gravação | Pós-Gravação: Depois da gravação | Masterizado: Versão final';
+                        }
+                      } else if (tipoSelect === 'video') {
+                        // Opções para vídeo
+                        if (versaoSelect) {
+                          versaoSelect.innerHTML += '<option value="pre-producao">Pré-Produção</option>';
+                          versaoSelect.innerHTML += '<option value="pos-producao">Pós-Produção</option>';
+                          versaoSelect.innerHTML += '<option value="mixagem">Mixagem</option>';
+                          versaoSelect.innerHTML += '<option value="masterizado">Masterizado</option>';
+                        }
+                        if (descricaoP) {
+                          descricaoP.textContent = 'Pré-Produção: Antes da gravação | Pós-Produção: Depois da gravação | Mixagem/Masterizado: Depois da pós';
+                        }
+                      }
+                    }}
                     className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
                   >
+                    <option value="">Selecione o tipo</option>
                     <option value="audio">Áudio</option>
                     <option value="video">Vídeo</option>
                   </select>
@@ -2150,7 +2498,7 @@ export default function ProjetoDetalhes() {
                       onUploadComplete={(url, fileName) => {
                         const tipoSelect = document.querySelector('[name="tipo"]') as HTMLSelectElement;
                         const descricaoInput = document.querySelector('[name="descricao"]') as HTMLTextAreaElement;
-                        const versaoInput = document.querySelector('[name="versao"]') as HTMLInputElement;
+                        const versaoSelect = document.querySelector('[name="versao"]') as HTMLSelectElement;
                         
                         handleSaveAudioVideo(selectedFaixaForModal.id, {
                           tipo: (tipoSelect?.value as 'audio' | 'video') || 'audio',
@@ -2158,25 +2506,33 @@ export default function ProjetoDetalhes() {
                           arquivo_url: url,
                           arquivo_nome: fileName,
                           descricao: descricaoInput?.value || undefined,
-                          versao: versaoInput?.value || undefined,
+                          versao: versaoSelect?.value || undefined,
                         });
                       }}
                       onError={(error) => alert(`Erro: ${error}`)}
                       accept="audio/*,video/*"
                       maxSizeMB={200}
                       label="Selecionar arquivo"
+                      customFileName={audioVideoTipo === 'video' && projeto?.artista?.nome 
+                        ? `video_${projeto.artista.nome.replace(/\s+/g, '_')}_ColorOK`
+                        : undefined}
                     />
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Versão (opcional)</label>
-                  <input
-                    type="text"
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Classificação *</label>
+                  <select
                     name="versao"
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                    placeholder="Ex: Master, Demo, Versão Final"
-                  />
+                    id="versao-select"
+                    required
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  >
+                    <option value="">Selecione a classificação</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1" id="classificacao-descricao">
+                    Selecione o tipo primeiro
+                  </p>
                 </div>
 
                 <div>
@@ -2194,6 +2550,8 @@ export default function ProjetoDetalhes() {
                     onClick={() => {
                       setShowAudioVideoModal(false);
                       setSelectedFaixaForModal(null);
+                      setAudioVideoTipo('');
+                      setAudioVideoFormato('link');
                     }}
                     className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                   >
