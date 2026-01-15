@@ -16,6 +16,7 @@ import Orcamentos from "../pages/orcamentos/page";
 import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
 import Documentos from "../pages/documentos/page";
+import YouTubeCallback from "../pages/youtube-callback/page";
 import ProtectedRoute from "../components/ProtectedRoute";
 
 const routes: RouteObject[] = [
@@ -86,6 +87,10 @@ const routes: RouteObject[] = [
   {
     path: "/documentos",
     element: <ProtectedRoute><Documentos /></ProtectedRoute>,
+  },
+  {
+    path: "/youtube-callback",
+    element: <YouTubeCallback />,
   },
   {
     path: "*",

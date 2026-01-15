@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import YouTubePreview from '../../components/projetos/YouTubePreview';
 import ReferenciaForm from '../../components/projetos/ReferenciaForm';
 import FileUpload from '../../components/projetos/FileUpload';
+import YouTubeUpload from '../../components/projetos/YouTubeUpload';
 import { fornecedoresMock } from '../../data/fornecedores-mock';
 import { produtoresMock } from '../../data/produtores-mock';
 
@@ -144,7 +145,7 @@ export default function ProjetoDetalhes() {
   const [showFichaTecnicaModal, setShowFichaTecnicaModal] = useState(false);
   const [showAudioVideoModal, setShowAudioVideoModal] = useState(false);
   const [selectedFaixaForModal, setSelectedFaixaForModal] = useState<Faixa | null>(null);
-  const [audioVideoFormato, setAudioVideoFormato] = useState<'link' | 'arquivo'>('link');
+  const [audioVideoFormato, setAudioVideoFormato] = useState<'link' | 'arquivo' | 'youtube'>('link');
   const [audioVideoTipo, setAudioVideoTipo] = useState<'audio' | 'video' | ''>('');
 
   useEffect(() => {
@@ -387,29 +388,7 @@ export default function ProjetoDetalhes() {
     }
   };
 
-  const handleUpdateFase = async (novaFase: string) => {
-    if (!id || !projeto) return;
-
-    try {
-      const { error } = await supabase
-        .from('projetos')
-        .update({
-          fase: novaFase,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setProjeto({ ...projeto, fase: novaFase });
-      setShowFaseDropdown(false);
-      loadProjetoData();
-    } catch (error) {
-      console.error('Erro ao atualizar fase:', error);
-      alert('Erro ao atualizar fase. Tente novamente.');
-    }
-  };
-
+  // Definir fases antes de usar na função
   const fases = [
     { value: 'planejamento', label: 'Planejamento' },
     { value: 'gravando', label: 'Gravando' },
@@ -420,6 +399,92 @@ export default function ProjetoDetalhes() {
     { value: 'em_fase_lancamento', label: 'Em fase de lançamento' },
     { value: 'lancado', label: 'Lançado' }
   ];
+
+  const handleUpdateFase = async (novaFase: string) => {
+    if (!id || !projeto) {
+      console.error('handleUpdateFase: id ou projeto não definido', { id, projeto });
+      return;
+    }
+
+    // Validar se a fase é válida
+    const fasesValidas = fases.map(f => f.value);
+    if (!fasesValidas.includes(novaFase)) {
+      console.error('Fase inválida:', novaFase, 'Fases válidas:', fasesValidas);
+      alert(`A fase "${novaFase}" não é válida.`);
+      return;
+    }
+
+    // Não atualizar se já estiver na mesma fase
+    if (projeto.fase === novaFase) {
+      setShowFaseDropdown(false);
+      return;
+    }
+
+    try {
+      console.log('Atualizando fase:', { projetoId: id, faseAtual: projeto.fase, novaFase });
+      
+      const { data, error } = await supabase
+        .from('projetos')
+        .update({
+          fase: novaFase,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select();
+
+      if (error) {
+        console.error('Erro do Supabase ao atualizar fase:', {
+          error,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          novaFase,
+          projetoId: id,
+          faseAtual: projeto.fase
+        });
+        
+        // Mensagem de erro mais específica
+        let errorMessage = 'Erro ao atualizar fase.';
+        if (error.code === '23514') {
+          errorMessage = `A fase "${novaFase}" não é um valor válido no banco de dados. Execute o script SQL para atualizar a constraint.`;
+        } else if (error.code === '42501') {
+          errorMessage = 'Você não tem permissão para atualizar este projeto. Verifique as políticas RLS.';
+        } else if (error.code === 'PGRST116') {
+          errorMessage = 'Nenhum registro encontrado para atualizar.';
+        } else if (error.message) {
+          errorMessage = `Erro: ${error.message}`;
+          if (error.hint) {
+            errorMessage += `\nDica: ${error.hint}`;
+          }
+        }
+        
+        alert(errorMessage);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        console.log('Fase atualizada com sucesso:', data[0]);
+        setProjeto({ ...projeto, fase: novaFase });
+        setShowFaseDropdown(false);
+        // Recarregar dados do projeto para garantir sincronização
+        loadProjetoData();
+      } else {
+        console.warn('Nenhum registro retornado após atualização');
+        throw new Error('Nenhum registro foi atualizado');
+      }
+    } catch (error: any) {
+      console.error('Erro ao atualizar fase (catch):', {
+        error,
+        message: error?.message,
+        stack: error?.stack,
+        novaFase,
+        projetoId: id,
+        faseAtual: projeto.fase
+      });
+      alert(error?.message || 'Erro ao atualizar fase. Tente novamente.');
+    }
+  };
 
   const handleSubmitFaixa = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2471,11 +2536,14 @@ export default function ProjetoDetalhes() {
                     name="formato"
                     required
                     value={audioVideoFormato}
-                    onChange={(e) => setAudioVideoFormato(e.target.value as 'link' | 'arquivo')}
+                    onChange={(e) => setAudioVideoFormato(e.target.value as 'link' | 'arquivo' | 'youtube')}
                     className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
                   >
                     <option value="link">Link</option>
-                    <option value="arquivo">Arquivo</option>
+                    <option value="arquivo">Arquivo (R2)</option>
+                    {audioVideoTipo === 'video' && (
+                      <option value="youtube">Upload para YouTube</option>
+                    )}
                   </select>
                 </div>
 
@@ -2488,6 +2556,29 @@ export default function ProjetoDetalhes() {
                       required
                       className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
                       placeholder="https://..."
+                    />
+                  </div>
+                ) : audioVideoFormato === 'youtube' && audioVideoTipo === 'video' ? (
+                  <div>
+                    <YouTubeUpload
+                      onUploadComplete={(videoUrl, videoId) => {
+                        const descricaoInput = document.querySelector('[name="descricao"]') as HTMLTextAreaElement;
+                        const versaoSelect = document.querySelector('[name="versao"]') as HTMLSelectElement;
+                        
+                        handleSaveAudioVideo(selectedFaixaForModal.id, {
+                          tipo: 'video',
+                          formato: 'link',
+                          link_url: videoUrl,
+                          descricao: descricaoInput?.value || `Upload para YouTube - ID: ${videoId}`,
+                          versao: versaoSelect?.value || 'masterizado',
+                        });
+                      }}
+                      onError={(error) => alert(`Erro: ${error}`)}
+                      projetoNome={projeto?.nome}
+                      artistaNome={projeto?.artista?.nome}
+                      onCancel={() => {
+                        setAudioVideoFormato('link');
+                      }}
                     />
                   </div>
                 ) : (
@@ -2535,37 +2626,41 @@ export default function ProjetoDetalhes() {
                   </p>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Descrição (opcional)</label>
-                  <textarea
-                    name="descricao"
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
-                    rows={3}
-                  />
-                </div>
+                {audioVideoFormato !== 'youtube' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Descrição (opcional)</label>
+                    <textarea
+                      name="descricao"
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
+                      rows={3}
+                    />
+                  </div>
+                )}
 
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAudioVideoModal(false);
-                      setSelectedFaixaForModal(null);
-                      setAudioVideoTipo('');
-                      setAudioVideoFormato('link');
-                    }}
-                    className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
-                  >
-                    Cancelar
-                  </button>
-                  {audioVideoFormato === 'link' && (
+                {audioVideoFormato !== 'youtube' && (
+                  <div className="flex gap-3 pt-4">
                     <button
-                      type="submit"
-                      className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
+                      type="button"
+                      onClick={() => {
+                        setShowAudioVideoModal(false);
+                        setSelectedFaixaForModal(null);
+                        setAudioVideoTipo('');
+                        setAudioVideoFormato('link');
+                      }}
+                      className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                     >
-                      Salvar
+                      Cancelar
                     </button>
-                  )}
-                </div>
+                    {audioVideoFormato === 'link' && (
+                      <button
+                        type="submit"
+                        className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
+                      >
+                        Salvar
+                      </button>
+                    )}
+                  </div>
+                )}
               </form>
 
             </div>

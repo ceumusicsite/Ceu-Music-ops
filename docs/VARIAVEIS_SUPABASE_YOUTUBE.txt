@@ -1,0 +1,81 @@
+============================================
+VARIÁVEIS DE AMBIENTE PARA SUPABASE
+Integração YouTube Data API v3
+============================================
+
+IMPORTANTE: Estas variáveis são para uso no frontend (Vite).
+Para maior segurança em produção, considere usar Edge Functions do Supabase.
+
+============================================
+VARIÁVEIS NECESSÁRIAS
+============================================
+
+# YouTube Data API v3
+VITE_YOUTUBE_CLIENT_ID=seu-client-id.apps.googleusercontent.com
+VITE_YOUTUBE_CLIENT_SECRET=seu-client-secret
+VITE_YOUTUBE_REDIRECT_URI=http://localhost:3000/youtube-callback
+
+Para produção, atualize VITE_YOUTUBE_REDIRECT_URI:
+VITE_YOUTUBE_REDIRECT_URI=https://seu-dominio.com/youtube-callback
+
+============================================
+COMO OBTER AS CREDENCIAIS
+============================================
+
+1. Acesse: https://console.cloud.google.com/
+2. Crie um novo projeto ou selecione um existente
+3. Vá em "APIs e Serviços" > "Biblioteca"
+4. Busque e habilite "YouTube Data API v3"
+5. Vá em "APIs e Serviços" > "Credenciais"
+6. Clique em "Criar credenciais" > "ID do cliente OAuth"
+7. Configure:
+   - Tipo: Aplicativo da Web
+   - Nome: CEU Music Ops
+   - URIs de redirecionamento:
+     * http://localhost:3000/youtube-callback (desenvolvimento)
+     * https://seu-dominio.com/youtube-callback (produção)
+8. Copie o ID do cliente e a chave secreta
+
+============================================
+ONDE ADICIONAR NO SUPABASE
+============================================
+
+OPÇÃO 1: Variáveis de Ambiente Locais (.env.local)
+----------------------------------------------------
+Adicione as variáveis no arquivo .env.local na raiz do projeto.
+
+OPÇÃO 2: Edge Functions (Recomendado para Produção)
+----------------------------------------------------
+1. Acesse Supabase Dashboard
+2. Vá em Settings > Edge Functions
+3. Clique em "Manage secrets"
+4. Adicione cada variável (sem o prefixo VITE_):
+   - YOUTUBE_CLIENT_ID
+   - YOUTUBE_CLIENT_SECRET
+   - YOUTUBE_REDIRECT_URI
+
+OPÇÃO 3: Variáveis de Ambiente no Provedor de Hospedagem
+----------------------------------------------------------
+Se usar Vercel, Netlify, etc:
+1. Acesse as configurações do projeto
+2. Vá em "Environment Variables"
+3. Adicione as variáveis com prefixo VITE_
+
+============================================
+NOTAS IMPORTANTES
+============================================
+
+⚠️ Variáveis com prefixo VITE_ são expostas ao cliente
+⚠️ Para produção, considere usar Edge Functions
+⚠️ Nunca commite .env.local no Git
+⚠️ Use diferentes credenciais para dev e produção
+⚠️ Configure domínios autorizados no Google Cloud Console
+
+============================================
+DOCUMENTAÇÃO COMPLETA
+============================================
+
+Consulte: docs/CONFIGURACAO_YOUTUBE.md
+Consulte: docs/VARIAVEIS_SUPABASE_YOUTUBE.md
+
+============================================
