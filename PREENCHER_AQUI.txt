@@ -1,0 +1,83 @@
+═══════════════════════════════════════════════════════════════
+  PREENCHA SUAS CREDENCIAIS DO SUPABASE AQUI
+═══════════════════════════════════════════════════════════════
+
+PASSO 1: Obter credenciais
+---------------------------
+1. Acesse: https://app.supabase.com
+2. Faca login
+3. Selecione seu projeto (ou crie um novo)
+4. Va em: Settings > API
+5. Copie os valores abaixo:
+
+
+PREENCHA AQUI:
+═══════════════════════════════════════════════════════════════
+
+Project URL (Secao "Configuration"):
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│ Cole aqui: https://_________________________.supabase.co    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+
+anon public key (Secao "Project API keys"):
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│ Cole aqui: eyJ_________________________________________     │
+│            ____________________________________________     │
+│            ____________________________________________     │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+
+═══════════════════════════════════════════════════════════════
+
+PASSO 2: Atualizar .env.local
+---------------------------
+Depois de preencher acima, copie os valores para o arquivo .env.local
+
+
+PASSO 3: Executar estes comandos
+---------------------------
+1. Pare o servidor (Ctrl+C no terminal)
+
+2. Execute este comando no PowerShell:
+
+@"
+# Google/YouTube API Configuration
+VITE_GOOGLE_CLIENT_ID=1007716861877-418o7hiac93kmnqaga2tjcprftdmn3r8.apps.googleusercontent.com
+VITE_GOOGLE_API_KEY=AIzaSyBNmwV62YsVOHvmMtCZyvGxOcyrZtMaHYA
+
+# Supabase Configuration
+VITE_PUBLIC_SUPABASE_URL=COLE-SEU-URL-AQUI
+VITE_PUBLIC_SUPABASE_ANON_KEY=COLE-SUA-CHAVE-AQUI
+"@ | Out-File -FilePath ".env.local" -Encoding utf8
+
+3. Substitua "COLE-SEU-URL-AQUI" e "COLE-SUA-CHAVE-AQUI" pelos valores reais
+
+4. Reinicie o servidor:
+   npm run dev
+
+
+═══════════════════════════════════════════════════════════════
+  CHECKLIST
+═══════════════════════════════════════════════════════════════
+
+[ ] Acessei app.supabase.com
+[ ] Fiz login
+[ ] Selecionei/criei projeto
+[ ] Fui em Settings > API
+[ ] Copiei Project URL
+[ ] Copiei anon public key
+[ ] Editei .env.local com os valores reais
+[ ] Salvei o arquivo
+[ ] Parei o servidor (Ctrl+C)
+[ ] Reiniciei o servidor (npm run dev)
+[ ] Testei o login novamente
+
+═══════════════════════════════════════════════════════════════
+
+PRECISA DE AJUDA?
+Consulte: DIAGNOSTICO_ERRO_LOGIN.md

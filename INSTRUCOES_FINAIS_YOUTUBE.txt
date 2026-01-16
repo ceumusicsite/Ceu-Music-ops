@@ -1,0 +1,78 @@
+╔══════════════════════════════════════════════════════════════╗
+║  CREDENCIAIS DO YOUTUBE CONFIGURADAS COM SUCESSO!           ║
+╚══════════════════════════════════════════════════════════════╝
+
+O QUE FOI FEITO:
+✓ Arquivo .env.local criado na raiz do projeto
+✓ Client ID configurado
+✓ API Key configurada
+
+═══════════════════════════════════════════════════════════════
+
+PROXIMOS PASSOS IMPORTANTES:
+
+1. REINICIAR O SERVIDOR (OBRIGATORIO):
+   - Pressione Ctrl+C para parar o servidor atual
+   - Execute novamente: npm run dev
+   - As variaveis de ambiente so serao carregadas apos reiniciar!
+
+2. CONFIGURAR URLs NO GOOGLE CLOUD CONSOLE:
+   Acesse: https://console.cloud.google.com/
+   
+   a) Selecione o projeto: helical-song-484514-c3
+   
+   b) Va em: APIs e Servicos > Credenciais
+   
+   c) Clique no Client ID: 1007716861877-418o7hiac93kmnqaga2tjcprftdmn3r8
+   
+   d) Adicione estas URLs em "Origens JavaScript autorizadas":
+      - http://localhost:5173
+      - http://localhost:3000
+   
+   e) Adicione as mesmas URLs em "URIs de redirecionamento":
+      - http://localhost:5173
+      - http://localhost:3000
+   
+   f) Clique em SALVAR
+
+3. ADICIONAR USUARIO DE TESTE (se o app estiver em modo teste):
+   No Google Cloud Console:
+   
+   a) Va em: APIs e Servicos > Tela de consentimento OAuth
+   
+   b) Role ate "Usuarios de teste"
+   
+   c) Adicione seu email do Google
+   
+   d) Salve as alteracoes
+
+4. TESTAR O SISTEMA:
+   ✓ Acesse: http://localhost:5173
+   ✓ Va em um projeto > Faixa > Adicionar midia
+   ✓ Selecione "Upload para YouTube"
+   ✓ Clique em "Fazer login no YouTube"
+   ✓ Teste o upload de um video!
+
+═══════════════════════════════════════════════════════════════
+
+DOCUMENTACAO CRIADA:
+• CONFIGURACAO_YOUTUBE_CREDENCIAIS.md (guia completo)
+• docs/GUIA_RAPIDO_YOUTUBE.md (guia rapido)
+• docs/CONFIGURAR_YOUTUBE.md (documentacao detalhada)
+
+═══════════════════════════════════════════════════════════════
+
+EM CASO DE PROBLEMAS COMUNS:
+
+Erro: "redirect_uri_mismatch"
+Solucao: Configure as URLs autorizadas no Google Cloud Console (passo 2)
+
+Erro: "Access blocked: Authorization Error"
+Solucao: Adicione seu email em "Usuarios de teste" (passo 3)
+
+Erro: "Google API nao carregada"
+Solucao: Reinicie o servidor (npm run dev) e limpe o cache do navegador
+
+═══════════════════════════════════════════════════════════════
+
+Pronto para fazer upload de videos para o YouTube!

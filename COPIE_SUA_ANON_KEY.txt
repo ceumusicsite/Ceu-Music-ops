@@ -1,0 +1,95 @@
+════════════════════════════════════════════════════════
+  PEGUE SUA ANON KEY DO SUPABASE
+════════════════════════════════════════════════════════
+
+✅ JA CONFIGURADO:
+   - URL: https://zbeygaayzhkvbgirtzne.supabase.co
+
+⚠️ FALTA APENAS:
+   - anon public key
+
+
+════════════════════════════════════════════════════════
+  PASSO A PASSO
+════════════════════════════════════════════════════════
+
+1️⃣ FAZER LOGIN NO SUPABASE
+   ▸ Janela do navegador aberta automaticamente
+   ▸ Se nao abriu, acesse:
+     https://supabase.com/dashboard/project/zbeygaayzhkvbgirtzne/settings/api
+   
+   ▸ Faca login com sua conta (GitHub ou Email)
+
+
+2️⃣ COPIAR A ANON KEY
+   Apos fazer login, voce vera a pagina "API Settings"
+   
+   ▸ Role a pagina para baixo
+   
+   ▸ Procure a secao: "Project API keys"
+   
+   ▸ Voce vai ver algo assim:
+   
+     ┌─────────────────────────────────────────┐
+     │ Project API keys                        │
+     ├─────────────────────────────────────────┤
+     │                                         │
+     │ anon  public                            │
+     │ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... │
+     │                           [Copy] [Hide] │
+     │                                         │
+     │ service_role  secret                    │
+     │ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... │
+     │                           [Copy] [Hide] │
+     └─────────────────────────────────────────┘
+   
+   ▸ Clique no botao [Copy] da chave "anon public"
+     (NAO copie a service_role!)
+   
+   ▸ A chave comeca com: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+
+
+3️⃣ EXECUTAR O SCRIPT
+   No PowerShell, execute:
+   
+   .\configurar-com-id.ps1
+   
+   ▸ O script vai pedir a anon key
+   ▸ Cole a chave que voce copiou (Ctrl+V)
+   ▸ Pressione Enter
+
+
+4️⃣ REINICIAR O SERVIDOR
+   
+   ▸ Pare o servidor: Ctrl+C
+   ▸ Inicie novamente: npm run dev
+   ▸ Aguarde ate ver: "Local: http://localhost:5173/"
+
+
+5️⃣ TESTAR
+   
+   ▸ Acesse: http://localhost:5173
+   ▸ Pressione Ctrl+Shift+R (limpar cache)
+   ▸ Tente fazer login
+   
+   ✅ O erro "Failed to fetch" deve desaparecer!
+
+
+════════════════════════════════════════════════════════
+  RESUMO RAPIDO
+════════════════════════════════════════════════════════
+
+1. Login no Supabase → https://app.supabase.com
+2. Settings > API
+3. Copie a "anon public" key
+4. Execute: .\configurar-com-id.ps1
+5. Cole a chave
+6. Reinicie: npm run dev
+7. Teste!
+
+
+════════════════════════════════════════════════════════
+
+EM CASO DE DUVIDAS:
+- DIAGNOSTICO_ERRO_LOGIN.md
+- CONFIGURAR_SUPABASE_URGENTE.md
