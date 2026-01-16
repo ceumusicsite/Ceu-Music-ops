@@ -233,49 +233,75 @@ export default function Documentos() {
 
   const handleDownloadDocumentoPDF = async (documento: any) => {
     try {
+      console.log('Gerando PDF para documento:', documento);
+      
+      // Verificar se o documento tem algum conteúdo
+      const hasContent = documento.identificacao_partes || 
+                        documento.objeto_escopo || 
+                        documento.valores_pagamento || 
+                        documento.vigencia_prazos || 
+                        documento.termos_legais || 
+                        documento.assinatura ||
+                        documento.descricao;
+      
+      console.log('Documento tem conteúdo?', hasContent);
+      
+      if (!hasContent) {
+        alert('Este documento não possui campos preenchidos para gerar o PDF. Preencha pelo menos um dos campos do formulário.');
+        return;
+      }
+
       // Importar html2pdf.js dinamicamente
       const html2pdf = (await import('html2pdf.js')).default;
 
-      // Criar elemento HTML temporário para o contrato
+      // Função helper para escapar HTML
+      const escapeHtml = (text: string) => {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      };
+
+      // Criar elemento HTML temporário para o documento
       const element = document.createElement('div');
       element.innerHTML = `
         <div style="font-family: Arial, sans-serif; padding: 40px; color: #333; line-height: 1.6; max-width: 800px; margin: 0 auto;">
           <div style="text-align: center; border-bottom: 3px solid #333; padding-bottom: 15px; margin-bottom: 30px;">
             <h1 style="font-size: 28px; margin: 0; color: #333;">CEU MUSIC</h1>
-            <p style="font-size: 16px; font-weight: bold; margin: 5px 0;">${getTipoLabel(documento.tipo).toUpperCase()}</p>
-            <p style="font-size: 14px; color: #666; margin: 5px 0;">${documento.titulo}</p>
+            <p style="font-size: 16px; font-weight: bold; margin: 5px 0;">${escapeHtml(getTipoLabel(documento.tipo).toUpperCase())}</p>
+            <p style="font-size: 14px; color: #666; margin: 5px 0;">${escapeHtml(documento.titulo || '')}</p>
           </div>
 
           ${documento.identificacao_partes ? `
           <div style="margin-bottom: 25px;">
             <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">1. IDENTIFICAÇÃO DAS PARTES (QUEM?)</h3>
-            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.identificacao_partes}</p>
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${escapeHtml(documento.identificacao_partes)}</p>
           </div>
           ` : ''}
 
           ${documento.objeto_escopo ? `
           <div style="margin-bottom: 25px;">
             <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">2. OBJETO E ESCOPO (O QUÊ?)</h3>
-            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.objeto_escopo}</p>
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${escapeHtml(documento.objeto_escopo)}</p>
           </div>
           ` : ''}
 
           ${documento.valores_pagamento ? `
           <div style="margin-bottom: 25px;">
             <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">3. VALORES E PAGAMENTO (QUANTO E COMO?)</h3>
-            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.valores_pagamento}</p>
-            ${documento.valor ? `<p style="font-size: 18px; font-weight: bold; color: #14b8a6; margin-top: 10px;">Valor Total: ${formatCurrency(documento.valor)}</p>` : ''}
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${escapeHtml(documento.valores_pagamento)}</p>
+            ${documento.valor ? `<p style="font-size: 18px; font-weight: bold; color: #14b8a6; margin-top: 10px;">Valor Total: ${escapeHtml(formatCurrency(documento.valor))}</p>` : ''}
           </div>
           ` : ''}
 
           ${documento.vigencia_prazos ? `
           <div style="margin-bottom: 25px;">
             <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">4. VIGÊNCIA E PRAZOS (QUANDO?)</h3>
-            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.vigencia_prazos}</p>
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${escapeHtml(documento.vigencia_prazos)}</p>
             ${documento.data_inicio || documento.data_fim ? `
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
-              ${documento.data_inicio ? `<p style="margin: 8px 0;"><strong>Data de Início:</strong> ${formatDate(documento.data_inicio)}</p>` : ''}
-              ${documento.data_fim ? `<p style="margin: 8px 0;"><strong>Data de Fim:</strong> ${formatDate(documento.data_fim)}</p>` : ''}
+              ${documento.data_inicio ? `<p style="margin: 8px 0;"><strong>Data de Início:</strong> ${escapeHtml(formatDate(documento.data_inicio))}</p>` : ''}
+              ${documento.data_fim ? `<p style="margin: 8px 0;"><strong>Data de Fim:</strong> ${escapeHtml(formatDate(documento.data_fim))}</p>` : ''}
             </div>
             ` : ''}
           </div>
@@ -284,13 +310,13 @@ export default function Documentos() {
           <div style="margin-bottom: 25px;">
             <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">INFORMAÇÕES ADICIONAIS</h3>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
-              ${documento.artista?.nome ? `<p style="margin: 8px 0;"><strong>Artista:</strong> ${documento.artista.nome}</p>` : ''}
-              ${documento.projeto?.nome ? `<p style="margin: 8px 0;"><strong>Projeto:</strong> ${documento.projeto.nome}</p>` : ''}
+              ${documento.artista?.nome ? `<p style="margin: 8px 0;"><strong>Artista:</strong> ${escapeHtml(documento.artista.nome)}</p>` : ''}
+              ${documento.projeto?.nome ? `<p style="margin: 8px 0;"><strong>Projeto:</strong> ${escapeHtml(documento.projeto.nome)}</p>` : ''}
             </div>
             ${documento.descricao ? `
             <div style="margin-top: 10px;">
               <p style="margin: 8px 0;"><strong>Descrição:</strong></p>
-              <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.descricao}</p>
+              <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${escapeHtml(documento.descricao)}</p>
             </div>
             ` : ''}
           </div>
@@ -298,14 +324,14 @@ export default function Documentos() {
           ${documento.termos_legais ? `
           <div style="margin-bottom: 25px;">
             <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">5. TERMOS LEGAIS E CLÁUSULAS</h3>
-            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.termos_legais}</p>
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${escapeHtml(documento.termos_legais)}</p>
           </div>
           ` : ''}
 
           ${documento.assinatura ? `
           <div style="margin-bottom: 25px;">
             <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">6. ASSINATURA E CONCORDÂNCIA</h3>
-            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.assinatura}</p>
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${escapeHtml(documento.assinatura)}</p>
           </div>
           ` : ''}
 
@@ -319,7 +345,7 @@ export default function Documentos() {
                 </div>
               </div>
               <div style="text-align: right;">
-                <p style="font-weight: bold; margin-bottom: 5px;">${documento.artista?.nome || 'Artista'}</p>
+                <p style="font-weight: bold; margin-bottom: 5px;">${escapeHtml(documento.artista?.nome || 'Artista')}</p>
                 <p style="font-size: 14px; color: #666;">Contratado</p>
                 <div style="border-top: 1px solid #333; padding-top: 10px; margin-top: 60px;">
                   <p style="font-size: 12px; color: #999;">Assinatura</p>
@@ -333,25 +359,90 @@ export default function Documentos() {
         </div>
       `;
 
-      // Esconder elemento temporariamente
-      element.style.position = 'absolute';
-      element.style.left = '-9999px';
+      // Adicionar elemento ao DOM para renderização
       document.body.appendChild(element);
+      
+      console.log('Elemento HTML criado e adicionado ao DOM');
+      console.log('Conteúdo preview:', element.innerHTML.substring(0, 300));
 
       // Configurações do PDF
       const opt = {
         margin: [15, 15, 15, 15],
-        filename: `${getTipoLabel(documento.tipo)}_${documento.titulo.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
+        filename: `${getTipoLabel(documento.tipo)}_${(documento.titulo || 'documento').replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true,
+          logging: true,
+          backgroundColor: '#ffffff'
+        },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
 
-      // Gerar e baixar PDF
-      await html2pdf().set(opt).from(element).save();
+      console.log('Iniciando geração do PDF com html2pdf...');
+      
+      // Gerar PDF como blob
+      const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
+      
+      console.log('PDF gerado como blob:', pdfBlob);
 
-      // Remover elemento temporário
-      document.body.removeChild(element);
+      // Fazer upload do PDF para o Cloudflare R2
+      const { uploadToR2, R2_BUCKETS } = await import('../../lib/r2');
+      
+      // Criar um File object a partir do blob
+      const pdfFile = new File(
+        [pdfBlob], 
+        opt.filename,
+        { type: 'application/pdf' }
+      );
+      
+      console.log('Fazendo upload do PDF para o Cloudflare R2...');
+      
+      const uploadResult = await uploadToR2(pdfFile, {
+        bucket: R2_BUCKETS.DOCUMENTOS,
+        folder: 'documentos',
+        contentType: 'application/pdf'
+      });
+      
+      console.log('Upload concluído:', uploadResult);
+      
+      // Atualizar o documento no banco com a URL do PDF no R2
+      const { data: updateData, error: updateError } = await supabase
+        .from('documentos')
+        .update({ 
+          arquivo_url: uploadResult.url,
+          arquivo_key: uploadResult.key,
+          arquivo_nome: opt.filename
+        })
+        .eq('id', documento.id)
+        .select();
+      
+      if (updateError) {
+        console.error('Erro ao atualizar documento:', updateError);
+      } else {
+        console.log('Documento atualizado com URL do R2:', updateData);
+      }
+      
+      // Baixar o PDF gerado
+      const downloadUrl = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = opt.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+      
+      console.log('PDF salvo no R2 e download iniciado!');
+
+      // Remover elemento temporário após um delay
+      setTimeout(() => {
+        if (document.body.contains(element)) {
+          document.body.removeChild(element);
+        }
+      }, 1000);
+      
+      alert('✅ PDF gerado e salvo no Cloudflare R2 com sucesso!');
     } catch (error: any) {
       console.error('Erro ao gerar PDF:', error);
       alert(`Erro ao gerar PDF do contrato: ${error.message || 'Erro desconhecido'}`);
