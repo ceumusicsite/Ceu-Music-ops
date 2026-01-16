@@ -132,14 +132,19 @@ export default function Documentos() {
       });
 
       // Preparar dados do documento
+      // Validar que o tipo está nos valores permitidos
+      const tiposPermitidos = ['contrato', 'termo', 'aditivo', 'outro'];
+      const tipoValido = tiposPermitidos.includes(formData.tipo) ? formData.tipo : 'outro';
+      
       const documentoData: any = {
         nome: formData.titulo.trim(), // Campo obrigatório no banco
         titulo: formData.titulo.trim(),
-        tipo: formData.tipo,
-        categoria: formData.tipo, // Campo obrigatório no banco (mesmo valor de tipo)
+        tipo: tipoValido,
+        categoria: tipoValido, // Campo obrigatório no banco (mesmo valor de tipo, validado)
         status: formData.status || 'ativo',
         arquivo_url: result.url,
         arquivo_nome: formData.arquivo.name,
+        arquivo_key: result.key, // Salvar o key para gerar novas URLs quando necessário
       };
 
       // Adicionar associações e tipo de associação
@@ -226,16 +231,396 @@ export default function Documentos() {
     setShowPrintModal(true);
   };
 
-  const handleDownload = async (documento: any) => {
+  const handleDownloadDocumentoPDF = async (documento: any) => {
     try {
-      if (documento.arquivo_url) {
-        window.open(documento.arquivo_url, '_blank');
-      } else {
-        alert('URL do arquivo não disponível.');
+      // Importar html2pdf.js dinamicamente
+      const html2pdf = (await import('html2pdf.js')).default;
+
+      // Criar elemento HTML temporário para o contrato
+      const element = document.createElement('div');
+      element.innerHTML = `
+        <div style="font-family: Arial, sans-serif; padding: 40px; color: #333; line-height: 1.6; max-width: 800px; margin: 0 auto;">
+          <div style="text-align: center; border-bottom: 3px solid #333; padding-bottom: 15px; margin-bottom: 30px;">
+            <h1 style="font-size: 28px; margin: 0; color: #333;">CEU MUSIC</h1>
+            <p style="font-size: 16px; font-weight: bold; margin: 5px 0;">${getTipoLabel(documento.tipo).toUpperCase()}</p>
+            <p style="font-size: 14px; color: #666; margin: 5px 0;">${documento.titulo}</p>
+          </div>
+
+          ${documento.identificacao_partes ? `
+          <div style="margin-bottom: 25px;">
+            <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">1. IDENTIFICAÇÃO DAS PARTES (QUEM?)</h3>
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.identificacao_partes}</p>
+          </div>
+          ` : ''}
+
+          ${documento.objeto_escopo ? `
+          <div style="margin-bottom: 25px;">
+            <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">2. OBJETO E ESCOPO (O QUÊ?)</h3>
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.objeto_escopo}</p>
+          </div>
+          ` : ''}
+
+          ${documento.valores_pagamento ? `
+          <div style="margin-bottom: 25px;">
+            <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">3. VALORES E PAGAMENTO (QUANTO E COMO?)</h3>
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.valores_pagamento}</p>
+            ${documento.valor ? `<p style="font-size: 18px; font-weight: bold; color: #14b8a6; margin-top: 10px;">Valor Total: ${formatCurrency(documento.valor)}</p>` : ''}
+          </div>
+          ` : ''}
+
+          ${documento.vigencia_prazos ? `
+          <div style="margin-bottom: 25px;">
+            <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">4. VIGÊNCIA E PRAZOS (QUANDO?)</h3>
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.vigencia_prazos}</p>
+            ${documento.data_inicio || documento.data_fim ? `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
+              ${documento.data_inicio ? `<p style="margin: 8px 0;"><strong>Data de Início:</strong> ${formatDate(documento.data_inicio)}</p>` : ''}
+              ${documento.data_fim ? `<p style="margin: 8px 0;"><strong>Data de Fim:</strong> ${formatDate(documento.data_fim)}</p>` : ''}
+            </div>
+            ` : ''}
+          </div>
+          ` : ''}
+
+          <div style="margin-bottom: 25px;">
+            <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">INFORMAÇÕES ADICIONAIS</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
+              ${documento.artista?.nome ? `<p style="margin: 8px 0;"><strong>Artista:</strong> ${documento.artista.nome}</p>` : ''}
+              ${documento.projeto?.nome ? `<p style="margin: 8px 0;"><strong>Projeto:</strong> ${documento.projeto.nome}</p>` : ''}
+            </div>
+            ${documento.descricao ? `
+            <div style="margin-top: 10px;">
+              <p style="margin: 8px 0;"><strong>Descrição:</strong></p>
+              <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.descricao}</p>
+            </div>
+            ` : ''}
+          </div>
+
+          ${documento.termos_legais ? `
+          <div style="margin-bottom: 25px;">
+            <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">5. TERMOS LEGAIS E CLÁUSULAS</h3>
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.termos_legais}</p>
+          </div>
+          ` : ''}
+
+          ${documento.assinatura ? `
+          <div style="margin-bottom: 25px;">
+            <h3 style="color: #555; margin-top: 25px; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #ddd; font-size: 16px;">6. ASSINATURA E CONCORDÂNCIA</h3>
+            <p style="margin: 8px 0; text-align: justify; white-space: pre-wrap;">${documento.assinatura}</p>
+          </div>
+          ` : ''}
+
+          <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #ddd;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 60px;">
+              <div>
+                <p style="font-weight: bold; margin-bottom: 5px;">CEU MUSIC</p>
+                <p style="font-size: 14px; color: #666;">Gravadora</p>
+                <div style="border-top: 1px solid #333; padding-top: 10px; margin-top: 60px;">
+                  <p style="font-size: 12px; color: #999;">Assinatura</p>
+                </div>
+              </div>
+              <div style="text-align: right;">
+                <p style="font-weight: bold; margin-bottom: 5px;">${documento.artista?.nome || 'Artista'}</p>
+                <p style="font-size: 14px; color: #666;">Contratado</p>
+                <div style="border-top: 1px solid #333; padding-top: 10px; margin-top: 60px;">
+                  <p style="font-size: 12px; color: #999;">Assinatura</p>
+                </div>
+              </div>
+            </div>
+            <div style="text-align: center; margin-top: 30px; font-size: 12px; color: #666;">
+              <p>Documento gerado em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}</p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Esconder elemento temporariamente
+      element.style.position = 'absolute';
+      element.style.left = '-9999px';
+      document.body.appendChild(element);
+
+      // Configurações do PDF
+      const opt = {
+        margin: [15, 15, 15, 15],
+        filename: `${getTipoLabel(documento.tipo)}_${documento.titulo.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      // Gerar e baixar PDF
+      await html2pdf().set(opt).from(element).save();
+
+      // Remover elemento temporário
+      document.body.removeChild(element);
+    } catch (error: any) {
+      console.error('Erro ao gerar PDF:', error);
+      alert(`Erro ao gerar PDF do contrato: ${error.message || 'Erro desconhecido'}`);
+    }
+  };
+
+  const handleDownload = async (documento: any) => {
+    // Sempre gerar PDF formatado do documento
+    handleDownloadDocumentoPDF(documento);
+  };
+
+  const handleDownloadArquivoAnexado = async (documento: any) => {
+    // Baixar o arquivo anexado no formulário (se houver)
+    try {
+      const { getSignedUrlR2, R2_BUCKETS, findKeyByFileName } = await import('../../lib/r2');
+      
+      // Determinar o key do arquivo
+      let arquivoKey: string | null = documento.arquivo_key || null;
+      
+      // Se não temos o key salvo, tentar encontrar no bucket
+      if (!arquivoKey && documento.arquivo_nome) {
+        try {
+          console.log('Buscando key do arquivo no bucket...');
+          // Tentar encontrar o arquivo no bucket pelo nome
+          arquivoKey = await findKeyByFileName(
+            R2_BUCKETS.DOCUMENTOS,
+            documento.arquivo_nome,
+            'documentos'
+          );
+          
+          if (arquivoKey) {
+            console.log('Key encontrado:', arquivoKey);
+            // Salvar o key encontrado no banco para próximas vezes
+            try {
+              await supabase
+                .from('documentos')
+                .update({ arquivo_key: arquivoKey })
+                .eq('id', documento.id);
+            } catch (e) {
+              console.warn('Erro ao salvar key no banco:', e);
+            }
+          }
+        } catch (error) {
+          console.warn('Erro ao buscar key no bucket:', error);
+        }
       }
+
+      // Se ainda não temos key, tentar extrair da URL
+      if (!arquivoKey && documento.arquivo_url) {
+        try {
+          const url = new URL(documento.arquivo_url);
+          const pathParts = url.pathname.split('/').filter(p => p);
+          
+          // Para URLs assinadas do R2, o formato pode variar
+          // Tentar extrair do pathname
+          if (pathParts.length >= 2) {
+            // Pular o bucket e pegar o resto
+            const bucketIndex = pathParts.findIndex(p => 
+              p === R2_BUCKETS.DOCUMENTOS || 
+              p === 'documentos' ||
+              p.includes('documentos')
+            );
+            
+            if (bucketIndex >= 0 && bucketIndex < pathParts.length - 1) {
+              arquivoKey = pathParts.slice(bucketIndex + 1).join('/');
+            } else {
+              // Se não encontrou o bucket, tentar pegar tudo depois do primeiro elemento
+              arquivoKey = pathParts.slice(1).join('/');
+            }
+          }
+        } catch (e) {
+          console.warn('Erro ao extrair key da URL:', e);
+        }
+      }
+
+      // Gerar nova URL assinada
+      let downloadUrl: string | null = null;
+      
+      if (arquivoKey) {
+        try {
+          console.log('Gerando URL assinada para key:', arquivoKey);
+          downloadUrl = await getSignedUrlR2(
+            R2_BUCKETS.DOCUMENTOS,
+            arquivoKey,
+            86400 // URL válida por 24 horas (1 dia)
+          );
+          console.log('Nova URL assinada gerada com sucesso');
+        } catch (error: any) {
+          console.error('Erro ao gerar URL assinada:', error);
+          
+          // Se o erro for NoSuchKey, tentar buscar no bucket novamente
+          if (error.message?.includes('NoSuchKey') || error.message?.includes('does not exist')) {
+            if (documento.arquivo_nome) {
+              console.log('Key não encontrado, tentando buscar no bucket...');
+              try {
+                arquivoKey = await findKeyByFileName(
+                  R2_BUCKETS.DOCUMENTOS,
+                  documento.arquivo_nome,
+                  'documentos'
+                );
+                
+                if (arquivoKey) {
+            downloadUrl = await getSignedUrlR2(
+              R2_BUCKETS.DOCUMENTOS,
+              arquivoKey,
+              86400 // URL válida por 24 horas
+            );
+                  // Salvar o key correto
+                  await supabase
+                    .from('documentos')
+                    .update({ arquivo_key: arquivoKey })
+                    .eq('id', documento.id);
+                }
+              } catch (retryError) {
+                console.error('Erro ao buscar key no bucket:', retryError);
+              }
+            }
+          }
+          
+          // Se ainda não temos URL, usar a original como último recurso
+          if (!downloadUrl && documento.arquivo_url) {
+            downloadUrl = documento.arquivo_url;
+            console.warn('Usando URL original como fallback (pode estar expirada)');
+          }
+        }
+      } else {
+        // Se não temos key, usar a URL original (pode estar expirada)
+        downloadUrl = documento.arquivo_url;
+        console.warn('Usando URL original (pode estar expirada)');
+      }
+
+      if (!downloadUrl) {
+        alert('Não foi possível gerar URL para download. O arquivo pode não existir mais no storage.');
+        return;
+      }
+
+      // Fazer download direto usando elemento <a>
+      console.log('Iniciando download de:', downloadUrl);
+      
+      // Criar link temporário para download
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      
+      // Tentar definir nome do arquivo se disponível
+      if (documento.arquivo_nome) {
+        link.download = documento.arquivo_nome;
+      } else {
+        link.download = `documento_${documento.id}_${Date.now()}`;
+      }
+      
+      // Adicionar ao DOM, clicar e remover
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      console.log('Download iniciado com sucesso');
+      
     } catch (error: any) {
       console.error('Erro ao baixar arquivo:', error);
-      alert(`Erro ao baixar arquivo: ${error.message}`);
+      alert(`Erro ao baixar arquivo: ${error.message || 'Erro desconhecido. Verifique se o arquivo existe e se as credenciais do R2 estão configuradas.'}`);
+    }
+  };
+
+  const handleDownloadMultiple = async (documentosParaDownload: any[]) => {
+    if (documentosParaDownload.length === 0) {
+      alert('Nenhum documento selecionado para download.');
+      return;
+    }
+
+    try {
+      const { getSignedUrlR2, R2_BUCKETS, findKeyByFileName } = await import('../../lib/r2');
+      
+      let sucesso = 0;
+      let falhas = 0;
+      const erros: string[] = [];
+
+      for (const documento of documentosParaDownload) {
+        try {
+          let arquivoKey: string | null = documento.arquivo_key || null;
+          
+          // Se não temos o key, tentar encontrar
+          if (!arquivoKey && documento.arquivo_nome) {
+            arquivoKey = await findKeyByFileName(
+              R2_BUCKETS.DOCUMENTOS,
+              documento.arquivo_nome,
+              'documentos'
+            );
+            
+            if (arquivoKey) {
+              await supabase
+                .from('documentos')
+                .update({ arquivo_key: arquivoKey })
+                .eq('id', documento.id);
+            }
+          }
+
+          // Se ainda não temos key, tentar extrair da URL
+          if (!arquivoKey && documento.arquivo_url) {
+            try {
+              const url = new URL(documento.arquivo_url);
+              const pathParts = url.pathname.split('/').filter(p => p);
+              if (pathParts.length >= 2) {
+                const bucketIndex = pathParts.findIndex(p => 
+                  p === R2_BUCKETS.DOCUMENTOS || 
+                  p === 'documentos' ||
+                  p.includes('documentos')
+                );
+                if (bucketIndex >= 0 && bucketIndex < pathParts.length - 1) {
+                  arquivoKey = pathParts.slice(bucketIndex + 1).join('/');
+                } else {
+                  arquivoKey = pathParts.slice(1).join('/');
+                }
+              }
+            } catch (e) {
+              // Ignorar erro de extração
+            }
+          }
+
+          // Gerar URL assinada
+          let downloadUrl: string | null = null;
+          
+          if (arquivoKey) {
+            downloadUrl = await getSignedUrlR2(
+              R2_BUCKETS.DOCUMENTOS,
+              arquivoKey,
+              86400 // URL válida por 24 horas
+            );
+          } else if (documento.arquivo_url) {
+            downloadUrl = documento.arquivo_url;
+          }
+
+          if (downloadUrl) {
+            // Criar link temporário para download direto
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            if (documento.arquivo_nome) {
+              link.download = documento.arquivo_nome;
+            }
+            
+            // Adicionar delay entre downloads para evitar bloqueio
+            setTimeout(() => {
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }, sucesso * 300); // Delay de 300ms entre cada download
+            sucesso++;
+          } else {
+            falhas++;
+            erros.push(`${documento.titulo}: URL não disponível`);
+          }
+        } catch (error: any) {
+          falhas++;
+          erros.push(`${documento.titulo}: ${error.message || 'Erro desconhecido'}`);
+        }
+      }
+
+      // Mostrar resultado
+      if (falhas === 0) {
+        alert(`✅ ${sucesso} documento(s) sendo baixado(s)!`);
+      } else {
+        alert(`⚠️ ${sucesso} documento(s) baixado(s) com sucesso.\n❌ ${falhas} falha(s):\n${erros.join('\n')}`);
+      }
+    } catch (error: any) {
+      console.error('Erro ao fazer download em lote:', error);
+      alert(`Erro ao fazer download em lote: ${error.message || 'Erro desconhecido'}`);
     }
   };
 
@@ -353,7 +738,7 @@ export default function Documentos() {
 
         {/* Filtros */}
         <div className="bg-dark-card border border-dark-border rounded-xl p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             {/* Busca */}
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">
@@ -410,6 +795,51 @@ export default function Documentos() {
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* Botões de Download em Lote */}
+          <div className="border-t border-dark-border pt-4">
+            <label className="block text-sm font-medium text-gray-400 mb-3">
+              <i className="ri-download-line mr-2"></i>Download em Lote
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => handleDownloadMultiple(filteredDocumentos)}
+                disabled={filteredDocumentos.length === 0}
+                className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                title={`Baixar todos os ${filteredDocumentos.length} documento(s) filtrado(s)`}
+              >
+                <i className="ri-download-line"></i>
+                Baixar Todos ({filteredDocumentos.length})
+              </button>
+              <button
+                onClick={() => handleDownloadMultiple(filteredDocumentos.filter(d => d.tipo === 'contrato'))}
+                disabled={filteredDocumentos.filter(d => d.tipo === 'contrato').length === 0}
+                className="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                title={`Baixar ${filteredDocumentos.filter(d => d.tipo === 'contrato').length} contrato(s)`}
+              >
+                <i className="ri-file-paper-line"></i>
+                Contratos ({filteredDocumentos.filter(d => d.tipo === 'contrato').length})
+              </button>
+              <button
+                onClick={() => handleDownloadMultiple(filteredDocumentos.filter(d => d.tipo === 'termo'))}
+                disabled={filteredDocumentos.filter(d => d.tipo === 'termo').length === 0}
+                className="px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                title={`Baixar ${filteredDocumentos.filter(d => d.tipo === 'termo').length} termo(s)`}
+              >
+                <i className="ri-file-text-line"></i>
+                Termos ({filteredDocumentos.filter(d => d.tipo === 'termo').length})
+              </button>
+              <button
+                onClick={() => handleDownloadMultiple(filteredDocumentos.filter(d => d.status === 'ativo'))}
+                disabled={filteredDocumentos.filter(d => d.status === 'ativo').length === 0}
+                className="px-4 py-2 bg-primary-teal/20 hover:bg-primary-teal/30 text-primary-teal rounded-lg transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                title={`Baixar ${filteredDocumentos.filter(d => d.status === 'ativo').length} documento(s) ativo(s)`}
+              >
+                <i className="ri-checkbox-circle-line"></i>
+                Ativos ({filteredDocumentos.filter(d => d.status === 'ativo').length})
+              </button>
             </div>
           </div>
         </div>
@@ -475,19 +905,17 @@ export default function Documentos() {
                             >
                               <i className="ri-eye-line text-lg"></i>
                             </button>
-                            {doc.tipo === 'contrato' && (
-                              <button
-                                onClick={() => handleImprimir(doc)}
-                                className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-smooth cursor-pointer"
-                                title="Imprimir"
-                              >
-                                <i className="ri-printer-line text-lg"></i>
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleImprimir(doc)}
+                              className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-smooth cursor-pointer"
+                              title="Imprimir"
+                            >
+                              <i className="ri-printer-line text-lg"></i>
+                            </button>
                             <button
                               onClick={() => handleDownload(doc)}
                               className="p-2 hover:bg-green-500/20 text-green-400 rounded-lg transition-smooth cursor-pointer"
-                              title="Download"
+                              title="Baixar PDF"
                             >
                               <i className="ri-download-line text-lg"></i>
                             </button>
@@ -917,25 +1345,29 @@ export default function Documentos() {
 
                 <div className="pt-4 border-t border-dark-border">
                   <div className="flex gap-3">
+                    <button
+                      onClick={() => handleDownload(selectedDocumento)}
+                      className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <i className="ri-file-pdf-line"></i>
+                      <span>Baixar {getTipoLabel(selectedDocumento.tipo)} (PDF)</span>
+                    </button>
+                    <button
+                      onClick={() => handleImprimir(selectedDocumento)}
+                      className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <i className="ri-printer-line"></i>
+                      <span>Imprimir</span>
+                    </button>
                     {selectedDocumento.arquivo_url && (
-                      <>
-                        <button
-                          onClick={() => handleDownload(selectedDocumento)}
-                          className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center justify-center gap-2"
-                        >
-                          <i className="ri-download-line"></i>
-                          <span>Baixar Arquivo</span>
-                        </button>
-                        {selectedDocumento.tipo === 'contrato' && (
-                          <button
-                            onClick={() => handleImprimir(selectedDocumento)}
-                            className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center justify-center gap-2"
-                          >
-                            <i className="ri-printer-line"></i>
-                            <span>Imprimir</span>
-                          </button>
-                        )}
-                      </>
+                      <button
+                        onClick={() => handleDownloadArquivoAnexado(selectedDocumento)}
+                        className="px-4 py-3 bg-gray-600 text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center justify-center gap-2"
+                        title="Baixar arquivo anexado ao formulário"
+                      >
+                        <i className="ri-file-download-line"></i>
+                        <span>Anexo</span>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -944,12 +1376,12 @@ export default function Documentos() {
           </div>
         )}
 
-        {/* Modal Imprimir Contrato */}
+        {/* Modal Imprimir Documento */}
         {showPrintModal && selectedDocumento && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-gray-900">Imprimir Contrato</h2>
+                <h2 className="text-xl font-semibold text-gray-900">Imprimir {getTipoLabel(selectedDocumento.tipo)}</h2>
                 <button 
                   onClick={() => {
                     setShowPrintModal(false);

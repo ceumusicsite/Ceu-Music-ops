@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Configuração do R2
@@ -181,6 +181,62 @@ export function getPublicUrlR2(bucket: string, key: string): string | null {
     return null;
   }
   return `${publicUrl}/${bucket}/${key}`;
+}
+
+/**
+ * Lista objetos em um bucket (útil para encontrar keys)
+ */
+export async function listObjectsR2(
+  bucket: string,
+  prefix?: string,
+  maxKeys: number = 1000
+): Promise<Array<{ key: string; size: number; lastModified: Date }>> {
+  try {
+    const command = new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix,
+      MaxKeys: maxKeys,
+    });
+
+    const response = await s3Client.send(command);
+    
+    if (!response.Contents) {
+      return [];
+    }
+
+    return response.Contents.map(item => ({
+      key: item.Key || '',
+      size: item.Size || 0,
+      lastModified: item.LastModified || new Date(),
+    }));
+  } catch (error: any) {
+    console.error('Erro ao listar objetos do R2:', error);
+    throw new Error(`Erro ao listar objetos: ${error.message || 'Erro desconhecido'}`);
+  }
+}
+
+/**
+ * Encontra o key de um arquivo pelo nome no bucket
+ */
+export async function findKeyByFileName(
+  bucket: string,
+  fileName: string,
+  folder?: string
+): Promise<string | null> {
+  try {
+    const prefix = folder ? `${folder}/` : '';
+    const objects = await listObjectsR2(bucket, prefix);
+    
+    // Procurar por arquivo que contenha o nome
+    const found = objects.find(obj => 
+      obj.key.includes(fileName) || obj.key.endsWith(fileName)
+    );
+    
+    return found ? found.key : null;
+  } catch (error: any) {
+    console.error('Erro ao buscar key por nome:', error);
+    return null;
+  }
 }
 
 
