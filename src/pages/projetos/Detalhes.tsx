@@ -77,6 +77,7 @@ interface FaixaAudioVideo {
   link_url?: string;
   descricao?: string;
   versao?: string;
+  nome_anexador?: string;
   created_at: string;
 }
 
@@ -1491,6 +1492,12 @@ export default function ProjetoDetalhes() {
                                               </div>
                                               {av.arquivo_nome && (
                                                 <p className="text-xs text-gray-500 mt-1 truncate">{av.arquivo_nome}</p>
+                                              )}
+                                              {av.nome_anexador && (
+                                                <p className="text-xs text-primary-teal mt-1 flex items-center gap-1">
+                                                  <i className="ri-user-line"></i>
+                                                  Anexado por: {av.nome_anexador}
+                                                </p>
                                               )}
                                             </div>
                                           </div>

@@ -16,6 +16,7 @@ export default function SharedAudioVideoForm() {
     link_url: '',
     descricao: '',
     versao: '',
+    nome_anexador: '',
   });
   const [uploadedFile, setUploadedFile] = useState<{ url: string; fileName: string } | null>(null);
 
@@ -159,6 +160,12 @@ export default function SharedAudioVideoForm() {
         return;
       }
 
+      if (!formData.nome_anexador || !formData.nome_anexador.trim()) {
+        alert('Por favor, informe seu nome');
+        setSubmitting(false);
+        return;
+      }
+
       // Preparar dados para salvar
       // Usar o tipo do link se existir, senão usar o tipo escolhido no formulário
       const tipoFinal = linkData?.tipo || formData.tipo;
@@ -167,6 +174,7 @@ export default function SharedAudioVideoForm() {
         formato: formData.formato,
         versao: formData.versao,
         descricao: formData.descricao || undefined,
+        nome_anexador: formData.nome_anexador.trim(),
       };
 
       if (formData.formato === 'link') {
@@ -355,6 +363,23 @@ export default function SharedAudioVideoForm() {
                 : formData.tipo === 'video'
                 ? 'Pré-Produção: Antes da gravação | Pós-Produção: Depois da gravação | Mixagem/Masterizado: Depois da pós'
                 : 'Selecione o tipo primeiro para ver as opções de classificação'}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-2">
+              Seu Nome <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              value={formData.nome_anexador}
+              onChange={(e) => setFormData(prev => ({ ...prev, nome_anexador: e.target.value }))}
+              required
+              className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+              placeholder="Digite seu nome completo"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              <i className="ri-information-line"></i> Informe seu nome para identificarmos quem anexou este áudio/vídeo
             </p>
           </div>
 
