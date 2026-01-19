@@ -10,6 +10,7 @@ export default function SharedAudioVideoForm() {
   const [submitting, setSubmitting] = useState(false);
   const [linkData, setLinkData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const [formData, setFormData] = useState({
     tipo: '',
     formato: 'link',
@@ -206,8 +207,8 @@ export default function SharedAudioVideoForm() {
 
       if (updateError) throw updateError;
 
-      alert('Formulário enviado com sucesso!');
-      navigate('/');
+      // Marcar como sucesso e não redirecionar
+      setSuccess(true);
     } catch (err: any) {
       console.error('Erro ao enviar formulário:', err);
       alert(`Erro ao enviar formulário: ${err.message || 'Erro desconhecido'}`);
@@ -227,6 +228,20 @@ export default function SharedAudioVideoForm() {
     );
   }
 
+  if (success) {
+    return (
+      <div className="min-h-screen bg-dark-bg flex items-center justify-center p-4">
+        <div className="bg-dark-card border border-green-500/50 rounded-xl p-8 max-w-md w-full text-center">
+          <i className="ri-checkbox-circle-line text-6xl text-green-500 mb-4"></i>
+          <h1 className="text-2xl font-bold text-white mb-2">Formulário enviado com sucesso!</h1>
+          <p className="text-gray-400 mb-6">
+            Seus dados foram salvos com sucesso. Obrigado!
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center p-4">
@@ -235,10 +250,10 @@ export default function SharedAudioVideoForm() {
           <h1 className="text-2xl font-bold text-white mb-2">Erro</h1>
           <p className="text-gray-400 mb-6">{error}</p>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => window.location.reload()}
             className="px-6 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth"
           >
-            Voltar
+            Tentar Novamente
           </button>
         </div>
       </div>

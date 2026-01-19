@@ -843,6 +843,9 @@ export default function ProjetoDetalhes() {
         const expiraEm = new Date();
         expiraEm.setDate(expiraEm.getDate() + 30);
 
+        // Obter o usuário atual autenticado
+        const { data: { user } } = await supabase.auth.getUser();
+
         const linkData: any = {
           token,
           faixa_id: faixaId,
@@ -853,6 +856,11 @@ export default function ProjetoDetalhes() {
         // Só adicionar tipo se foi fornecido
         if (tipo) {
           linkData.tipo = tipo;
+        }
+
+        // Adicionar created_by se o usuário estiver autenticado
+        if (user?.id) {
+          linkData.created_by = user.id;
         }
 
         const { error: insertError } = await supabase
@@ -1133,18 +1141,18 @@ export default function ProjetoDetalhes() {
                                     </span>
                                   )}
                                   <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedFaixaForModal(faixa);
-                                      setAudioVideoFormato('arquivo');
-                                      setShowAudioVideoModal(true);
-                                    }}
-                                    className="px-3 py-1 bg-primary-teal/20 text-primary-teal text-xs font-medium rounded hover:bg-primary-teal/30 transition-smooth cursor-pointer flex items-center gap-1.5"
-                                    title="Anexar áudio ou vídeo"
-                                  >
-                                    <i className="ri-attachment-line"></i>
-                                    Anexar Áudio/Vídeo
-                                  </button>
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedFaixaForModal(faixa);
+                      setAudioVideoFormato('arquivo');
+                      setShowAudioVideoModal(true);
+                    }}
+                    className="px-3 py-1 bg-primary-teal/20 text-primary-teal text-xs font-medium rounded hover:bg-primary-teal/30 transition-smooth cursor-pointer flex items-center gap-1.5"
+                    title="Anexar áudio ou vídeo"
+                  >
+                    <i className="ri-attachment-line"></i>
+                    Anexar Áudio/Vídeo
+                  </button>
                                   {faixa.audio_video && faixa.audio_video.length > 0 && (
                                     <div className="flex flex-wrap gap-1.5">
                                       {faixa.audio_video.slice(0, 3).map((av, idx) => (
@@ -2628,6 +2636,14 @@ export default function ProjetoDetalhes() {
                   </select>
                 </div>
 
+                {/* Separador Visual */}
+                <div className="border-t border-dark-border pt-4">
+                  <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                    <i className="ri-attachment-line text-primary-teal"></i>
+                    Anexar Áudio/Vídeo
+                  </h3>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-2">Formato</label>
                   <select
@@ -2641,120 +2657,18 @@ export default function ProjetoDetalhes() {
                         setSharedLink(null);
                         setLinkCopied(false);
                       }
-                      // O useEffect vai cuidar de gerar o link quando necessário
                     }}
                     className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
                   >
                     <option value="link">Link</option>
                     <option value="arquivo">Arquivo (R2)</option>
-                    <option value="compartilhavel">Link Compartilhável</option>
                     {audioVideoTipo === 'video' && (
                       <option value="youtube">Upload para YouTube</option>
                     )}
                   </select>
                 </div>
 
-                {audioVideoFormato === 'compartilhavel' ? (
-                  <div className="space-y-4">
-                    {generatingLink ? (
-                      <div className="text-center py-4">
-                        <i className="ri-loader-4-line text-2xl text-primary-teal animate-spin mb-2"></i>
-                        <p className="text-gray-400">Gerando link...</p>
-                      </div>
-                    ) : sharedLink ? (
-                      <div className="bg-dark-bg border border-primary-teal/50 rounded-lg p-4 space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-400 mb-2">
-                            <i className="ri-link text-primary-teal"></i> Link Compartilhável Gerado
-                          </label>
-                          <div className="flex gap-2 mb-2">
-                            <input
-                              type="text"
-                              value={sharedLink}
-                              readOnly
-                              className="flex-1 px-4 py-2 bg-dark-card border border-dark-border rounded-lg text-white text-sm"
-                            />
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                try {
-                                  await navigator.clipboard.writeText(sharedLink);
-                                  setLinkCopied(true);
-                                  setTimeout(() => setLinkCopied(false), 2000);
-                                } catch (err) {
-                                  // Fallback para navegadores antigos
-                                  const textArea = document.createElement('textarea');
-                                  textArea.value = sharedLink;
-                                  textArea.style.position = 'fixed';
-                                  textArea.style.opacity = '0';
-                                  document.body.appendChild(textArea);
-                                  textArea.select();
-                                  document.execCommand('copy');
-                                  document.body.removeChild(textArea);
-                                  setLinkCopied(true);
-                                  setTimeout(() => setLinkCopied(false), 2000);
-                                }
-                              }}
-                              className={`px-4 py-2 rounded-lg transition-smooth cursor-pointer ${
-                                linkCopied 
-                                  ? 'bg-green-500 text-white' 
-                                  : 'bg-primary-teal hover:bg-primary-brown text-white'
-                              }`}
-                              title={linkCopied ? "Copiado!" : "Copiar link"}
-                            >
-                              {linkCopied ? (
-                                <i className="ri-check-line"></i>
-                              ) : (
-                                <i className="ri-file-copy-line"></i>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="border-t border-dark-border pt-4">
-                          <p className="text-sm font-medium text-gray-300 mb-3">Compartilhar via:</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const tipoTexto = audioVideoTipo === 'audio' ? 'Áudio' : audioVideoTipo === 'video' ? 'Vídeo' : 'Áudio/Vídeo';
-                                const subject = encodeURIComponent(`Formulário de ${tipoTexto} - ${selectedFaixaForModal?.nome}`);
-                                const body = encodeURIComponent(`Olá,\n\nPor favor, preencha o formulário de áudio/vídeo para a faixa "${selectedFaixaForModal?.nome}" através do link abaixo:\n\n${sharedLink}\n\nObrigado!`);
-                                window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
-                              }}
-                              className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg transition-smooth cursor-pointer"
-                            >
-                              <i className="ri-mail-line"></i>
-                              <span className="text-sm">Email</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const message = encodeURIComponent(`Olá! Por favor, preencha o formulário de áudio/vídeo para a faixa "${selectedFaixaForModal?.nome}" através do link:\n${sharedLink}`);
-                                window.open(`https://wa.me/?text=${message}`, '_blank');
-                              }}
-                              className="flex items-center justify-center gap-2 px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-smooth cursor-pointer"
-                            >
-                              <i className="ri-whatsapp-line"></i>
-                              <span className="text-sm">WhatsApp</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="bg-dark-card/50 border border-dark-border rounded-lg p-3">
-                          <p className="text-xs text-gray-400 flex items-start gap-2">
-                            <i className="ri-information-line text-primary-teal mt-0.5"></i>
-                            <span>
-                              <strong>Instruções:</strong> Envie este link para a pessoa que precisa preencher o formulário. 
-                              A pessoa poderá escolher se é áudio ou vídeo no formulário. 
-                              O link expira em <strong>30 dias</strong> e só pode ser usado <strong>uma vez</strong>.
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : audioVideoFormato === 'link' ? (
+                {audioVideoFormato === 'link' ? (
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">URL do Link</label>
                     <input
@@ -2844,7 +2758,7 @@ export default function ProjetoDetalhes() {
                   </div>
                 )}
 
-                {audioVideoFormato !== 'youtube' && (
+                {audioVideoFormato !== 'youtube' && audioVideoFormato !== 'compartilhavel' && (
                   <div className="flex gap-3 pt-4">
                     <button
                       type="button"
@@ -2858,7 +2772,7 @@ export default function ProjetoDetalhes() {
                       }}
                       className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                     >
-                      {audioVideoFormato === 'compartilhavel' ? 'Fechar' : 'Cancelar'}
+                      Cancelar
                     </button>
                     {audioVideoFormato === 'link' && (
                       <button
@@ -2870,11 +2784,194 @@ export default function ProjetoDetalhes() {
                     )}
                   </div>
                 )}
+
+                {/* Seção Separada: Link Compartilhável */}
+                <div className="border-t border-dark-border pt-6 mt-6">
+                  <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                    <i className="ri-link text-purple-400"></i>
+                    Link Compartilhável
+                  </h3>
+                  <p className="text-xs text-gray-400 mb-4">
+                    Gere um link para compartilhar com outras pessoas, permitindo que elas preencham o formulário de áudio/vídeo.
+                  </p>
+                  
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!selectedFaixaForModal) return;
+                      setAudioVideoFormato('compartilhavel');
+                      if (!sharedLink && !generatingLink) {
+                        await handleGenerateSharedLink(selectedFaixaForModal.id, audioVideoTipo || undefined);
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 rounded-lg text-purple-400 text-sm font-medium transition-smooth cursor-pointer mb-4 flex items-center justify-center gap-2"
+                  >
+                    <i className="ri-link"></i>
+                    {generatingLink ? 'Gerando Link...' : sharedLink ? 'Link Já Gerado' : 'Gerar Link Compartilhável'}
+                  </button>
+
+                  <div className="bg-dark-bg border border-purple-500/50 rounded-lg p-4 space-y-4">
+                    {audioVideoFormato === 'compartilhavel' && (
+                      <>
+                        {generatingLink ? (
+                          <div className="text-center py-4">
+                            <i className="ri-loader-4-line text-2xl text-primary-teal animate-spin mb-2"></i>
+                            <p className="text-gray-400">Gerando link...</p>
+                          </div>
+                        ) : sharedLink ? (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-400 mb-2">
+                              <i className="ri-link text-purple-400"></i> Link Compartilhável Gerado
+                            </label>
+                            <div className="flex gap-2 mb-2">
+                              <input
+                                type="text"
+                                value={sharedLink}
+                                readOnly
+                                className="flex-1 px-4 py-2 bg-dark-card border border-dark-border rounded-lg text-white text-sm"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-4">
+                            <p className="text-sm text-gray-400 mb-2">O link será gerado automaticamente...</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    <div className="border-t border-dark-border pt-4">
+                      <p className="text-sm font-medium text-gray-300 mb-3">Compartilhar via:</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!sharedLink) {
+                              alert('Por favor, clique em "Gerar Link Compartilhável" primeiro.');
+                              return;
+                            }
+                            const tipoTexto = audioVideoTipo === 'audio' ? 'Áudio' : audioVideoTipo === 'video' ? 'Vídeo' : 'Áudio/Vídeo';
+                            const subject = encodeURIComponent(`Formulário de ${tipoTexto} - ${selectedFaixaForModal?.nome}`);
+                            const body = encodeURIComponent(`Olá,\n\nPor favor, preencha o formulário de áudio/vídeo para a faixa "${selectedFaixaForModal?.nome}" através do link abaixo:\n\n${sharedLink}\n\nObrigado!`);
+                            window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+                          }}
+                          className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-smooth ${
+                            sharedLink 
+                              ? 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 cursor-pointer' 
+                              : 'bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-50'
+                          }`}
+                          disabled={!sharedLink}
+                        >
+                          <i className="ri-mail-line"></i>
+                          <span className="text-sm">Email</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!sharedLink) {
+                              alert('Por favor, clique em "Gerar Link Compartilhável" primeiro.');
+                              return;
+                            }
+                            const message = encodeURIComponent(`Olá! Por favor, preencha o formulário de áudio/vídeo para a faixa "${selectedFaixaForModal?.nome}" através do link:\n${sharedLink}`);
+                            window.open(`https://wa.me/?text=${message}`, '_blank');
+                          }}
+                          className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-smooth ${
+                            sharedLink 
+                              ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400 cursor-pointer' 
+                              : 'bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-50'
+                          }`}
+                          disabled={!sharedLink}
+                        >
+                          <i className="ri-whatsapp-line"></i>
+                          <span className="text-sm">WhatsApp</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!sharedLink) {
+                              alert('Por favor, clique em "Gerar Link Compartilhável" primeiro.');
+                              return;
+                            }
+                            try {
+                              await navigator.clipboard.writeText(sharedLink);
+                              setLinkCopied(true);
+                              setTimeout(() => setLinkCopied(false), 2000);
+                            } catch (err) {
+                              // Fallback para navegadores antigos
+                              const textArea = document.createElement('textarea');
+                              textArea.value = sharedLink;
+                              textArea.style.position = 'fixed';
+                              textArea.style.opacity = '0';
+                              document.body.appendChild(textArea);
+                              textArea.select();
+                              document.execCommand('copy');
+                              document.body.removeChild(textArea);
+                              setLinkCopied(true);
+                              setTimeout(() => setLinkCopied(false), 2000);
+                            }
+                          }}
+                          className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-smooth ${
+                            linkCopied 
+                              ? 'bg-green-500 text-white cursor-pointer' 
+                              : sharedLink
+                              ? 'bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 cursor-pointer'
+                              : 'bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-50'
+                          }`}
+                          disabled={!sharedLink}
+                          title={linkCopied ? "Copiado!" : "Copiar link"}
+                        >
+                          {linkCopied ? (
+                            <>
+                              <i className="ri-check-line"></i>
+                              <span className="text-sm">Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <i className="ri-file-copy-line"></i>
+                              <span className="text-sm">Copiar</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="bg-dark-card/50 border border-dark-border rounded-lg p-3">
+                      <p className="text-xs text-gray-400 flex items-start gap-2">
+                        <i className="ri-information-line text-purple-400 mt-0.5"></i>
+                        <span>
+                          <strong>Instruções:</strong> Envie este link para a pessoa que precisa preencher o formulário. 
+                          A pessoa poderá escolher se é áudio ou vídeo no formulário. 
+                          O link expira em <strong>30 dias</strong> e só pode ser usado <strong>uma vez</strong>.
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {audioVideoFormato === 'compartilhavel' && (
+                  <div className="flex gap-3 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAudioVideoModal(false);
+                        setSelectedFaixaForModal(null);
+                        setAudioVideoTipo('');
+                        setAudioVideoFormato('link');
+                        setSharedLink(null);
+                        setLinkCopied(false);
+                      }}
+                      className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                )}
               </form>
 
             </div>
           </div>
         )}
+
       </div>
     </MainLayout>
   );
