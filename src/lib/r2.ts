@@ -239,4 +239,28 @@ export async function findKeyByFileName(
   }
 }
 
+/**
+ * Deleta múltiplos arquivos do R2
+ */
+export async function deleteMultipleFromR2(
+  bucket: string,
+  keys: string[]
+): Promise<{ success: number; failed: number; errors: Array<{ key: string; error: string }> }> {
+  let success = 0;
+  let failed = 0;
+  const errors: Array<{ key: string; error: string }> = [];
+
+  for (const key of keys) {
+    try {
+      await deleteFromR2(bucket, key);
+      success++;
+    } catch (error: any) {
+      failed++;
+      errors.push({ key, error: error.message || 'Erro desconhecido' });
+    }
+  }
+
+  return { success, failed, errors };
+}
+
 

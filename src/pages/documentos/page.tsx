@@ -5,6 +5,9 @@ import { supabase } from '../../lib/supabase';
 
 type FilterTipo = 'todos' | 'contrato' | 'termo' | 'aditivo' | 'outro';
 type FilterStatus = 'todos' | 'ativo' | 'vencido' | 'cancelado';
+type ViewMode = 'tabela' | 'cards' | 'grid';
+type SortBy = 'data' | 'titulo' | 'tipo' | 'artista' | 'projeto';
+type GroupBy = 'nenhum' | 'tipo' | 'artista' | 'projeto' | 'status';
 
 export default function Documentos() {
   const { user } = useAuth();
@@ -13,15 +16,25 @@ export default function Documentos() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterTipo, setFilterTipo] = useState<FilterTipo>('todos');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('todos');
+  const [viewMode, setViewMode] = useState<ViewMode>('tabela');
+  const [sortBy, setSortBy] = useState<SortBy>('data');
+  const [groupBy, setGroupBy] = useState<GroupBy>('nenhum');
   const [showModal, setShowModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [showAnexosModal, setShowAnexosModal] = useState(false);
+  const [showLimpezaModal, setShowLimpezaModal] = useState(false);
   const [documentos, setDocumentos] = useState<any[]>([]);
   const [artistas, setArtistas] = useState<any[]>([]);
   const [projetos, setProjetos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [selectedDocumento, setSelectedDocumento] = useState<any>(null);
+  const [anexos, setAnexos] = useState<any[]>([]);
+  const [uploadingAnexo, setUploadingAnexo] = useState(false);
+  const [arquivosOrfaos, setArquivosOrfaos] = useState<Array<{ key: string; size: number; lastModified: Date }>>([]);
+  const [limpandoArquivos, setLimpandoArquivos] = useState(false);
+  const [verificandoArquivos, setVerificandoArquivos] = useState(false);
   
   const [formData, setFormData] = useState({
     titulo: '',
@@ -34,13 +47,7 @@ export default function Documentos() {
     descricao: '',
     status: 'ativo',
     arquivo: null as File | null,
-    // Novos campos
-    identificacao_partes: '',
-    objeto_escopo: '',
-    valores_pagamento: '',
-    vigencia_prazos: '',
-    termos_legais: '',
-    assinatura: '',
+    arquivos: [] as File[],
   });
 
   useEffect(() => {
@@ -57,7 +64,8 @@ export default function Documentos() {
         .select(`
           *,
           artista:artista_id(id, nome),
-          projeto:projeto_id(id, nome)
+          projeto:projeto_id(id, nome),
+          anexos:documentos_anexos(id, arquivo_url, arquivo_nome, arquivo_key, arquivo_tipo, descricao, ordem)
         `)
         .order('created_at', { ascending: false });
 
@@ -71,6 +79,22 @@ export default function Documentos() {
       setDocumentos([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAnexos = async (documentoId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('documentos_anexos')
+        .select('*')
+        .eq('documento_id', documentoId)
+        .order('ordem', { ascending: true });
+
+      if (error) throw error;
+      if (data) setAnexos(data);
+    } catch (error) {
+      console.error('Erro ao carregar anexos:', error);
+      setAnexos([]);
     }
   };
 
@@ -116,20 +140,23 @@ export default function Documentos() {
         alert('Por favor, selecione o tipo de documento.');
         return;
       }
-      if (!formData.arquivo) {
-        alert('Por favor, selecione um arquivo para upload.');
+      if (!formData.arquivo && formData.arquivos.length === 0) {
+        alert('Por favor, selecione pelo menos um arquivo para upload.');
         return;
       }
 
       setUploading(true);
 
-      // Upload do arquivo para Cloudflare R2
-      const { storageService, R2_BUCKETS } = await import('../../services/storage');
-      const result = await storageService.upload(formData.arquivo, {
-        bucket: R2_BUCKETS.DOCUMENTOS,
-        folder: 'documentos',
-        makePublic: false, // Usar signed URLs (mais seguro)
-      });
+      // Upload do arquivo principal para Cloudflare R2
+      let result: any = null;
+      if (formData.arquivo) {
+        const { storageService, R2_BUCKETS } = await import('../../services/storage');
+        result = await storageService.upload(formData.arquivo, {
+          bucket: R2_BUCKETS.DOCUMENTOS,
+          folder: 'documentos',
+          makePublic: false, // Usar signed URLs (mais seguro)
+        });
+      }
 
       // Preparar dados do documento
       // Validar que o tipo está nos valores permitidos
@@ -142,10 +169,14 @@ export default function Documentos() {
         tipo: tipoValido,
         categoria: tipoValido, // Campo obrigatório no banco (mesmo valor de tipo, validado)
         status: formData.status || 'ativo',
-        arquivo_url: result.url,
-        arquivo_nome: formData.arquivo.name,
-        arquivo_key: result.key, // Salvar o key para gerar novas URLs quando necessário
       };
+
+      // Adicionar arquivo principal se houver
+      if (result) {
+        documentoData.arquivo_url = result.url;
+        documentoData.arquivo_nome = formData.arquivo?.name;
+        documentoData.arquivo_key = result.key;
+      }
 
       // Adicionar associações e tipo de associação
       if (formData.artista_id && formData.projeto_id) {
@@ -208,6 +239,37 @@ export default function Documentos() {
 
       console.log('Documento criado com sucesso:', data);
 
+      // Upload de anexos adicionais para Cloudflare R2
+      // Todos os anexos são salvos no bucket R2_BUCKETS.DOCUMENTOS na pasta 'documentos/anexos'
+      if (formData.arquivos.length > 0 && data && data[0]) {
+        const { storageService, R2_BUCKETS } = await import('../../services/storage');
+        for (let i = 0; i < formData.arquivos.length; i++) {
+          const file = formData.arquivos[i];
+          try {
+            const anexoResult = await storageService.upload(file, {
+              bucket: R2_BUCKETS.DOCUMENTOS,
+              folder: 'documentos/anexos',
+              makePublic: false, // Usar signed URLs (mais seguro)
+              provider: 'r2', // Garantir que usa R2 explicitamente
+            });
+
+            await supabase
+              .from('documentos_anexos')
+              .insert([{
+                documento_id: data[0].id,
+                arquivo_url: anexoResult.url,
+                arquivo_nome: file.name,
+                arquivo_key: anexoResult.key,
+                arquivo_tipo: file.type,
+                arquivo_tamanho: file.size,
+                ordem: i,
+              }]);
+          } catch (error: any) {
+            console.error(`Erro ao fazer upload do anexo ${file.name}:`, error);
+          }
+        }
+      }
+
       await loadDocumentos();
       
       setShowModal(false);
@@ -219,11 +281,6 @@ export default function Documentos() {
     } finally {
       setUploading(false);
     }
-  };
-
-  const handleVisualizar = (documento: any) => {
-    setSelectedDocumento(documento);
-    setShowViewModal(true);
   };
 
   const handleImprimir = (documento: any) => {
@@ -450,8 +507,8 @@ export default function Documentos() {
   };
 
   const handleDownload = async (documento: any) => {
-    // Sempre gerar PDF formatado do documento
-    handleDownloadDocumentoPDF(documento);
+    // Baixar o arquivo anexado do R2
+    await handleDownloadArquivoAnexado(documento);
   };
 
   const handleDownloadArquivoAnexado = async (documento: any) => {
@@ -721,11 +778,49 @@ export default function Documentos() {
       return;
     }
 
-    if (!confirm('Tem certeza que deseja excluir este documento?')) {
+    if (!confirm('Tem certeza que deseja excluir este documento? Todos os arquivos associados também serão excluídos do Cloudflare R2.')) {
       return;
     }
 
     try {
+      // Buscar o documento para obter informações dos arquivos
+      const { data: documento, error: fetchError } = await supabase
+        .from('documentos')
+        .select('arquivo_key, anexos:documentos_anexos(id, arquivo_key)')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Excluir arquivo principal do R2 se existir
+      if (documento?.arquivo_key) {
+        try {
+          const { deleteFromR2, R2_BUCKETS } = await import('../../lib/r2');
+          await deleteFromR2(R2_BUCKETS.DOCUMENTOS, documento.arquivo_key);
+          console.log('Arquivo principal excluído do R2:', documento.arquivo_key);
+        } catch (r2Error: any) {
+          console.warn('Erro ao excluir arquivo principal do R2 (continuando...):', r2Error);
+          // Continuar mesmo se houver erro ao excluir do R2
+        }
+      }
+
+      // Excluir todos os anexos do R2
+      if (documento?.anexos && documento.anexos.length > 0) {
+        const { deleteFromR2, R2_BUCKETS } = await import('../../lib/r2');
+        for (const anexo of documento.anexos) {
+          if (anexo.arquivo_key) {
+            try {
+              await deleteFromR2(R2_BUCKETS.DOCUMENTOS, anexo.arquivo_key);
+              console.log('Anexo excluído do R2:', anexo.arquivo_key);
+            } catch (r2Error: any) {
+              console.warn(`Erro ao excluir anexo ${anexo.id} do R2 (continuando...):`, r2Error);
+              // Continuar mesmo se houver erro
+            }
+          }
+        }
+      }
+
+      // Excluir o documento do banco (os anexos serão excluídos automaticamente por CASCADE)
       const { error } = await supabase
         .from('documentos')
         .delete()
@@ -734,7 +829,7 @@ export default function Documentos() {
       if (error) throw error;
 
       await loadDocumentos();
-      alert('Documento excluído com sucesso!');
+      alert('Documento e arquivos excluídos com sucesso!');
     } catch (error: any) {
       console.error('Erro ao excluir documento:', error);
       alert(`Erro ao excluir documento: ${error.message}`);
@@ -753,6 +848,7 @@ export default function Documentos() {
       descricao: '',
       status: 'ativo',
       arquivo: null,
+      arquivos: [],
       identificacao_partes: '',
       objeto_escopo: '',
       valores_pagamento: '',
@@ -760,6 +856,94 @@ export default function Documentos() {
       termos_legais: '',
       assinatura: '',
     });
+  };
+
+  const handleAddAnexo = async (documentoId: string, file: File) => {
+    try {
+      setUploadingAnexo(true);
+      
+      // Upload do arquivo para Cloudflare R2
+      // O storageService por padrão usa R2 (configurado em services/storage.ts)
+      const { storageService, R2_BUCKETS } = await import('../../services/storage');
+      const result = await storageService.upload(file, {
+        bucket: R2_BUCKETS.DOCUMENTOS,
+        folder: 'documentos/anexos',
+        makePublic: false, // Usar signed URLs (mais seguro)
+        provider: 'r2', // Garantir que usa R2 explicitamente
+      });
+
+      // Obter número de anexos existentes para definir ordem
+      const { count } = await supabase
+        .from('documentos_anexos')
+        .select('*', { count: 'exact', head: true })
+        .eq('documento_id', documentoId);
+
+      // Inserir anexo
+      const { error } = await supabase
+        .from('documentos_anexos')
+        .insert([{
+          documento_id: documentoId,
+          arquivo_url: result.url,
+          arquivo_nome: file.name,
+          arquivo_key: result.key,
+          arquivo_tipo: file.type,
+          arquivo_tamanho: file.size,
+          ordem: (count || 0),
+        }]);
+
+      if (error) throw error;
+
+      await loadAnexos(documentoId);
+      await loadDocumentos();
+      alert('Anexo adicionado com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao adicionar anexo:', error);
+      alert(`Erro ao adicionar anexo: ${error.message}`);
+    } finally {
+      setUploadingAnexo(false);
+    }
+  };
+
+  const handleDeleteAnexo = async (anexoId: string, documentoId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este anexo? O arquivo também será excluído do Cloudflare R2.')) return;
+
+    try {
+      // Buscar o anexo para obter o arquivo_key
+      const { data: anexo, error: fetchError } = await supabase
+        .from('documentos_anexos')
+        .select('arquivo_key')
+        .eq('id', anexoId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Excluir arquivo do R2 se existir
+      if (anexo?.arquivo_key) {
+        try {
+          const { deleteFromR2, R2_BUCKETS } = await import('../../lib/r2');
+          await deleteFromR2(R2_BUCKETS.DOCUMENTOS, anexo.arquivo_key);
+          console.log('Anexo excluído do R2:', anexo.arquivo_key);
+        } catch (r2Error: any) {
+          console.warn('Erro ao excluir anexo do R2 (continuando...):', r2Error);
+          // Continuar mesmo se houver erro ao excluir do R2
+        }
+      }
+
+      // Excluir o anexo do banco
+      const { error } = await supabase
+        .from('documentos_anexos')
+        .delete()
+        .eq('id', anexoId);
+
+      if (error) throw error;
+
+      await loadAnexos(documentoId);
+      await loadDocumentos();
+      alert('Anexo e arquivo excluídos com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao excluir anexo:', error);
+      alert(`Erro ao excluir anexo: ${error.message}`);
+    }
   };
 
   const formatDate = (date: string | null) => {
@@ -807,7 +991,159 @@ export default function Documentos() {
     return matchesSearch && matchesTipo && matchesStatus;
   });
 
+  // Função de ordenação
+  const sortedDocumentos = [...filteredDocumentos].sort((a, b) => {
+    switch (sortBy) {
+      case 'titulo':
+        return (a.titulo || '').localeCompare(b.titulo || '');
+      case 'tipo':
+        return (a.tipo || '').localeCompare(b.tipo || '');
+      case 'artista':
+        return (a.artista?.nome || '').localeCompare(b.artista?.nome || '');
+      case 'projeto':
+        return (a.projeto?.nome || '').localeCompare(b.projeto?.nome || '');
+      case 'data':
+      default:
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
+        return dateB - dateA;
+    }
+  });
+
+  // Função de agrupamento
+  const groupedDocumentos = (() => {
+    if (groupBy === 'nenhum') {
+      return { 'Todos': sortedDocumentos };
+    }
+
+    const groups: { [key: string]: any[] } = {};
+    sortedDocumentos.forEach(doc => {
+      let key = 'Sem agrupamento';
+      
+      switch (groupBy) {
+        case 'tipo':
+          key = getTipoLabel(doc.tipo) || 'Sem tipo';
+          break;
+        case 'artista':
+          key = doc.artista?.nome || 'Sem artista';
+          break;
+        case 'projeto':
+          key = doc.projeto?.nome || 'Sem projeto';
+          break;
+        case 'status':
+          key = doc.status?.charAt(0).toUpperCase() + doc.status?.slice(1) || 'Sem status';
+          break;
+      }
+
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(doc);
+    });
+
+    return groups;
+  })();
+
   const tipos = ['contrato', 'termo', 'aditivo', 'outro'];
+
+  const handleVisualizar = (documento: any) => {
+    setSelectedDocumento(documento);
+    setShowViewModal(true);
+    if (documento.id) {
+      loadAnexos(documento.id);
+    }
+  };
+
+  const handleVerificarArquivosOrfaos = async () => {
+    try {
+      setVerificandoArquivos(true);
+      setArquivosOrfaos([]);
+
+      // Buscar todas as referências de arquivos no banco
+      const { data: documentosRefs } = await supabase
+        .from('documentos')
+        .select('arquivo_key')
+        .not('arquivo_key', 'is', null);
+
+      const { data: anexosRefs } = await supabase
+        .from('documentos_anexos')
+        .select('arquivo_key')
+        .not('arquivo_key', 'is', null);
+
+      // Criar um Set com todas as keys referenciadas
+      const keysReferenciadas = new Set<string>();
+      documentosRefs?.forEach(doc => {
+        if (doc.arquivo_key) keysReferenciadas.add(doc.arquivo_key);
+      });
+      anexosRefs?.forEach(anexo => {
+        if (anexo.arquivo_key) keysReferenciadas.add(anexo.arquivo_key);
+      });
+
+      // Listar todos os arquivos no R2 (na pasta documentos e na raiz)
+      const { listObjectsR2, R2_BUCKETS } = await import('../../lib/r2');
+      
+      // Buscar arquivos na pasta documentos
+      const arquivosPasta = await listObjectsR2(R2_BUCKETS.DOCUMENTOS, 'documentos', 10000);
+      
+      // Buscar arquivos na raiz (sem prefixo)
+      const arquivosRaiz = await listObjectsR2(R2_BUCKETS.DOCUMENTOS, undefined, 10000);
+      
+      // Combinar e remover duplicatas
+      const todosArquivos = [...arquivosPasta, ...arquivosRaiz].filter((arquivo, index, self) =>
+        index === self.findIndex(a => a.key === arquivo.key)
+      );
+
+      // Filtrar arquivos órfãos (que não têm referência no banco)
+      const orfaos = todosArquivos.filter(arquivo => !keysReferenciadas.has(arquivo.key));
+
+      setArquivosOrfaos(orfaos);
+      setShowLimpezaModal(true);
+
+      if (orfaos.length === 0) {
+        alert('✅ Nenhum arquivo órfão encontrado! Todos os arquivos no R2 têm referência no banco de dados.');
+      }
+    } catch (error: any) {
+      console.error('Erro ao verificar arquivos órfãos:', error);
+      alert(`Erro ao verificar arquivos órfãos: ${error.message}`);
+    } finally {
+      setVerificandoArquivos(false);
+    }
+  };
+
+  const handleLimparArquivosOrfaos = async () => {
+    if (arquivosOrfaos.length === 0) {
+      alert('Nenhum arquivo órfão para limpar.');
+      return;
+    }
+
+    if (!confirm(`Tem certeza que deseja excluir ${arquivosOrfaos.length} arquivo(s) órfão(s) do Cloudflare R2?\n\nEsta ação não pode ser desfeita!`)) {
+      return;
+    }
+
+    try {
+      setLimpandoArquivos(true);
+
+      const { deleteMultipleFromR2, R2_BUCKETS } = await import('../../lib/r2');
+      const keys = arquivosOrfaos.map(a => a.key);
+      
+      const resultado = await deleteMultipleFromR2(R2_BUCKETS.DOCUMENTOS, keys);
+
+      if (resultado.failed === 0) {
+        alert(`✅ ${resultado.success} arquivo(s) órfão(s) excluído(s) com sucesso do Cloudflare R2!`);
+        setArquivosOrfaos([]);
+        setShowLimpezaModal(false);
+      } else {
+        alert(`⚠️ ${resultado.success} arquivo(s) excluído(s) com sucesso.\n❌ ${resultado.failed} falha(s).\n\nErros:\n${resultado.errors.map(e => `- ${e.key}: ${e.error}`).join('\n')}`);
+        // Atualizar lista removendo os que foram excluídos com sucesso
+        setArquivosOrfaos(arquivosOrfaos.filter(a => resultado.errors.some(e => e.key === a.key)));
+      }
+    } catch (error: any) {
+      console.error('Erro ao limpar arquivos órfãos:', error);
+      alert(`Erro ao limpar arquivos órfãos: ${error.message}`);
+    } finally {
+      setLimpandoArquivos(false);
+    }
+  };
 
   return (
     <MainLayout>
@@ -823,8 +1159,73 @@ export default function Documentos() {
             className="px-4 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2"
           >
             <i className="ri-file-add-line text-lg"></i>
-            <span>Novo Documento</span>
+            <span>Anexar Documento</span>
           </button>
+        </div>
+
+        {/* Controles de Organização */}
+        <div className="bg-dark-card border border-dark-border rounded-xl p-4 mb-4">
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Modo de Visualização */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-400">Visualização:</label>
+              <div className="flex gap-1 bg-dark-bg rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode('tabela')}
+                  className={`p-2 rounded transition-smooth ${viewMode === 'tabela' ? 'bg-gradient-primary text-white' : 'text-gray-400 hover:text-white'}`}
+                  title="Tabela"
+                >
+                  <i className="ri-table-line"></i>
+                </button>
+                <button
+                  onClick={() => setViewMode('cards')}
+                  className={`p-2 rounded transition-smooth ${viewMode === 'cards' ? 'bg-gradient-primary text-white' : 'text-gray-400 hover:text-white'}`}
+                  title="Cards"
+                >
+                  <i className="ri-file-list-3-line"></i>
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2 rounded transition-smooth ${viewMode === 'grid' ? 'bg-gradient-primary text-white' : 'text-gray-400 hover:text-white'}`}
+                  title="Grid"
+                >
+                  <i className="ri-grid-line"></i>
+                </button>
+              </div>
+            </div>
+
+            {/* Ordenação */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-400">Ordenar por:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+                className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+              >
+                <option value="data">Data (mais recente)</option>
+                <option value="titulo">Título</option>
+                <option value="tipo">Tipo</option>
+                <option value="artista">Artista</option>
+                <option value="projeto">Projeto</option>
+              </select>
+            </div>
+
+            {/* Agrupamento */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-400">Agrupar por:</label>
+              <select
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+              >
+                <option value="nenhum">Nenhum</option>
+                <option value="tipo">Tipo</option>
+                <option value="artista">Artista</option>
+                <option value="projeto">Projeto</option>
+                <option value="status">Status</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Filtros */}
@@ -889,6 +1290,33 @@ export default function Documentos() {
             </div>
           </div>
 
+          {/* Ferramentas Administrativas */}
+          {isAdmin && (
+            <div className="border-t border-dark-border pt-4 mb-4">
+              <label className="block text-sm font-medium text-gray-400 mb-3">
+                <i className="ri-tools-line mr-2"></i>Ferramentas Administrativas
+              </label>
+              <button
+                onClick={handleVerificarArquivosOrfaos}
+                disabled={verificandoArquivos}
+                className="px-4 py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded-lg transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+                title="Verificar arquivos órfãos no Cloudflare R2"
+              >
+                {verificandoArquivos ? (
+                  <>
+                    <i className="ri-loader-4-line animate-spin"></i>
+                    Verificando...
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-search-line"></i>
+                    Verificar Arquivos Órfãos
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
           {/* Botões de Download em Lote */}
           <div className="border-t border-dark-border pt-4">
             <label className="block text-sm font-medium text-gray-400 mb-3">
@@ -943,92 +1371,190 @@ export default function Documentos() {
           </div>
         ) : (
           <>
-            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-dark-hover">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Título</th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Tipo</th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Artista</th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Projeto</th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Período</th>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
-                      <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-dark-border">
-                    {filteredDocumentos.map((doc) => (
-                      <tr key={doc.id} className="hover:bg-dark-hover transition-smooth">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-white">{doc.titulo}</div>
-                          {doc.descricao && (
-                            <div className="text-xs text-gray-400 mt-1 line-clamp-1">{doc.descricao}</div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2 py-1 text-xs rounded-lg bg-primary-teal/20 text-primary-teal">
-                            {getTipoLabel(doc.tipo)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-white">{doc.artista?.nome || '-'}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-white">{doc.projeto?.nome || '-'}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-white">
-                            {formatDate(doc.data_inicio)} {doc.data_fim && `- ${formatDate(doc.data_fim)}`}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs rounded-lg ${getStatusColor(doc.status)}`}>
+            {Object.entries(groupedDocumentos).map(([groupName, docs]) => (
+              <div key={groupName} className="mb-6">
+                {groupBy !== 'nenhum' && (
+                  <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <i className="ri-folder-line text-primary-teal"></i>
+                    {groupName} ({docs.length})
+                  </h3>
+                )}
+                
+                {viewMode === 'tabela' && (
+                  <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-dark-hover">
+                          <tr>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Título</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Tipo</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Artista</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Projeto</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Período</th>
+                            <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                            <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-dark-border">
+                          {docs.map((doc) => (
+                            <tr key={doc.id} className="hover:bg-dark-hover transition-smooth">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-medium text-white">{doc.titulo}</div>
+                                {doc.descricao && (
+                                  <div className="text-xs text-gray-400 mt-1 line-clamp-1">{doc.descricao}</div>
+                                )}
+                                {doc.anexos && doc.anexos.length > 0 && (
+                                  <div className="text-xs text-primary-teal mt-1">
+                                    <i className="ri-attachment-line"></i> {doc.anexos.length} anexo(s)
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className="px-2 py-1 text-xs rounded-lg bg-primary-teal/20 text-primary-teal">
+                                  {getTipoLabel(doc.tipo)}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-white">{doc.artista?.nome || '-'}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-white">{doc.projeto?.nome || '-'}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-white">
+                                  {formatDate(doc.data_inicio)} {doc.data_fim && `- ${formatDate(doc.data_fim)}`}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`px-2 py-1 text-xs rounded-lg ${getStatusColor(doc.status)}`}>
+                                  {doc.status?.charAt(0).toUpperCase() + doc.status?.slice(1)}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <button
+                                    onClick={() => handleVisualizar(doc)}
+                                    className="p-2 hover:bg-primary-teal/20 text-primary-teal rounded-lg transition-smooth cursor-pointer"
+                                    title="Visualizar"
+                                  >
+                                    <i className="ri-eye-line text-lg"></i>
+                                  </button>
+                                  <button
+                                    onClick={() => handleImprimir(doc)}
+                                    className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-smooth cursor-pointer"
+                                    title="Imprimir"
+                                  >
+                                    <i className="ri-printer-line text-lg"></i>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDownload(doc)}
+                                    className="p-2 hover:bg-green-500/20 text-green-400 rounded-lg transition-smooth cursor-pointer"
+                                    title="Baixar PDF"
+                                  >
+                                    <i className="ri-download-line text-lg"></i>
+                                  </button>
+                                  {isAdmin && (
+                                    <button
+                                      onClick={() => handleDelete(doc.id)}
+                                      className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-smooth cursor-pointer"
+                                      title="Excluir"
+                                    >
+                                      <i className="ri-delete-bin-line text-lg"></i>
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {viewMode === 'cards' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {docs.map((doc) => (
+                      <div key={doc.id} className="bg-dark-card border border-dark-border rounded-xl p-4 hover:border-primary-teal transition-smooth">
+                        <div className="flex items-start justify-between mb-3">
+                          <h4 className="text-white font-semibold text-sm line-clamp-2">{doc.titulo}</h4>
+                          <span className={`px-2 py-1 text-xs rounded-lg ${getStatusColor(doc.status)} ml-2 flex-shrink-0`}>
                             {doc.status?.charAt(0).toUpperCase() + doc.status?.slice(1)}
                           </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleVisualizar(doc)}
-                              className="p-2 hover:bg-primary-teal/20 text-primary-teal rounded-lg transition-smooth cursor-pointer"
-                              title="Visualizar"
-                            >
-                              <i className="ri-eye-line text-lg"></i>
-                            </button>
-                            <button
-                              onClick={() => handleImprimir(doc)}
-                              className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-smooth cursor-pointer"
-                              title="Imprimir"
-                            >
-                              <i className="ri-printer-line text-lg"></i>
-                            </button>
-                            <button
-                              onClick={() => handleDownload(doc)}
-                              className="p-2 hover:bg-green-500/20 text-green-400 rounded-lg transition-smooth cursor-pointer"
-                              title="Baixar PDF"
-                            >
-                              <i className="ri-download-line text-lg"></i>
-                            </button>
-                            {isAdmin && (
-                              <button
-                                onClick={() => handleDelete(doc.id)}
-                                className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-smooth cursor-pointer"
-                                title="Excluir"
-                              >
-                                <i className="ri-delete-bin-line text-lg"></i>
-                              </button>
-                            )}
+                        </div>
+                        <div className="space-y-2 mb-4">
+                          <div className="flex items-center gap-2 text-xs text-gray-400">
+                            <i className="ri-file-list-line"></i>
+                            <span>{getTipoLabel(doc.tipo)}</span>
                           </div>
-                        </td>
-                      </tr>
+                          {doc.artista?.nome && (
+                            <div className="flex items-center gap-2 text-xs text-gray-400">
+                              <i className="ri-user-line"></i>
+                              <span>{doc.artista.nome}</span>
+                            </div>
+                          )}
+                          {doc.projeto?.nome && (
+                            <div className="flex items-center gap-2 text-xs text-gray-400">
+                              <i className="ri-folder-line"></i>
+                              <span>{doc.projeto.nome}</span>
+                            </div>
+                          )}
+                          {doc.anexos && doc.anexos.length > 0 && (
+                            <div className="flex items-center gap-2 text-xs text-primary-teal">
+                              <i className="ri-attachment-line"></i>
+                              <span>{doc.anexos.length} anexo(s)</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2 pt-3 border-t border-dark-border">
+                          <button
+                            onClick={() => handleVisualizar(doc)}
+                            className="flex-1 px-3 py-2 bg-primary-teal/20 hover:bg-primary-teal/30 text-primary-teal rounded-lg transition-smooth cursor-pointer text-sm flex items-center justify-center gap-1"
+                          >
+                            <i className="ri-eye-line"></i>
+                            Ver
+                          </button>
+                          <button
+                            onClick={() => handleDownload(doc)}
+                            className="px-3 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-smooth cursor-pointer"
+                            title="Baixar"
+                          >
+                            <i className="ri-download-line"></i>
+                          </button>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  </div>
+                )}
 
-            {filteredDocumentos.length === 0 && (
+                {viewMode === 'grid' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {docs.map((doc) => (
+                      <div key={doc.id} className="bg-dark-card border border-dark-border rounded-xl p-4 hover:border-primary-teal transition-smooth cursor-pointer" onClick={() => handleVisualizar(doc)}>
+                        <div className="text-center mb-3">
+                          <i className="ri-file-pdf-line text-4xl text-primary-teal mb-2"></i>
+                          <h4 className="text-white font-semibold text-sm line-clamp-2">{doc.titulo}</h4>
+                        </div>
+                        <div className="space-y-1 mb-3 text-xs text-gray-400">
+                          <div>{getTipoLabel(doc.tipo)}</div>
+                          {doc.artista?.nome && <div>{doc.artista.nome}</div>}
+                          {doc.anexos && doc.anexos.length > 0 && (
+                            <div className="text-primary-teal">
+                              <i className="ri-attachment-line"></i> {doc.anexos.length}
+                            </div>
+                          )}
+                        </div>
+                        <span className={`block text-center px-2 py-1 text-xs rounded-lg ${getStatusColor(doc.status)}`}>
+                          {doc.status?.charAt(0).toUpperCase() + doc.status?.slice(1)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {sortedDocumentos.length === 0 && (
               <div className="text-center py-12">
                 <i className="ri-file-line text-6xl text-gray-600 mb-4"></i>
                 <p className="text-gray-400">Nenhum documento encontrado</p>
@@ -1037,12 +1563,12 @@ export default function Documentos() {
           </>
         )}
 
-        {/* Modal Novo Documento */}
+        {/* Modal Anexar Documento */}
         {showModal && (
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-white">Novo Documento</h2>
+                <h2 className="text-xl font-semibold text-white">Anexar Documento</h2>
                 <button 
                   onClick={() => {
                     setShowModal(false);
@@ -1055,248 +1581,171 @@ export default function Documentos() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Arquivo Principal */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Arquivo do Documento *</label>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt"
+                    onChange={(e) => setFormData({ ...formData, arquivo: e.target.files?.[0] || null })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  />
+                  {formData.arquivo && (
+                    <p className="text-xs text-primary-teal mt-2">
+                      ✓ {formData.arquivo.name}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Formatos aceitos: PDF, DOC, DOCX, TXT
+                  </p>
+                </div>
+
+                {/* Anexos Adicionais */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    <i className="ri-attachment-line mr-2"></i>
+                    Anexos Adicionais (Opcional)
+                  </label>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      setFormData({ ...formData, arquivos: files });
+                    }}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  />
+                  {formData.arquivos.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {formData.arquivos.map((file, index) => (
+                        <p key={index} className="text-xs text-primary-teal">
+                          ✓ {file.name}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Você pode anexar múltiplos arquivos adicionais ao documento
+                  </p>
+                </div>
+
                 {/* Informações Básicas */}
-                <div className="border-b border-dark-border pb-4">
-                  <h3 className="text-lg font-semibold text-white mb-4">Informações Básicas</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-400 mb-2">Título *</label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.titulo}
-                        onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                        placeholder="Ex: Contrato de Gravação - Artista X"
-                      />
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Título *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.titulo}
+                      onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                      placeholder="Ex: Contrato de Gravação - Artista X"
+                    />
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">Tipo *</label>
-                      <select
-                        required
-                        value={formData.tipo}
-                        onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                      >
-                        <option value="">Selecione o tipo</option>
-                        {tipos.map(tipo => (
-                          <option key={tipo} value={tipo}>{getTipoLabel(tipo)}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Tipo *</label>
+                    <select
+                      required
+                      value={formData.tipo}
+                      onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                    >
+                      <option value="">Selecione o tipo</option>
+                      {tipos.map(tipo => (
+                        <option key={tipo} value={tipo}>{getTipoLabel(tipo)}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">Status</label>
-                      <select
-                        value={formData.status}
-                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                      >
-                        <option value="ativo">Ativo</option>
-                        <option value="vencido">Vencido</option>
-                        <option value="cancelado">Cancelado</option>
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Status</label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                    >
+                      <option value="ativo">Ativo</option>
+                      <option value="vencido">Vencido</option>
+                      <option value="cancelado">Cancelado</option>
+                    </select>
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">Artista</label>
-                      <select
-                        value={formData.artista_id}
-                        onChange={(e) => setFormData({ ...formData, artista_id: e.target.value })}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                      >
-                        <option value="">Selecione o artista</option>
-                        {artistas.map(artista => (
-                          <option key={artista.id} value={artista.id}>{artista.nome}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Artista</label>
+                    <select
+                      value={formData.artista_id}
+                      onChange={(e) => setFormData({ ...formData, artista_id: e.target.value })}
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                    >
+                      <option value="">Selecione o artista</option>
+                      {artistas.map(artista => (
+                        <option key={artista.id} value={artista.id}>{artista.nome}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">Projeto</label>
-                      <select
-                        value={formData.projeto_id}
-                        onChange={(e) => setFormData({ ...formData, projeto_id: e.target.value })}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                      >
-                        <option value="">Selecione o projeto</option>
-                        {projetos.map(projeto => (
-                          <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Projeto</label>
+                    <select
+                      value={formData.projeto_id}
+                      onChange={(e) => setFormData({ ...formData, projeto_id: e.target.value })}
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                    >
+                      <option value="">Selecione o projeto</option>
+                      {projetos.map(projeto => (
+                        <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
                 {/* Datas e Valores */}
-                <div className="border-b border-dark-border pb-4">
-                  <h3 className="text-lg font-semibold text-white mb-4">Datas e Valores</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">Data de Início</label>
-                      <input
-                        type="date"
-                        value={formData.data_inicio}
-                        onChange={(e) => setFormData({ ...formData, data_inicio: e.target.value })}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth [color-scheme:dark]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">Data de Fim</label>
-                      <input
-                        type="date"
-                        value={formData.data_fim}
-                        onChange={(e) => setFormData({ ...formData, data_fim: e.target.value })}
-                        min={formData.data_inicio || new Date().toISOString().split('T')[0]}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth [color-scheme:dark]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">Valor</label>
-                      <input
-                        type="text"
-                        value={formData.valor}
-                        onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                        placeholder="R$ 0,00"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Identificação das Partes */}
-                <div className="border-b border-dark-border pb-4">
-                  <h3 className="text-lg font-semibold text-white mb-4">Identificação das Partes (Quem?)</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
-                      Identifique as partes envolvidas no contrato/documento
-                    </label>
-                    <textarea
-                      value={formData.identificacao_partes}
-                      onChange={(e) => setFormData({ ...formData, identificacao_partes: e.target.value })}
-                      rows={4}
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
-                      placeholder="Ex: CONTRATANTE: CEU MUSIC, CNPJ: XX.XXX.XXX/XXXX-XX. CONTRATADO: [Nome do Artista], CPF: XXX.XXX.XXX-XX..."
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Data de Início</label>
+                    <input
+                      type="date"
+                      value={formData.data_inicio}
+                      onChange={(e) => setFormData({ ...formData, data_inicio: e.target.value })}
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth [color-scheme:dark]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Data de Fim</label>
+                    <input
+                      type="date"
+                      value={formData.data_fim}
+                      onChange={(e) => setFormData({ ...formData, data_fim: e.target.value })}
+                      min={formData.data_inicio || new Date().toISOString().split('T')[0]}
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth [color-scheme:dark]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Valor</label>
+                    <input
+                      type="text"
+                      value={formData.valor}
+                      onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                      placeholder="R$ 0,00"
                     />
                   </div>
                 </div>
 
-                {/* Objeto e Escopo */}
-                <div className="border-b border-dark-border pb-4">
-                  <h3 className="text-lg font-semibold text-white mb-4">Objeto e Escopo (O quê?)</h3>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
-                      Descreva o objeto e o escopo do contrato/documento
-                    </label>
-                    <textarea
-                      value={formData.objeto_escopo}
-                      onChange={(e) => setFormData({ ...formData, objeto_escopo: e.target.value })}
-                      rows={4}
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
-                      placeholder="Ex: O presente contrato tem por objeto a gravação de um álbum completo, incluindo produção, mixagem e masterização..."
-                    />
-                  </div>
-                </div>
-
-                {/* Valores e Pagamento */}
-                <div className="border-b border-dark-border pb-4">
-                  <h3 className="text-lg font-semibold text-white mb-4">Valores e Pagamento (Quanto e Como?)</h3>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
-                      Detalhe os valores e condições de pagamento
-                    </label>
-                    <textarea
-                      value={formData.valores_pagamento}
-                      onChange={(e) => setFormData({ ...formData, valores_pagamento: e.target.value })}
-                      rows={4}
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
-                      placeholder="Ex: O valor total do contrato é de R$ 50.000,00 (cinquenta mil reais), a ser pago em 3 parcelas de R$ 16.666,67, sendo a primeira no ato da assinatura..."
-                    />
-                  </div>
-                </div>
-
-                {/* Vigência e Prazos */}
-                <div className="border-b border-dark-border pb-4">
-                  <h3 className="text-lg font-semibold text-white mb-4">Vigência e Prazos (Quando?)</h3>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
-                      Especifique a vigência e prazos do contrato/documento
-                    </label>
-                    <textarea
-                      value={formData.vigencia_prazos}
-                      onChange={(e) => setFormData({ ...formData, vigencia_prazos: e.target.value })}
-                      rows={4}
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
-                      placeholder="Ex: Este contrato terá vigência de 12 (doze) meses, contados a partir da data de assinatura. O prazo para entrega do material é de 90 dias..."
-                    />
-                  </div>
-                </div>
-
-                {/* Termos Legais e Assinatura */}
-                <div className="border-b border-dark-border pb-4">
-                  <h3 className="text-lg font-semibold text-white mb-4">Termos Legais e Assinatura (Concordância)</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">
-                        Termos Legais e Cláusulas
-                      </label>
-                      <textarea
-                        value={formData.termos_legais}
-                        onChange={(e) => setFormData({ ...formData, termos_legais: e.target.value })}
-                        rows={4}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
-                        placeholder="Ex: As partes concordam que... Foro de eleição: Comarca de São Paulo/SP..."
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">
-                        Assinaturas e Concordância
-                      </label>
-                      <textarea
-                        value={formData.assinatura}
-                        onChange={(e) => setFormData({ ...formData, assinatura: e.target.value })}
-                        rows={3}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
-                        placeholder="Ex: As partes declaram estar de acordo com os termos deste contrato e o assinam em duas vias de igual teor..."
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Arquivo e Descrição */}
-                <div className="border-b border-dark-border pb-4">
-                  <h3 className="text-lg font-semibold text-white mb-4">Arquivo e Descrição</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">Arquivo *</label>
-                      <input
-                        type="file"
-                        required
-                        accept=".pdf,.doc,.docx,.txt"
-                        onChange={(e) => setFormData({ ...formData, arquivo: e.target.files?.[0] || null })}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                      />
-                      {formData.arquivo && (
-                        <p className="text-xs text-gray-400 mt-1">
-                          Arquivo selecionado: {formData.arquivo.name}
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-2">Descrição</label>
-                      <textarea
-                        value={formData.descricao}
-                        onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                        rows={3}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
-                        placeholder="Descrição do documento..."
-                      />
-                    </div>
-                  </div>
+                {/* Descrição */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Descrição</label>
+                  <textarea
+                    value={formData.descricao}
+                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
+                    placeholder="Descrição ou observações sobre o documento..."
+                  />
                 </div>
 
                 <div className="flex gap-3 pt-4">
@@ -1318,10 +1767,10 @@ export default function Documentos() {
                     {uploading ? (
                       <span className="flex items-center justify-center gap-2">
                         <i className="ri-loader-4-line animate-spin"></i>
-                        Enviando...
+                        Anexando...
                       </span>
                     ) : (
-                      'Salvar Documento'
+                      'Anexar Documento'
                     )}
                   </button>
                 </div>
@@ -1434,6 +1883,103 @@ export default function Documentos() {
                   </div>
                 )}
 
+                {/* Seção de Anexos */}
+                <div className="border-t border-dark-border pt-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="block text-sm font-medium text-gray-400">
+                      <i className="ri-attachment-line mr-2"></i>
+                      Anexos ({anexos.length + (selectedDocumento.anexos?.length || 0)})
+                    </label>
+                    <button
+                      onClick={() => {
+                        setShowAnexosModal(true);
+                      }}
+                      className="px-3 py-1 bg-primary-teal/20 hover:bg-primary-teal/30 text-primary-teal rounded-lg transition-smooth cursor-pointer text-sm flex items-center gap-1"
+                    >
+                      <i className="ri-add-line"></i>
+                      Adicionar Anexo
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {selectedDocumento.arquivo_url && (
+                      <div className="flex items-center justify-between p-3 bg-dark-bg rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <i className="ri-file-line text-primary-teal text-xl"></i>
+                          <div>
+                            <p className="text-white text-sm">{selectedDocumento.arquivo_nome || 'Arquivo principal'}</p>
+                            <p className="text-xs text-gray-400">Arquivo principal</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDownloadArquivoAnexado(selectedDocumento)}
+                          className="p-2 hover:bg-primary-teal/20 text-primary-teal rounded-lg transition-smooth cursor-pointer"
+                          title="Baixar"
+                        >
+                          <i className="ri-download-line"></i>
+                        </button>
+                      </div>
+                    )}
+                    
+                    {(anexos.length > 0 || selectedDocumento.anexos?.length > 0) && (
+                      <>
+                        {(selectedDocumento.anexos || anexos).map((anexo: any) => (
+                          <div key={anexo.id} className="flex items-center justify-between p-3 bg-dark-bg rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <i className="ri-attachment-line text-primary-teal text-xl"></i>
+                              <div>
+                                <p className="text-white text-sm">{anexo.arquivo_nome}</p>
+                                {anexo.descricao && (
+                                  <p className="text-xs text-gray-400">{anexo.descricao}</p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  const { getSignedUrlR2, R2_BUCKETS } = await import('../../lib/r2');
+                                  try {
+                                    const url = await getSignedUrlR2(
+                                      R2_BUCKETS.DOCUMENTOS,
+                                      anexo.arquivo_key,
+                                      86400
+                                    );
+                                    const link = document.createElement('a');
+                                    link.href = url;
+                                    link.download = anexo.arquivo_nome;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                  } catch (error: any) {
+                                    alert(`Erro ao baixar anexo: ${error.message}`);
+                                  }
+                                }}
+                                className="p-2 hover:bg-primary-teal/20 text-primary-teal rounded-lg transition-smooth cursor-pointer"
+                                title="Baixar"
+                              >
+                                <i className="ri-download-line"></i>
+                              </button>
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleDeleteAnexo(anexo.id, selectedDocumento.id)}
+                                  className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-smooth cursor-pointer"
+                                  title="Excluir"
+                                >
+                                  <i className="ri-delete-bin-line"></i>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                    
+                    {anexos.length === 0 && !selectedDocumento.arquivo_url && (selectedDocumento.anexos?.length || 0) === 0 && (
+                      <p className="text-gray-400 text-sm text-center py-4">Nenhum anexo adicionado</p>
+                    )}
+                  </div>
+                </div>
+
                 <div className="pt-4 border-t border-dark-border">
                   <div className="flex gap-3">
                     <button
@@ -1450,16 +1996,6 @@ export default function Documentos() {
                       <i className="ri-printer-line"></i>
                       <span>Imprimir</span>
                     </button>
-                    {selectedDocumento.arquivo_url && (
-                      <button
-                        onClick={() => handleDownloadArquivoAnexado(selectedDocumento)}
-                        className="px-4 py-3 bg-gray-600 text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center justify-center gap-2"
-                        title="Baixar arquivo anexado ao formulário"
-                      >
-                        <i className="ri-file-download-line"></i>
-                        <span>Anexo</span>
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1651,6 +2187,177 @@ export default function Documentos() {
                 >
                   Fechar
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Adicionar Anexo */}
+        {showAnexosModal && selectedDocumento && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-white">Adicionar Anexo</h2>
+                <button 
+                  onClick={() => {
+                    setShowAnexosModal(false);
+                  }}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Arquivo</label>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file && selectedDocumento.id) {
+                        await handleAddAnexo(selectedDocumento.id, file);
+                        setShowAnexosModal(false);
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Formatos aceitos: PDF, DOC, DOCX, TXT, JPG, PNG
+                  </p>
+                </div>
+
+                {uploadingAnexo && (
+                  <div className="text-center py-4">
+                    <i className="ri-loader-4-line text-2xl text-primary-teal animate-spin"></i>
+                    <p className="text-gray-400 text-sm mt-2">Enviando anexo...</p>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowAnexosModal(false)}
+                    className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Limpeza de Arquivos Órfãos */}
+        {showLimpezaModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-semibold text-white">Arquivos Órfãos no Cloudflare R2</h2>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Arquivos que estão no R2 mas não têm referência no banco de dados
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowLimpezaModal(false);
+                    setArquivosOrfaos([]);
+                  }}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {arquivosOrfaos.length > 0 ? (
+                  <>
+                    <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <i className="ri-alert-line text-orange-400"></i>
+                        <p className="text-orange-400 font-semibold">
+                          {arquivosOrfaos.length} arquivo(s) órfão(s) encontrado(s)
+                        </p>
+                      </div>
+                      <p className="text-sm text-gray-400">
+                        Estes arquivos estão ocupando espaço no Cloudflare R2 mas não têm referência no banco de dados.
+                        Você pode excluí-los com segurança para liberar espaço.
+                      </p>
+                    </div>
+
+                    <div className="bg-dark-bg rounded-lg border border-dark-border overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-dark-hover">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Arquivo</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Tamanho</th>
+                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Modificado</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-dark-border">
+                            {arquivosOrfaos.map((arquivo, index) => (
+                              <tr key={index} className="hover:bg-dark-hover">
+                                <td className="px-4 py-3">
+                                  <div className="text-sm text-white font-mono break-all">
+                                    {arquivo.key}
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-400">
+                                  {(arquivo.size / 1024).toFixed(2)} KB
+                                </td>
+                                <td className="px-4 py-3 text-sm text-gray-400">
+                                  {new Date(arquivo.lastModified).toLocaleString('pt-BR')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowLimpezaModal(false);
+                          setArquivosOrfaos([]);
+                        }}
+                        className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLimparArquivosOrfaos}
+                        disabled={limpandoArquivos || arquivosOrfaos.length === 0}
+                        className="flex-1 px-4 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {limpandoArquivos ? (
+                          <>
+                            <i className="ri-loader-4-line animate-spin"></i>
+                            Excluindo...
+                          </>
+                        ) : (
+                          <>
+                            <i className="ri-delete-bin-line"></i>
+                            Excluir {arquivosOrfaos.length} Arquivo(s) Órfão(s)
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8">
+                    <i className="ri-checkbox-circle-line text-4xl text-green-400 mb-4"></i>
+                    <p className="text-white font-semibold">Nenhum arquivo órfão encontrado!</p>
+                    <p className="text-gray-400 text-sm mt-2">
+                      Todos os arquivos no Cloudflare R2 têm referência no banco de dados.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
