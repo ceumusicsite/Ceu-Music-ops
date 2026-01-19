@@ -9,6 +9,16 @@ import YouTubeUpload from '../../components/projetos/YouTubeUpload';
 import { fornecedoresMock } from '../../data/fornecedores-mock';
 import { produtoresMock } from '../../data/produtores-mock';
 
+// Função helper para detectar URLs do YouTube
+function isYouTubeUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  const youtubePatterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([^&\n?#]+)/,
+    /youtube\.com\/watch\?.*v=([^&\n?#]+)/,
+  ];
+  return youtubePatterns.some(pattern => pattern.test(url));
+}
+
 interface Projeto {
   id: string;
   nome: string;
@@ -151,6 +161,7 @@ export default function ProjetoDetalhes() {
   const [sharedLink, setSharedLink] = useState<string | null>(null);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [playingAudioVideo, setPlayingAudioVideo] = useState<FaixaAudioVideo | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -1511,6 +1522,20 @@ export default function ProjetoDetalhes() {
                                             </div>
                                           </div>
                                           <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                                            {/* Botão Ouvir/Assistir */}
+                                            {((av.formato === 'arquivo' && av.arquivo_url) || (av.formato === 'link' && av.link_url)) && (
+                                              <button
+                                                onClick={() => setPlayingAudioVideo(av)}
+                                                className={`p-2 rounded-lg transition-smooth ${
+                                                  av.tipo === 'audio' 
+                                                    ? 'text-primary-teal hover:bg-primary-teal/20' 
+                                                    : 'text-purple-400 hover:bg-purple-500/20'
+                                                }`}
+                                                title={av.tipo === 'audio' ? 'Ouvir áudio' : 'Assistir vídeo'}
+                                              >
+                                                <i className={`ri-${av.tipo === 'audio' ? 'play-circle' : 'play-circle'}-line text-base`}></i>
+                                              </button>
+                                            )}
                                             {av.formato === 'link' && av.link_url && (
                                               <a 
                                                 href={av.link_url} 
@@ -1529,6 +1554,7 @@ export default function ProjetoDetalhes() {
                                                 rel="noopener noreferrer" 
                                                 className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
                                                 title="Baixar arquivo"
+                                                download
                                               >
                                                 <i className="ri-download-line text-base"></i>
                                               </a>
@@ -2548,6 +2574,122 @@ export default function ProjetoDetalhes() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Player de Áudio/Vídeo */}
+        {playingAudioVideo && (
+          <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-semibold text-white">
+                    {playingAudioVideo.tipo === 'audio' ? 'Ouvir Áudio' : 'Assistir Vídeo'}
+                  </h2>
+                  <p className="text-sm text-gray-400 mt-1">
+                    {faixas.find(f => f.id === playingAudioVideo.faixa_id)?.nome || 'Faixa'}
+                    {playingAudioVideo.versao && ` - ${playingAudioVideo.versao === 'pre-producao' ? 'Pré-Produção' :
+                      playingAudioVideo.versao === 'pos-producao' ? 'Pós-Produção' :
+                      playingAudioVideo.versao === 'pos-gravacao' ? 'Pós-Gravação' :
+                      playingAudioVideo.versao === 'mixagem' ? 'Mixagem' :
+                      playingAudioVideo.versao === 'masterizado' ? 'Masterizado' :
+                      playingAudioVideo.versao}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setPlayingAudioVideo(null)}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Detectar se é YouTube */}
+                {(() => {
+                  const url = playingAudioVideo.formato === 'link' ? playingAudioVideo.link_url : playingAudioVideo.arquivo_url;
+                  if (!url) return null;
+
+                  // Verificar se é URL do YouTube
+                  if (isYouTubeUrl(url) && playingAudioVideo.formato === 'link') {
+                    return (
+                      <YouTubePreview 
+                        url={url} 
+                        title={playingAudioVideo.arquivo_nome || playingAudioVideo.descricao || 'Vídeo'} 
+                      />
+                    );
+                  }
+
+                  // Player HTML5 para áudio ou vídeo
+                  if (playingAudioVideo.tipo === 'audio') {
+                    return (
+                      <div className="bg-dark-bg border border-dark-border rounded-lg p-6">
+                        <audio 
+                          controls 
+                          className="w-full"
+                          style={{ outline: 'none' }}
+                        >
+                          <source src={url || ''} type="audio/mpeg" />
+                          <source src={url || ''} type="audio/wav" />
+                          <source src={url || ''} type="audio/ogg" />
+                          <source src={url || ''} type="audio/mp4" />
+                          Seu navegador não suporta o elemento de áudio.
+                        </audio>
+                        {playingAudioVideo.arquivo_nome && (
+                          <p className="text-sm text-gray-400 mt-4 text-center">
+                            {playingAudioVideo.arquivo_nome}
+                          </p>
+                        )}
+                        {playingAudioVideo.descricao && (
+                          <p className="text-xs text-gray-500 mt-2 text-center">
+                            {playingAudioVideo.descricao}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div className="bg-dark-bg border border-dark-border rounded-lg overflow-hidden">
+                        <video 
+                          controls 
+                          className="w-full"
+                          style={{ maxHeight: '70vh' }}
+                        >
+                          <source src={url || ''} type="video/mp4" />
+                          <source src={url || ''} type="video/webm" />
+                          <source src={url || ''} type="video/ogg" />
+                          <source src={url || ''} type="video/quicktime" />
+                          Seu navegador não suporta o elemento de vídeo.
+                        </video>
+                        {(playingAudioVideo.arquivo_nome || playingAudioVideo.descricao) && (
+                          <div className="p-4 border-t border-dark-border">
+                            {playingAudioVideo.arquivo_nome && (
+                              <p className="text-sm text-gray-400 text-center">
+                                {playingAudioVideo.arquivo_nome}
+                              </p>
+                            )}
+                            {playingAudioVideo.descricao && (
+                              <p className="text-xs text-gray-500 mt-2 text-center">
+                                {playingAudioVideo.descricao}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                })()}
+
+                {/* Informações adicionais */}
+                {playingAudioVideo.nome_anexador && (
+                  <div className="bg-dark-bg border border-dark-border rounded-lg p-4">
+                    <p className="text-xs text-gray-400">
+                      <i className="ri-user-line text-primary-teal"></i> Anexado por: <span className="text-white">{playingAudioVideo.nome_anexador}</span>
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
