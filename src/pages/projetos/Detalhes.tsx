@@ -780,6 +780,7 @@ export default function ProjetoDetalhes() {
     link_url?: string;
     descricao?: string;
     versao?: string;
+    nome_anexador?: string;
   }) => {
     try {
       const { error } = await supabase
@@ -2576,12 +2577,18 @@ export default function ProjetoDetalhes() {
                   if (audioVideoFormato === 'link') {
                     const formData = new FormData(e.currentTarget);
                     const tipo = formData.get('tipo') as 'audio' | 'video';
+                    const nomeAnexador = formData.get('nome_anexador')?.toString()?.trim();
+                    if (!nomeAnexador) {
+                      alert('Por favor, informe seu nome');
+                      return;
+                    }
                     handleSaveAudioVideo(selectedFaixaForModal.id, {
                       tipo,
                       formato: 'link',
                       link_url: formData.get('link_url')?.toString() || undefined,
                       descricao: formData.get('descricao')?.toString() || undefined,
                       versao: formData.get('versao')?.toString() || undefined,
+                      nome_anexador: nomeAnexador,
                     });
                   }
                   // Para arquivo, o upload é feito via FileUpload component
@@ -2685,6 +2692,8 @@ export default function ProjetoDetalhes() {
                       onUploadComplete={(videoUrl, videoId) => {
                         const descricaoInput = document.querySelector('[name="descricao"]') as HTMLTextAreaElement;
                         const versaoSelect = document.querySelector('[name="versao"]') as HTMLSelectElement;
+                        const nomeAnexadorInput = document.querySelector('[name="nome_anexador"]') as HTMLInputElement;
+                        const nomeAnexador = nomeAnexadorInput?.value?.trim();
                         
                         handleSaveAudioVideo(selectedFaixaForModal.id, {
                           tipo: 'video',
@@ -2692,6 +2701,7 @@ export default function ProjetoDetalhes() {
                           link_url: videoUrl,
                           descricao: descricaoInput?.value || `Upload para YouTube - ID: ${videoId}`,
                           versao: versaoSelect?.value || 'masterizado',
+                          nome_anexador: nomeAnexador || undefined,
                         });
                       }}
                       onError={(error) => alert(`Erro: ${error}`)}
@@ -2711,6 +2721,13 @@ export default function ProjetoDetalhes() {
                         const tipoSelect = document.querySelector('[name="tipo"]') as HTMLSelectElement;
                         const descricaoInput = document.querySelector('[name="descricao"]') as HTMLTextAreaElement;
                         const versaoSelect = document.querySelector('[name="versao"]') as HTMLSelectElement;
+                        const nomeAnexadorInput = document.querySelector('[name="nome_anexador"]') as HTMLInputElement;
+                        const nomeAnexador = nomeAnexadorInput?.value?.trim();
+                        
+                        if (!nomeAnexador) {
+                          alert('Por favor, informe seu nome antes de fazer upload do arquivo');
+                          return;
+                        }
                         
                         handleSaveAudioVideo(selectedFaixaForModal.id, {
                           tipo: (tipoSelect?.value as 'audio' | 'video') || 'audio',
@@ -2719,6 +2736,7 @@ export default function ProjetoDetalhes() {
                           arquivo_nome: fileName,
                           descricao: descricaoInput?.value || undefined,
                           versao: versaoSelect?.value || undefined,
+                          nome_anexador: nomeAnexador,
                         });
                       }}
                       onError={(error) => alert(`Erro: ${error}`)}
@@ -2749,6 +2767,24 @@ export default function ProjetoDetalhes() {
 
                 {audioVideoFormato !== 'youtube' && (
                   <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      Nome <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="nome_anexador"
+                      required
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                      placeholder="Digite seu nome completo"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      <i className="ri-information-line"></i> Informe seu nome para identificarmos quem anexou este áudio/vídeo
+                    </p>
+                  </div>
+                )}
+
+                {audioVideoFormato !== 'youtube' && (
+                  <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">Descrição (opcional)</label>
                     <textarea
                       name="descricao"
@@ -2774,9 +2810,44 @@ export default function ProjetoDetalhes() {
                     >
                       Cancelar
                     </button>
-                    {audioVideoFormato === 'link' && (
+                    {(audioVideoFormato === 'link' || audioVideoFormato === 'arquivo') && (
                       <button
-                        type="submit"
+                        type={audioVideoFormato === 'link' ? 'submit' : 'button'}
+                        onClick={audioVideoFormato === 'arquivo' ? () => {
+                          // Para arquivo, o upload já é feito automaticamente quando o arquivo é selecionado
+                          // O botão serve apenas como confirmação visual
+                          // Verificar se todos os campos estão preenchidos
+                          const tipoSelect = document.querySelector('[name="tipo"]') as HTMLSelectElement;
+                          const versaoSelect = document.querySelector('[name="versao"]') as HTMLSelectElement;
+                          const nomeAnexadorInput = document.querySelector('[name="nome_anexador"]') as HTMLInputElement;
+                          
+                          if (!tipoSelect?.value) {
+                            alert('Por favor, selecione o tipo');
+                            return;
+                          }
+                          
+                          if (!versaoSelect?.value) {
+                            alert('Por favor, selecione a classificação');
+                            return;
+                          }
+                          
+                          const nomeAnexador = nomeAnexadorInput?.value?.trim();
+                          if (!nomeAnexador) {
+                            alert('Por favor, informe seu nome');
+                            return;
+                          }
+                          
+                          // Verificar se há arquivo selecionado
+                          const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+                          if (!fileInput?.files?.length) {
+                            alert('Por favor, selecione um arquivo primeiro. O upload será feito automaticamente.');
+                            return;
+                          }
+                          
+                          // Para arquivo, o upload e salvamento já acontecem automaticamente no onUploadComplete
+                          // Este botão apenas confirma que está tudo preenchido
+                          alert('O arquivo será salvo automaticamente após o upload ser concluído. Por favor, aguarde.');
+                        } : undefined}
                         className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
                       >
                         Salvar
