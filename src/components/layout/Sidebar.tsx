@@ -11,6 +11,7 @@ const menuItems = [
   { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'executivo', 'financeiro', 'operador'] },
   { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/documentos', icon: 'ri-file-text-line', label: 'Documentos', roles: ['admin', 'executivo', 'ar', 'financeiro', 'operador'] },
+  { path: '/configuracoes', icon: 'ri-settings-3-line', label: 'Configurações', roles: ['admin'] },
 ];
 
 export default function Sidebar() {
