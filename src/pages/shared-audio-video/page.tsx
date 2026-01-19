@@ -280,30 +280,11 @@ export default function SharedAudioVideoForm() {
 
         <form onSubmit={handleSubmit} className="bg-dark-card border border-dark-border rounded-xl p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">Tipo *</label>
-            <select
-              value={formData.tipo || linkData?.tipo || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, tipo: e.target.value }))}
-              required
-              className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-            >
-              <option value="">Selecione o tipo</option>
-              <option value="audio">Áudio</option>
-              <option value="video">Vídeo</option>
-            </select>
-            {linkData?.tipo && (
-              <p className="text-xs text-gray-500 mt-1">
-                <i className="ri-information-line"></i> Tipo sugerido: {linkData.tipo === 'audio' ? 'Áudio' : 'Vídeo'} (você pode alterar se necessário)
-              </p>
-            )}
-          </div>
-
-          <div>
             <label className="block text-sm font-medium text-gray-400 mb-2">Formato</label>
             <select
               value={formData.formato}
               onChange={(e) => {
-                setFormData(prev => ({ ...prev, formato: e.target.value as 'link' | 'arquivo' }));
+                setFormData(prev => ({ ...prev, formato: e.target.value as 'link' | 'arquivo', tipo: prev.tipo }));
                 setUploadedFile(null);
               }}
               className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
@@ -314,37 +295,85 @@ export default function SharedAudioVideoForm() {
           </div>
 
           {formData.formato === 'link' ? (
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">URL do Link *</label>
-              <input
-                type="url"
-                value={formData.link_url}
-                onChange={(e) => setFormData(prev => ({ ...prev, link_url: e.target.value }))}
-                required
-                className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                placeholder="https://..."
-              />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Tipo *</label>
+                <select
+                  value={formData.tipo || linkData?.tipo || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, tipo: e.target.value }))}
+                  required
+                  className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                >
+                  <option value="">Selecione o tipo</option>
+                  <option value="audio">Áudio</option>
+                  <option value="video">Vídeo</option>
+                </select>
+                {linkData?.tipo && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    <i className="ri-information-line"></i> Tipo sugerido: {linkData.tipo === 'audio' ? 'Áudio' : 'Vídeo'} (você pode alterar se necessário)
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">URL do Link *</label>
+                <input
+                  type="url"
+                  value={formData.link_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, link_url: e.target.value }))}
+                  required
+                  className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                  placeholder="https://..."
+                />
+              </div>
+            </>
           ) : (
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">Arquivo *</label>
-              <FileUpload
-                bucket="faixas-audio-video"
-                folder={`faixa-${linkData?.faixa_id}`}
-                onUploadComplete={(url, fileName) => {
-                  setUploadedFile({ url, fileName });
-                }}
-                onError={(error) => alert(`Erro: ${error}`)}
-                accept={formData.tipo === 'audio' ? 'audio/*' : formData.tipo === 'video' ? 'video/*' : 'audio/*,video/*'}
-                maxSizeMB={200}
-                label="Selecionar arquivo"
-              />
-              {uploadedFile && (
-                <p className="text-sm text-green-400 mt-2">
-                  <i className="ri-check-line"></i> Arquivo enviado: {uploadedFile.fileName}
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Tipo *</label>
+                <select
+                  value={formData.tipo || linkData?.tipo || ''}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, tipo: e.target.value }));
+                    setUploadedFile(null);
+                  }}
+                  required
+                  className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                >
+                  <option value="">Selecione o tipo</option>
+                  <option value="audio">Áudio</option>
+                  <option value="video">Vídeo</option>
+                </select>
+                {linkData?.tipo && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    <i className="ri-information-line"></i> Tipo sugerido: {linkData.tipo === 'audio' ? 'Áudio' : 'Vídeo'} (você pode alterar se necessário)
+                  </p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Selecione se é um arquivo de áudio ou vídeo
                 </p>
+              </div>
+              {formData.tipo && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Arquivo *</label>
+                  <FileUpload
+                    bucket="faixas-audio-video"
+                    folder={`faixa-${linkData?.faixa_id}`}
+                    onUploadComplete={(url, fileName) => {
+                      setUploadedFile({ url, fileName });
+                    }}
+                    onError={(error) => alert(`Erro: ${error}`)}
+                    accept={formData.tipo === 'audio' ? 'audio/*' : formData.tipo === 'video' ? 'video/*' : 'audio/*,video/*'}
+                    maxSizeMB={200}
+                    label="Selecionar arquivo"
+                  />
+                  {uploadedFile && (
+                    <p className="text-sm text-green-400 mt-2">
+                      <i className="ri-check-line"></i> Arquivo enviado: {uploadedFile.fileName}
+                    </p>
+                  )}
+                </div>
               )}
-            </div>
+            </>
           )}
 
           <div>

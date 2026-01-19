@@ -162,6 +162,7 @@ export default function ProjetoDetalhes() {
   const [generatingLink, setGeneratingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [playingAudioVideo, setPlayingAudioVideo] = useState<FaixaAudioVideo | null>(null);
+  const [uploadedFileData, setUploadedFileData] = useState<{ url: string; fileName: string } | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -807,6 +808,7 @@ export default function ProjetoDetalhes() {
       setSelectedFaixaForModal(null);
       setAudioVideoTipo('');
       setAudioVideoFormato('link');
+      setUploadedFileData(null);
       loadProjetoData();
     } catch (error) {
       console.error('Erro ao salvar áudio/vídeo:', error);
@@ -2706,6 +2708,7 @@ export default function ProjetoDetalhes() {
                     setSelectedFaixaForModal(null);
                     setAudioVideoTipo('');
                     setAudioVideoFormato('link');
+                    setUploadedFileData(null);
                   }}
                   className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
                 >
@@ -2737,54 +2740,6 @@ export default function ProjetoDetalhes() {
                 }}
                 className="space-y-4"
               >
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Tipo</label>
-                  <select
-                    name="tipo"
-                    id="tipo-select"
-                    required
-                    onChange={(e) => {
-                      const tipoSelect = e.target.value;
-                      setAudioVideoTipo(tipoSelect as 'audio' | 'video' | '');
-                      const versaoSelect = document.getElementById('versao-select') as HTMLSelectElement;
-                      const descricaoP = document.getElementById('classificacao-descricao');
-                      
-                      // Limpar opções anteriores
-                      if (versaoSelect) {
-                        versaoSelect.innerHTML = '<option value="">Selecione a classificação</option>';
-                      }
-                      
-                      if (tipoSelect === 'audio') {
-                        // Opções para áudio
-                        if (versaoSelect) {
-                          versaoSelect.innerHTML += '<option value="pre-producao">Pré-Produção</option>';
-                          versaoSelect.innerHTML += '<option value="pos-gravacao">Pós-Gravação</option>';
-                          versaoSelect.innerHTML += '<option value="masterizado">Masterizado</option>';
-                        }
-                        if (descricaoP) {
-                          descricaoP.textContent = 'Pré-Produção: Antes da gravação | Pós-Gravação: Depois da gravação | Masterizado: Versão final';
-                        }
-                      } else if (tipoSelect === 'video') {
-                        // Opções para vídeo
-                        if (versaoSelect) {
-                          versaoSelect.innerHTML += '<option value="pre-producao">Pré-Produção</option>';
-                          versaoSelect.innerHTML += '<option value="pos-producao">Pós-Produção</option>';
-                          versaoSelect.innerHTML += '<option value="mixagem">Mixagem</option>';
-                          versaoSelect.innerHTML += '<option value="masterizado">Masterizado</option>';
-                        }
-                        if (descricaoP) {
-                          descricaoP.textContent = 'Pré-Produção: Antes da gravação | Pós-Produção: Depois da gravação | Mixagem/Masterizado: Depois da pós';
-                        }
-                      }
-                    }}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                  >
-                    <option value="">Selecione o tipo</option>
-                    <option value="audio">Áudio</option>
-                    <option value="video">Vídeo</option>
-                  </select>
-                </div>
-
                 {/* Separador Visual */}
                 <div className="border-t border-dark-border pt-4">
                   <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
@@ -2802,6 +2757,8 @@ export default function ProjetoDetalhes() {
                     onChange={(e) => {
                       const novoFormato = e.target.value as 'link' | 'arquivo' | 'youtube' | 'compartilhavel';
                       setAudioVideoFormato(novoFormato);
+                      setAudioVideoTipo('');
+                      setUploadedFileData(null);
                       if (novoFormato !== 'compartilhavel') {
                         setSharedLink(null);
                         setLinkCopied(false);
@@ -2811,86 +2768,159 @@ export default function ProjetoDetalhes() {
                   >
                     <option value="link">Link</option>
                     <option value="arquivo">Arquivo (R2)</option>
-                    {audioVideoTipo === 'video' && (
-                      <option value="youtube">Upload para YouTube</option>
-                    )}
                   </select>
                 </div>
 
                 {audioVideoFormato === 'link' ? (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">URL do Link</label>
-                    <input
-                      type="url"
-                      name="link_url"
-                      required
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                      placeholder="https://..."
-                    />
-                  </div>
-                ) : audioVideoFormato === 'youtube' && audioVideoTipo === 'video' ? (
-                  <div>
-                    <YouTubeUpload
-                      onUploadComplete={(videoUrl, videoId) => {
-                        const descricaoInput = document.querySelector('[name="descricao"]') as HTMLTextAreaElement;
-                        const versaoSelect = document.querySelector('[name="versao"]') as HTMLSelectElement;
-                        const nomeAnexadorInput = document.querySelector('[name="nome_anexador"]') as HTMLInputElement;
-                        const nomeAnexador = nomeAnexadorInput?.value?.trim();
-                        
-                        handleSaveAudioVideo(selectedFaixaForModal.id, {
-                          tipo: 'video',
-                          formato: 'link',
-                          link_url: videoUrl,
-                          descricao: descricaoInput?.value || `Upload para YouTube - ID: ${videoId}`,
-                          versao: versaoSelect?.value || 'masterizado',
-                          nome_anexador: nomeAnexador || undefined,
-                        });
-                      }}
-                      onError={(error) => alert(`Erro: ${error}`)}
-                      projetoNome={projeto?.nome}
-                      artistaNome={projeto?.artista?.nome}
-                      onCancel={() => {
-                        setAudioVideoFormato('link');
-                      }}
-                    />
-                  </div>
-                ) : (
-                  <div>
-                    <FileUpload
-                      bucket="faixas-audio-video"
-                      folder={`faixa-${selectedFaixaForModal.id}`}
-                      onUploadComplete={(url, fileName) => {
-                        const tipoSelect = document.querySelector('[name="tipo"]') as HTMLSelectElement;
-                        const descricaoInput = document.querySelector('[name="descricao"]') as HTMLTextAreaElement;
-                        const versaoSelect = document.querySelector('[name="versao"]') as HTMLSelectElement;
-                        const nomeAnexadorInput = document.querySelector('[name="nome_anexador"]') as HTMLInputElement;
-                        const nomeAnexador = nomeAnexadorInput?.value?.trim();
-                        
-                        if (!nomeAnexador) {
-                          alert('Por favor, informe seu nome antes de fazer upload do arquivo');
-                          return;
-                        }
-                        
-                        handleSaveAudioVideo(selectedFaixaForModal.id, {
-                          tipo: (tipoSelect?.value as 'audio' | 'video') || 'audio',
-                          formato: 'arquivo',
-                          arquivo_url: url,
-                          arquivo_nome: fileName,
-                          descricao: descricaoInput?.value || undefined,
-                          versao: versaoSelect?.value || undefined,
-                          nome_anexador: nomeAnexador,
-                        });
-                      }}
-                      onError={(error) => alert(`Erro: ${error}`)}
-                      accept="audio/*,video/*"
-                      maxSizeMB={200}
-                      label="Selecionar arquivo"
-                      customFileName={audioVideoTipo === 'video' && projeto?.artista?.nome 
-                        ? `video_${projeto.artista.nome.replace(/\s+/g, '_')}_ColorOK`
-                        : undefined}
-                    />
-                  </div>
-                )}
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">Tipo</label>
+                      <select
+                        name="tipo"
+                        id="tipo-select"
+                        required
+                        onChange={(e) => {
+                          const tipoSelect = e.target.value;
+                          setAudioVideoTipo(tipoSelect as 'audio' | 'video' | '');
+                          const versaoSelect = document.getElementById('versao-select') as HTMLSelectElement;
+                          const descricaoP = document.getElementById('classificacao-descricao');
+                          
+                          // Limpar opções anteriores
+                          if (versaoSelect) {
+                            versaoSelect.innerHTML = '<option value="">Selecione a classificação</option>';
+                          }
+                          
+                          if (tipoSelect === 'audio') {
+                            // Opções para áudio
+                            if (versaoSelect) {
+                              versaoSelect.innerHTML += '<option value="pre-producao">Pré-Produção</option>';
+                              versaoSelect.innerHTML += '<option value="pos-gravacao">Pós-Gravação</option>';
+                              versaoSelect.innerHTML += '<option value="masterizado">Masterizado</option>';
+                            }
+                            if (descricaoP) {
+                              descricaoP.textContent = 'Pré-Produção: Antes da gravação | Pós-Gravação: Depois da gravação | Masterizado: Versão final';
+                            }
+                          } else if (tipoSelect === 'video') {
+                            // Opções para vídeo
+                            if (versaoSelect) {
+                              versaoSelect.innerHTML += '<option value="pre-producao">Pré-Produção</option>';
+                              versaoSelect.innerHTML += '<option value="pos-producao">Pós-Produção</option>';
+                              versaoSelect.innerHTML += '<option value="mixagem">Mixagem</option>';
+                              versaoSelect.innerHTML += '<option value="masterizado">Masterizado</option>';
+                            }
+                            if (descricaoP) {
+                              descricaoP.textContent = 'Pré-Produção: Antes da gravação | Pós-Produção: Depois da gravação | Mixagem/Masterizado: Depois da pós';
+                            }
+                          }
+                        }}
+                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                      >
+                        <option value="">Selecione o tipo</option>
+                        <option value="audio">Áudio</option>
+                        <option value="video">Vídeo</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">URL do Link</label>
+                      <input
+                        type="url"
+                        name="link_url"
+                        required
+                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                        placeholder="https://..."
+                      />
+                    </div>
+                  </>
+                ) : audioVideoFormato === 'arquivo' ? (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">Tipo *</label>
+                      <select
+                        name="tipo"
+                        id="tipo-select"
+                        required
+                        value={audioVideoTipo}
+                        onChange={(e) => {
+                          const tipoSelect = e.target.value;
+                          setAudioVideoTipo(tipoSelect as 'audio' | 'video' | '');
+                          setUploadedFileData(null);
+                          const versaoSelect = document.getElementById('versao-select') as HTMLSelectElement;
+                          const descricaoP = document.getElementById('classificacao-descricao');
+                          
+                          // Limpar opções anteriores
+                          if (versaoSelect) {
+                            versaoSelect.innerHTML = '<option value="">Selecione a classificação</option>';
+                          }
+                          
+                          if (tipoSelect === 'audio') {
+                            // Opções para áudio
+                            if (versaoSelect) {
+                              versaoSelect.innerHTML += '<option value="pre-producao">Pré-Produção</option>';
+                              versaoSelect.innerHTML += '<option value="pos-gravacao">Pós-Gravação</option>';
+                              versaoSelect.innerHTML += '<option value="masterizado">Masterizado</option>';
+                            }
+                            if (descricaoP) {
+                              descricaoP.textContent = 'Pré-Produção: Antes da gravação | Pós-Gravação: Depois da gravação | Masterizado: Versão final';
+                            }
+                          } else if (tipoSelect === 'video') {
+                            // Opções para vídeo
+                            if (versaoSelect) {
+                              versaoSelect.innerHTML += '<option value="pre-producao">Pré-Produção</option>';
+                              versaoSelect.innerHTML += '<option value="pos-producao">Pós-Produção</option>';
+                              versaoSelect.innerHTML += '<option value="mixagem">Mixagem</option>';
+                              versaoSelect.innerHTML += '<option value="masterizado">Masterizado</option>';
+                            }
+                            if (descricaoP) {
+                              descricaoP.textContent = 'Pré-Produção: Antes da gravação | Pós-Produção: Depois da gravação | Mixagem/Masterizado: Depois da pós';
+                            }
+                          }
+                        }}
+                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                      >
+                        <option value="">Selecione o tipo</option>
+                        <option value="audio">Áudio</option>
+                        <option value="video">Vídeo</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Selecione se é um arquivo de áudio ou vídeo
+                      </p>
+                    </div>
+                    {audioVideoTipo && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">Arquivo *</label>
+                        <FileUpload
+                          bucket="faixas-audio-video"
+                          folder={`faixa-${selectedFaixaForModal.id}`}
+                          onUploadComplete={(url, fileName) => {
+                            // Armazenar dados do upload, mas não salvar ainda
+                            setUploadedFileData({ url, fileName });
+                          }}
+                          onError={(error) => {
+                            alert(`Erro: ${error}`);
+                            setUploadedFileData(null);
+                          }}
+                          accept={audioVideoTipo === 'audio' ? 'audio/*' : audioVideoTipo === 'video' ? 'video/*' : 'audio/*,video/*'}
+                          maxSizeMB={200}
+                          label="Selecionar arquivo"
+                          customFileName={audioVideoTipo === 'video' && projeto?.artista?.nome 
+                            ? `video_${projeto.artista.nome.replace(/\s+/g, '_')}_ColorOK`
+                            : undefined}
+                        />
+                        {uploadedFileData && (
+                          <div className="mt-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                            <p className="text-sm text-green-400 flex items-center gap-2">
+                              <i className="ri-check-line"></i>
+                              Arquivo enviado: {uploadedFileData.fileName}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              Clique em "Salvar" para confirmar o envio
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : null}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-2">Classificação *</label>
@@ -2947,6 +2977,7 @@ export default function ProjetoDetalhes() {
                         setAudioVideoFormato('link');
                         setSharedLink(null);
                         setLinkCopied(false);
+                        setUploadedFileData(null);
                       }}
                       className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                     >
@@ -2956,12 +2987,11 @@ export default function ProjetoDetalhes() {
                       <button
                         type={audioVideoFormato === 'link' ? 'submit' : 'button'}
                         onClick={audioVideoFormato === 'arquivo' ? () => {
-                          // Para arquivo, o upload já é feito automaticamente quando o arquivo é selecionado
-                          // O botão serve apenas como confirmação visual
                           // Verificar se todos os campos estão preenchidos
                           const tipoSelect = document.querySelector('[name="tipo"]') as HTMLSelectElement;
                           const versaoSelect = document.querySelector('[name="versao"]') as HTMLSelectElement;
                           const nomeAnexadorInput = document.querySelector('[name="nome_anexador"]') as HTMLInputElement;
+                          const descricaoInput = document.querySelector('[name="descricao"]') as HTMLTextAreaElement;
                           
                           if (!tipoSelect?.value) {
                             alert('Por favor, selecione o tipo');
@@ -2979,16 +3009,25 @@ export default function ProjetoDetalhes() {
                             return;
                           }
                           
-                          // Verificar se há arquivo selecionado
-                          const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-                          if (!fileInput?.files?.length) {
-                            alert('Por favor, selecione um arquivo primeiro. O upload será feito automaticamente.');
+                          // Verificar se há arquivo enviado
+                          if (!uploadedFileData) {
+                            alert('Por favor, faça o upload do arquivo primeiro');
                             return;
                           }
                           
-                          // Para arquivo, o upload e salvamento já acontecem automaticamente no onUploadComplete
-                          // Este botão apenas confirma que está tudo preenchido
-                          alert('O arquivo será salvo automaticamente após o upload ser concluído. Por favor, aguarde.');
+                          // Salvar os dados no sistema
+                          handleSaveAudioVideo(selectedFaixaForModal.id, {
+                            tipo: (tipoSelect?.value as 'audio' | 'video') || 'audio',
+                            formato: 'arquivo',
+                            arquivo_url: uploadedFileData.url,
+                            arquivo_nome: uploadedFileData.fileName,
+                            descricao: descricaoInput?.value || undefined,
+                            versao: versaoSelect?.value || undefined,
+                            nome_anexador: nomeAnexador,
+                          });
+                          
+                          // Limpar dados do upload
+                          setUploadedFileData(null);
                         } : undefined}
                         className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
                       >
@@ -3172,6 +3211,7 @@ export default function ProjetoDetalhes() {
                         setAudioVideoFormato('link');
                         setSharedLink(null);
                         setLinkCopied(false);
+                        setUploadedFileData(null);
                       }}
                       className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
                     >
