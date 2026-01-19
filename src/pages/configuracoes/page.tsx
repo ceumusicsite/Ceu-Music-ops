@@ -218,7 +218,8 @@ export default function Configuracoes() {
     return colors[role] || 'bg-gray-500/20 text-gray-400';
   };
 
-  const roles: UserRole[] = ['admin', 'executivo', 'ar', 'producao', 'financeiro', 'operador', 'viewer'];
+  // Apenas admin e operador estão disponíveis para criação/edição
+  const availableRoles: UserRole[] = ['admin', 'operador'];
 
   const filteredUsuarios = usuarios.filter((u) => {
     const matchesSearch = 
@@ -312,7 +313,7 @@ export default function Configuracoes() {
                     className="w-full px-4 py-2 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
                   >
                     <option value="todos">Todos os perfis</option>
-                    {roles.map(role => (
+                    {availableRoles.map(role => (
                       <option key={role} value={role}>{getRoleLabel(role)}</option>
                     ))}
                   </select>
@@ -579,7 +580,7 @@ export default function Configuracoes() {
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
                     className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
                   >
-                    {roles.map(role => (
+                    {availableRoles.map(role => (
                       <option key={role} value={role}>{getRoleLabel(role)}</option>
                     ))}
                   </select>
@@ -658,7 +659,7 @@ export default function Configuracoes() {
                     onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value as UserRole })}
                     className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
                   >
-                    {roles.map(role => (
+                    {availableRoles.map(role => (
                       <option key={role} value={role}>{getRoleLabel(role)}</option>
                     ))}
                   </select>
