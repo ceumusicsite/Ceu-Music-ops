@@ -18,6 +18,7 @@ export default function Orcamentos() {
   const [loading, setLoading] = useState(true);
   const [showArtistasList, setShowArtistasList] = useState(false);
   const [filteredArtistas, setFilteredArtistas] = useState<any[]>([]);
+  const [artistaSelecionadoId, setArtistaSelecionadoId] = useState<string | null>(null);
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   
@@ -98,20 +99,6 @@ export default function Orcamentos() {
     loadOrcamentos();
     loadArtistas();
   }, []);
-
-  useEffect(() => {
-    // Filtrar artistas baseado no texto digitado
-    if (formData.vinculoArtista) {
-      const filtered = artistas.filter(artista =>
-        artista.nome.toLowerCase().includes(formData.vinculoArtista.toLowerCase())
-      );
-      setFilteredArtistas(filtered);
-      setShowArtistasList(filtered.length > 0);
-    } else {
-      setFilteredArtistas(artistas);
-      setShowArtistasList(false);
-    }
-  }, [formData.vinculoArtista, artistas]);
 
   const loadArtistas = async () => {
     try {
@@ -425,9 +412,16 @@ export default function Orcamentos() {
       
       if (formData.vinculoArtista && formData.vinculoArtista.trim()) {
         orcamentoData.vinculo_artista = formData.vinculoArtista.trim();
-        const artistaEncontrado = artistas.find(a => a.nome === formData.vinculoArtista);
-        if (artistaEncontrado) {
-          orcamentoData.artista_id = artistaEncontrado.id;
+        // Usar o ID do artista selecionado, ou buscar pelo nome
+        if (artistaSelecionadoId) {
+          orcamentoData.artista_id = artistaSelecionadoId;
+        } else {
+          const artistaEncontrado = artistas.find(a => 
+            a.nome.toLowerCase() === formData.vinculoArtista.toLowerCase()
+          );
+          if (artistaEncontrado) {
+            orcamentoData.artista_id = artistaEncontrado.id;
+          }
         }
       }
       
@@ -531,6 +525,8 @@ export default function Orcamentos() {
         auditabilidade: '',
         fluxoCaixa: '',
       });
+      setArtistaSelecionadoId(null);
+      setShowArtistasList(false);
     } catch (error: any) {
       console.error('Erro ao criar orçamento:', error);
       console.error('Erro completo:', JSON.stringify(error, null, 2));
@@ -734,19 +730,40 @@ export default function Orcamentos() {
 
         {/* Modal Novo Orçamento */}
         {showModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 overflow-y-auto">
-            <div className="bg-dark-card border border-dark-border rounded-xl p-8 w-full max-w-5xl my-8 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-6 sticky top-0 bg-dark-card pb-4 border-b border-dark-border">
+          <div className="fixed inset-0 lg:left-64 bg-black/80 flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-dark-card border border-dark-border rounded-xl w-full max-w-5xl my-auto max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between p-8 pb-4 border-b border-dark-border flex-shrink-0">
                 <h2 className="text-2xl font-semibold text-white">Novo Orçamento</h2>
                 <button 
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    setFormData({
+                      type: '',
+                      description: '',
+                      project: '',
+                      value: '',
+                      solicitante: '',
+                      vinculoArtista: '',
+                      recuperabilidade: '',
+                      centroCusto: '',
+                      divisaoVerbas: '',
+                      breakEven: '',
+                      cronogramaDesembolso: '',
+                      reservaContingencia: '',
+                      auditabilidade: '',
+                      fluxoCaixa: '',
+                    });
+                    setArtistaSelecionadoId(null);
+                    setShowArtistasList(false);
+                  }}
                   className="text-gray-400 hover:text-white transition-smooth cursor-pointer p-2 hover:bg-dark-hover rounded-lg"
                 >
                   <i className="ri-close-line text-2xl"></i>
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="overflow-y-auto flex-1 px-8 pb-8">
+              <form onSubmit={handleSubmit} className="space-y-6 pt-6">
                 {/* Seção: Informações Básicas */}
                 <div className="bg-dark-bg/50 border border-dark-border rounded-xl p-6">
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -827,18 +844,54 @@ export default function Orcamentos() {
                           type="text"
                           value={formData.vinculoArtista}
                           onChange={(e) => {
-                            setFormData({ ...formData, vinculoArtista: e.target.value });
-                            setShowArtistasList(true);
+                            const valor = e.target.value;
+                            setFormData({ ...formData, vinculoArtista: valor });
+                            
+                            // Filtrar artistas em tempo real
+                            if (valor.trim()) {
+                              const filtrados = artistas.filter(artista =>
+                                artista.nome.toLowerCase().includes(valor.toLowerCase())
+                              );
+                              setFilteredArtistas(filtrados);
+                              setShowArtistasList(filtrados.length > 0);
+                              
+                              // Verificar se o valor digitado corresponde exatamente a um artista
+                              const artistaExato = artistas.find(a => 
+                                a.nome.toLowerCase() === valor.toLowerCase()
+                              );
+                              if (artistaExato) {
+                                setArtistaSelecionadoId(artistaExato.id);
+                              } else {
+                                setArtistaSelecionadoId(null);
+                              }
+                            } else {
+                              setFilteredArtistas(artistas);
+                              setShowArtistasList(false);
+                              setArtistaSelecionadoId(null);
+                            }
                           }}
                           onFocus={() => {
                             if (artistas.length > 0) {
-                              setFilteredArtistas(artistas);
-                              setShowArtistasList(true);
+                              if (formData.vinculoArtista.trim()) {
+                                const filtrados = artistas.filter(artista =>
+                                  artista.nome.toLowerCase().includes(formData.vinculoArtista.toLowerCase())
+                                );
+                                setFilteredArtistas(filtrados);
+                                setShowArtistasList(filtrados.length > 0);
+                              } else {
+                                setFilteredArtistas(artistas);
+                                setShowArtistasList(true);
+                              }
                             }
                           }}
-                          onBlur={() => {
-                            // Delay para permitir clique na lista
-                            setTimeout(() => setShowArtistasList(false), 200);
+                          onBlur={(e) => {
+                            // Não fechar se o próximo elemento focado for da lista
+                            const relatedTarget = e.relatedTarget as HTMLElement;
+                            if (!relatedTarget || !relatedTarget.closest('.artistas-list-container')) {
+                              setTimeout(() => {
+                                setShowArtistasList(false);
+                              }, 200);
+                            }
                           }}
                           className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
                           placeholder="Digite ou selecione um artista"
@@ -847,11 +900,20 @@ export default function Orcamentos() {
                         {artistas.length > 0 && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setFilteredArtistas(artistas);
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (formData.vinculoArtista.trim()) {
+                                const filtrados = artistas.filter(artista =>
+                                  artista.nome.toLowerCase().includes(formData.vinculoArtista.toLowerCase())
+                                );
+                                setFilteredArtistas(filtrados);
+                              } else {
+                                setFilteredArtistas(artistas);
+                              }
                               setShowArtistasList(!showArtistasList);
                             }}
-                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-smooth cursor-pointer z-20"
                           >
                             <i className={`ri-arrow-${showArtistasList ? 'up' : 'down'}-s-line text-lg`}></i>
                           </button>
@@ -859,13 +921,21 @@ export default function Orcamentos() {
                         
                         {/* Lista customizada com scroll */}
                         {showArtistasList && filteredArtistas.length > 0 && (
-                          <div className="absolute z-10 w-full mt-1 bg-dark-card border border-dark-border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          <div 
+                            className="artistas-list-container absolute z-30 w-full mt-1 bg-dark-card border border-dark-border rounded-lg shadow-lg max-h-60 overflow-y-auto"
+                            onMouseDown={(e) => {
+                              // Prevenir que o blur do input seja acionado
+                              e.preventDefault();
+                            }}
+                          >
                             {filteredArtistas.map((artista) => (
                               <button
                                 key={artista.id}
                                 type="button"
-                                onClick={() => {
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
                                   setFormData({ ...formData, vinculoArtista: artista.nome });
+                                  setArtistaSelecionadoId(artista.id);
                                   setShowArtistasList(false);
                                 }}
                                 className="w-full px-4 py-2 text-left text-white text-sm hover:bg-dark-hover transition-smooth cursor-pointer first:rounded-t-lg last:rounded-b-lg"
@@ -1027,7 +1097,27 @@ export default function Orcamentos() {
                 <div className="flex gap-3 pt-4 border-t border-dark-border">
                   <button
                     type="button"
-                    onClick={() => setShowModal(false)}
+                    onClick={() => {
+                      setShowModal(false);
+                      setFormData({
+                        type: '',
+                        description: '',
+                        project: '',
+                        value: '',
+                        solicitante: '',
+                        vinculoArtista: '',
+                        recuperabilidade: '',
+                        centroCusto: '',
+                        divisaoVerbas: '',
+                        breakEven: '',
+                        cronogramaDesembolso: '',
+                        reservaContingencia: '',
+                        auditabilidade: '',
+                        fluxoCaixa: '',
+                      });
+                      setArtistaSelecionadoId(null);
+                      setShowArtistasList(false);
+                    }}
                     className="flex-1 px-6 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap font-medium"
                   >
                     Cancelar
@@ -1041,15 +1131,16 @@ export default function Orcamentos() {
                   </button>
                 </div>
               </form>
+              </div>
             </div>
           </div>
         )}
 
         {/* Modal Visualizar Orçamento */}
         {showViewModal && selectedOrcamento && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 overflow-y-auto">
-            <div className="bg-dark-card border border-dark-border rounded-xl p-8 w-full max-w-4xl my-8 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-6 sticky top-0 bg-dark-card pb-4 border-b border-dark-border">
+          <div className="fixed inset-0 lg:left-64 bg-black/80 flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-dark-card border border-dark-border rounded-xl w-full max-w-4xl my-auto max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between p-8 pb-4 border-b border-dark-border flex-shrink-0">
                 <h2 className="text-2xl font-semibold text-white">Detalhes do Orçamento</h2>
                 <button 
                   onClick={() => {
@@ -1062,7 +1153,8 @@ export default function Orcamentos() {
                 </button>
               </div>
 
-              <div className="space-y-6">
+              <div className="overflow-y-auto flex-1 px-8 pb-8">
+                <div className="space-y-6 pt-6">
                 {/* Informações Básicas */}
                 <div className="bg-dark-bg/50 border border-dark-border rounded-xl p-6">
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -1244,18 +1336,19 @@ export default function Orcamentos() {
                     )}
                   </div>
                 </div>
-              </div>
 
-              <div className="flex gap-3 pt-6 mt-6 border-t border-dark-border">
-                <button
-                  onClick={() => {
-                    setShowViewModal(false);
-                    setSelectedOrcamento(null);
-                  }}
-                  className="flex-1 px-6 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap font-medium"
-                >
-                  Fechar
-                </button>
+                <div className="flex gap-3 pt-6 mt-6 border-t border-dark-border">
+                  <button
+                    onClick={() => {
+                      setShowViewModal(false);
+                      setSelectedOrcamento(null);
+                    }}
+                    className="flex-1 px-6 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap font-medium"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
               </div>
             </div>
           </div>
