@@ -12,6 +12,8 @@ interface Artista {
   contato_telefone?: string;
   observacoes_internas?: string;
   created_at: string;
+  foto?: string; // Caminho da foto
+  isFromPhotos?: boolean; // Indica se é um artista que só tem foto, sem registro no banco
 }
 
 export default function Artistas() {
@@ -42,6 +44,95 @@ export default function Artistas() {
   useEffect(() => {
     loadArtistas();
   }, []);
+
+  // Função para normalizar nome do artista para corresponder à pasta
+  const normalizeNome = (nome: string): string => {
+    return nome
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+      .replace(/\s+/g, '-') // Substitui espaços por hífens
+      .replace(/[^a-z0-9-]/g, ''); // Remove caracteres especiais
+  };
+
+  // Função para encontrar a foto do artista
+  const getArtistaFoto = (nome: string): string | null => {
+    const normalizedNome = normalizeNome(nome);
+    
+    // Mapeamento direto de nomes conhecidos (para casos especiais)
+    const nomeMapping: Record<string, string> = {
+      'alex-lucio': 'alex-lucio',
+      'caio-torres': 'caio-torres',
+      'debora-lopes': 'debora-lopes',
+      'gabriel-magalhaes': 'gabriel-magalhaes',
+      'george-lean': 'george-lean',
+      'kaka-tavares': 'kaka-tavares',
+      'maria-pita': 'maria-pita',
+      'martinha': 'martinha',
+      'na-graca': 'na graca',
+      'nicole-lavinia': 'nicole-lavinia',
+      'no-santuario': 'no santuario',
+      'rachel-malafaia': 'rachel-malafaia',
+      'william-soares': 'william-soares',
+    };
+
+    // Tenta encontrar pelo mapeamento primeiro
+    const pastaNome = nomeMapping[normalizedNome] || normalizedNome;
+    
+    // Lista de pastas conhecidas com fotos
+    const pastasComFotos = [
+      'alex-lucio',
+      'caio-torres',
+      'debora-lopes',
+      'gabriel-magalhaes',
+      'george-lean',
+      'kaka-tavares',
+      'maria-pita',
+      'martinha',
+      'na graca',
+      'nicole-lavinia',
+      'no santuario',
+      'rachel-malafaia',
+      'william-soares',
+    ];
+
+    // Verifica se a pasta existe
+    if (pastasComFotos.includes(pastaNome)) {
+      // Retorna o caminho da foto
+      return `/artistas/${pastaNome}/${pastaNome === 'alex-lucio' ? 'IMG_3735.jpg' :
+        pastaNome === 'caio-torres' ? 'IMG_0273.jpg' :
+        pastaNome === 'debora-lopes' ? 'debora-lopes.png' :
+        pastaNome === 'gabriel-magalhaes' ? 'IMG_4165.jpg' :
+        pastaNome === 'george-lean' ? 'IMG_1982.jpg' :
+        pastaNome === 'kaka-tavares' ? 'IMG_3648.jpg' :
+        pastaNome === 'maria-pita' ? 'IMG_4240.jpg' :
+        pastaNome === 'martinha' ? 'Gemini_Generated_Image_o5dhzho5dhzho5dh (1).png' :
+        pastaNome === 'na graca' ? 'na graca.png' :
+        pastaNome === 'nicole-lavinia' ? 'IMG_3996.jpg' :
+        pastaNome === 'no santuario' ? 'IMG_0090.jpg' :
+        pastaNome === 'rachel-malafaia' ? 'IMG_5693.jpg' :
+        pastaNome === 'william-soares' ? 'IMG_4092.jpg' : ''}`;
+    }
+
+    return null;
+  };
+
+  // Lista de artistas que têm fotos mas podem não estar no banco
+  const artistasComFotos: Array<{ nome: string; foto: string }> = [
+    { nome: 'Alex Lucio', foto: '/artistas/alex-lucio/IMG_3735.jpg' },
+    { nome: 'Caio Torres', foto: '/artistas/caio-torres/IMG_0273.jpg' },
+    { nome: 'Débora Lopes', foto: '/artistas/debora-lopes/debora-lopes.png' },
+    { nome: 'Gabriel Magalhães', foto: '/artistas/gabriel-magalhaes/IMG_4165.jpg' },
+    { nome: 'George Lean', foto: '/artistas/george-lean/IMG_1982.jpg' },
+    { nome: 'Kaká Tavares', foto: '/artistas/kaka-tavares/IMG_3648.jpg' },
+    { nome: 'Maria Pita', foto: '/artistas/maria-pita/IMG_4240.jpg' },
+    { nome: 'Martinha', foto: '/artistas/martinha/Gemini_Generated_Image_o5dhzho5dhzho5dh (1).png' },
+    { nome: 'Na Graça', foto: '/artistas/na graca/na graca.png' },
+    { nome: 'Nicole Lavínia', foto: '/artistas/nicole-lavinia/IMG_3996.jpg' },
+    { nome: 'No Santuário', foto: '/artistas/no santuario/IMG_0090.jpg' },
+    { nome: 'Rachel Malafaia', foto: '/artistas/rachel-malafaia/IMG_5693.jpg' },
+    { nome: 'William Soares', foto: '/artistas/william-soares/IMG_4092.jpg' },
+  ];
 
   const loadArtistas = async () => {
     try {
@@ -115,7 +206,33 @@ export default function Artistas() {
     setArtistaToDelete(null);
   };
 
-  const filteredArtistas = artistas.filter(artista => {
+  // Adiciona fotos aos artistas existentes e cria lista combinada
+  const artistasComFotosAdicionadas = artistas.map(artista => ({
+    ...artista,
+    foto: getArtistaFoto(artista.nome) || undefined,
+  }));
+
+  // Encontra artistas que têm fotos mas não estão no banco
+  const artistasSemRegistro = artistasComFotos.filter(fotoArtista => {
+    const normalizedFotoNome = normalizeNome(fotoArtista.nome);
+    return !artistas.some(artista => 
+      normalizeNome(artista.nome) === normalizedFotoNome
+    );
+  }).map(fotoArtista => ({
+    id: `foto-${normalizeNome(fotoArtista.nome)}`,
+    nome: fotoArtista.nome,
+    genero: 'gospel',
+    status: 'ativo',
+    contato_email: '',
+    foto: fotoArtista.foto,
+    isFromPhotos: true,
+    created_at: new Date().toISOString(),
+  }));
+
+  // Combina artistas do banco com artistas que só têm fotos
+  const todosArtistas = [...artistasComFotosAdicionadas, ...artistasSemRegistro];
+
+  const filteredArtistas = todosArtistas.filter(artista => {
     const matchesSearch = artista.nome.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'todos' || artista.status.toLowerCase() === filterStatus;
     return matchesSearch && matchesStatus;
@@ -205,10 +322,30 @@ export default function Artistas() {
             >
               {/* Área da Foto */}
               <div className="w-full py-8 px-6 bg-dark-bg flex items-center justify-center">
-                <div className="w-52 h-64 rounded-xl bg-gradient-primary flex items-center justify-center shadow-xl">
-                  <span className="text-5xl font-bold text-white">{getInitials(artista.nome)}</span>
+                {artista.foto ? (
+                  <div className="w-52 h-64 rounded-xl overflow-hidden shadow-xl">
+                    <img 
+                      src={artista.foto} 
+                      alt={artista.nome}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Se a imagem não carregar, mostra as iniciais
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.className = 'w-52 h-64 rounded-xl bg-gradient-primary flex items-center justify-center shadow-xl';
+                          parent.innerHTML = `<span class="text-5xl font-bold text-white">${getInitials(artista.nome)}</span>`;
+                        }
+                      }}
+                    />
                   </div>
-                </div>
+                ) : (
+                  <div className="w-52 h-64 rounded-xl bg-gradient-primary flex items-center justify-center shadow-xl">
+                    <span className="text-5xl font-bold text-white">{getInitials(artista.nome)}</span>
+                  </div>
+                )}
+              </div>
 
               {/* Informações do Artista */}
               <div className="px-6 py-7 space-y-4 flex-1">
@@ -216,10 +353,12 @@ export default function Artistas() {
                 <h3 className="text-lg font-semibold text-white mb-2">{artista.nome}</h3>
                 
                 {/* Email */}
-                <div className="flex items-center gap-3 text-base text-white">
-                  <i className="ri-mail-line text-primary-teal text-xl"></i>
-                  <span className="truncate">{artista.contato_email}</span>
-                </div>
+                {artista.contato_email && (
+                  <div className="flex items-center gap-3 text-base text-white">
+                    <i className="ri-mail-line text-primary-teal text-xl"></i>
+                    <span className="truncate">{artista.contato_email}</span>
+                  </div>
+                )}
                 
                 {/* Telefone */}
                 {artista.contato_telefone && (
@@ -228,19 +367,47 @@ export default function Artistas() {
                     <span>{artista.contato_telefone}</span>
                   </div>
                 )}
+
+                {/* Indicador de artista sem registro completo */}
+                {artista.isFromPhotos && (
+                  <div className="flex items-center gap-2 text-sm text-yellow-400">
+                    <i className="ri-image-line"></i>
+                    <span>Foto disponível - Registro incompleto</span>
+                  </div>
+                )}
               </div>
 
               {/* Botões */}
               <div className="px-6 pb-6 flex gap-3 relative">
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(`/artistas/${artista.id}`);
-                  }}
-                  className="flex-1 px-5 py-3 bg-dark-bg hover:bg-dark-hover text-white text-base font-medium rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
-                >
-                  Ver Detalhes
-                </button>
+                {!artista.isFromPhotos ? (
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/artistas/${artista.id}`);
+                    }}
+                    className="flex-1 px-5 py-3 bg-dark-bg hover:bg-dark-hover text-white text-base font-medium rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
+                  >
+                    Ver Detalhes
+                  </button>
+                ) : (
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowModal(true);
+                      setFormData({
+                        nome: artista.nome,
+                        genero: 'gospel',
+                        status: 'ativo',
+                        contato_email: '',
+                        contato_telefone: '',
+                        observacoes_internas: ''
+                      });
+                    }}
+                    className="flex-1 px-5 py-3 bg-gradient-primary hover:opacity-90 text-white text-base font-medium rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
+                  >
+                    Criar Registro
+                  </button>
+                )}
                 <div className="relative">
                   <button 
                     onClick={(e) => {
@@ -253,7 +420,7 @@ export default function Artistas() {
                     <i className="ri-more-2-fill text-xl"></i>
                   </button>
                   
-                  {showActionsMenu === artista.id && (
+                  {showActionsMenu === artista.id && !artista.isFromPhotos && (
                     <div className="absolute right-0 bottom-full mb-2 w-48 bg-dark-card border border-dark-border rounded-lg shadow-lg z-10">
                       <button
                         onClick={(e) => {
