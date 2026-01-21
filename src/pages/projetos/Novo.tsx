@@ -176,19 +176,33 @@ export default function NovoProjeto() {
     try {
       setLoading(true);
 
+      // Função helper para validar e converter UUID
+      const toUUID = (value: string | null | undefined): string | null => {
+        if (!value || value.trim() === '' || value === '0' || value === 'null' || value === 'undefined') {
+          return null;
+        }
+        // Validar formato UUID básico (8-4-4-4-12 caracteres hexadecimais)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(value)) {
+          return value;
+        }
+        // Se não for um UUID válido, retornar null
+        return null;
+      };
+
       // Criar projeto
       const dadosProjeto: any = {
         nome: formData.nome.trim(),
         titulo: formData.nome.trim(),
         tipo: formData.tipo,
-        artista_id: formData.artista_id,
+        artista_id: toUUID(formData.artista_id),
         fase: formData.fase,
         prioridade: formData.prioridade,
-        fornecedor_audio_id: fornecedoresData.fornecedor_audio_id || null,
-        fornecedor_video_id: fornecedoresData.fornecedor_video_id || null,
-        local_gravacao_id: fornecedoresData.local_gravacao_id || null,
-        produtor_id: fornecedoresData.produtor_id || null,
-        maquiador_id: fornecedoresData.maquiador_id || null,
+        fornecedor_audio_id: toUUID(fornecedoresData.fornecedor_audio_id),
+        fornecedor_video_id: toUUID(fornecedoresData.fornecedor_video_id),
+        local_gravacao_id: toUUID(fornecedoresData.local_gravacao_id),
+        produtor_id: toUUID(fornecedoresData.produtor_id),
+        maquiador_id: toUUID(fornecedoresData.maquiador_id),
         outros_profissionais: fornecedoresData.outros_profissionais.length > 0 ? fornecedoresData.outros_profissionais : null,
       };
 

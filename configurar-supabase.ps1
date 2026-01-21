@@ -14,9 +14,9 @@ if (-not (Test-Path ".env.local")) {
     New-Item -Path ".env.local" -ItemType File -Force | Out-Null
 }
 
-# Credenciais do Supabase (do histórico anterior)
+# Credenciais do Supabase
 $supabaseUrl = "https://zbeygaayzhkvbgirtzne.supabase.co"
-$supabaseAnonKey = "sb_publishable_H12O0bI0YWeO1m9Xl-yQkQ_CqoJ7SHd"
+$supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpiZXlnYWF5emhrdmJnaXJ0em5lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY0MjIxMDIsImV4cCI6MjA4MTk5ODEwMn0.5vOBNBwQFMrc3r1h8c2p-TMJAoPqEWm6vFHMq_xAlY8"
 
 Write-Host "Configurando credenciais do Supabase..." -ForegroundColor White
 Write-Host ""
