@@ -4,7 +4,6 @@
     "@aws-sdk/s3-request-presigner": "^3.966.0",
     "@stripe/react-stripe-js": "4.0.2",
     "@supabase/supabase-js": "2.57.4",
-    "firebase": "12.0.0",
     "html2pdf.js": "^0.14.0",
     "i18next": "25.4.1",
     "i18next-browser-languagedetector": "^8.2.0",

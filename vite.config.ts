@@ -70,6 +70,32 @@ export default defineConfig({
   build: {
     sourcemap: true,
     outDir: "out",
+    chunkSizeWarningLimit: 1000, // Aumentar limite para 1MB (padrão é 500KB)
+    rollupOptions: {
+      onwarn(warning, warn) {
+        // Suprimir avisos sobre importações dinâmicas/estáticas misturadas
+        if (
+          warning.code === 'MODULE_LEVEL_DIRECTIVE' ||
+          warning.message?.includes('dynamically imported') ||
+          warning.message?.includes('statically imported')
+        ) {
+          return;
+        }
+        warn(warning);
+      },
+      output: {
+        // Code splitting manual para otimizar chunks
+        manualChunks: {
+          // Vendor chunks - bibliotecas principais
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'supabase-vendor': ['@supabase/supabase-js'],
+          'aws-vendor': ['@aws-sdk/client-s3', '@aws-sdk/s3-request-presigner'],
+          'charts-vendor': ['recharts'],
+          'i18n-vendor': ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+          'stripe-vendor': ['@stripe/react-stripe-js'],
+        },
+      },
+    },
   },
   resolve: {
     alias: {
@@ -81,5 +107,10 @@ export default defineConfig({
     host: "0.0.0.0",
     open: true,
     strictPort: false,
+  },
+  logLevel: 'warn', // Reduzir verbosidade dos logs
+  optimizeDeps: {
+    // Ignorar avisos sobre dependências otimizadas
+    exclude: [],
   },
 });
