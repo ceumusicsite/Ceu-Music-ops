@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { uploadVideoToYouTube, getYouTubeAuthUrl, isYouTubeAuthenticated, getYouTubeAccessToken, saveYouTubeAccessToken } from '../../services/youtube';
+import { uploadVideoToYouTube, isYouTubeConfigured, getYouTubeAuthUrl } from '../../services/youtube-shared';
 
 interface YouTubeUploadProps {
   onUploadComplete: (videoUrl: string, videoId: string) => void;
@@ -21,11 +21,22 @@ export default function YouTubeUpload({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [privacyStatus, setPrivacyStatus] = useState<'private' | 'unlisted' | 'public'>('private');
-  const [authenticated, setAuthenticated] = useState(false);
+  const [configured, setConfigured] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
-    setAuthenticated(isYouTubeAuthenticated());
+    // Verificar se a conta CEU Music está configurada
+    isYouTubeConfigured()
+      .then((isConfig) => {
+        setConfigured(isConfig);
+        setChecking(false);
+      })
+      .catch((error) => {
+        console.error('Erro ao verificar configuração:', error);
+        setConfigured(false);
+        setChecking(false);
+      });
     
     // Preencher título automaticamente se vazio
     if (!title && projetoNome) {
@@ -33,11 +44,16 @@ export default function YouTubeUpload({
     }
   }, [projetoNome, title]);
 
-  const handleAuthenticate = () => {
-    const authUrl = getYouTubeAuthUrl();
-    // Salvar URL de retorno para depois da autenticação
-    sessionStorage.setItem('youtube_upload_return', 'true');
-    window.location.href = authUrl;
+  const handleConfigure = () => {
+    try {
+      const authUrl = getYouTubeAuthUrl();
+      // Salvar flag para indicar que é configuração inicial
+      sessionStorage.setItem('youtube_configure_account', 'true');
+      window.location.href = authUrl;
+    } catch (error: any) {
+      console.error('Erro ao gerar URL de autenticação:', error);
+      onError?.(error.message || 'Erro ao iniciar configuração. Verifique se o Client ID está configurado no .env.local e reinicie o servidor.');
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,9 +87,8 @@ export default function YouTubeUpload({
       return;
     }
 
-    const accessToken = getYouTubeAccessToken();
-    if (!accessToken) {
-      onError?.('Autenticação necessária. Por favor, autentique-se primeiro.');
+    if (!configured) {
+      onError?.('Conta YouTube da CEU Music não está configurada. Configure primeiro.');
       return;
     }
 
@@ -81,8 +96,8 @@ export default function YouTubeUpload({
       setUploading(true);
       setUploadProgress(0);
 
+      // Usar o serviço compartilhado - sempre usa a conta CEU Music
       const result = await uploadVideoToYouTube(
-        accessToken,
         {
           title,
           description: description || undefined,
@@ -112,36 +127,57 @@ export default function YouTubeUpload({
     }
   };
 
-  // Verificar se voltou da autenticação
+  // Verificar se voltou da configuração
   useEffect(() => {
-    const returnedFromAuth = sessionStorage.getItem('youtube_upload_return');
-    if (returnedFromAuth) {
-      sessionStorage.removeItem('youtube_upload_return');
-      setAuthenticated(isYouTubeAuthenticated());
+    const returnedFromConfig = sessionStorage.getItem('youtube_configure_account');
+    if (returnedFromConfig) {
+      sessionStorage.removeItem('youtube_configure_account');
+      // Verificar novamente se está configurado
+      isYouTubeConfigured()
+        .then((isConfig) => {
+          setConfigured(isConfig);
+        })
+        .catch((error) => {
+          console.error('Erro ao verificar configuração:', error);
+        });
     }
   }, []);
 
+  if (checking) {
+    return (
+      <div className="p-4 bg-dark-bg border border-dark-border rounded-lg">
+        <div className="flex items-center gap-3">
+          <i className="ri-loader-4-line text-xl text-primary-teal animate-spin"></i>
+          <p className="text-sm text-gray-400">Verificando configuração da conta YouTube...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {!authenticated ? (
+      {!configured ? (
         <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
           <div className="flex items-start gap-3 mb-3">
             <i className="ri-youtube-line text-2xl text-red-400"></i>
             <div>
               <p className="text-sm font-medium text-yellow-400 mb-1">
-                Autenticação necessária
+                Configuração necessária
               </p>
-              <p className="text-xs text-gray-400">
-                Você precisa autenticar com sua conta do YouTube para fazer upload de vídeos.
+              <p className="text-xs text-gray-400 mb-2">
+                A conta YouTube da CEU Music precisa ser configurada uma única vez. Todos os uploads usarão esta conta compartilhada.
+              </p>
+              <p className="text-xs text-gray-500">
+                ⚠️ Apenas um administrador precisa fazer esta configuração inicial.
               </p>
             </div>
           </div>
           <button
-            onClick={handleAuthenticate}
+            onClick={handleConfigure}
             className="w-full px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-smooth flex items-center justify-center gap-2"
           >
             <i className="ri-youtube-line"></i>
-            Autenticar com YouTube
+            Configurar Conta YouTube da CEU Music
           </button>
         </div>
       ) : (
@@ -149,7 +185,10 @@ export default function YouTubeUpload({
           <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
             <p className="text-sm text-green-400 flex items-center gap-2">
               <i className="ri-checkbox-circle-line"></i>
-              Autenticado com YouTube
+              Conta YouTube da CEU Music configurada
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Todos os uploads serão feitos para a conta da CEU Music
             </p>
           </div>
 

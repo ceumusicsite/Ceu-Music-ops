@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { getAccessTokenFromCode, saveYouTubeAccessToken } from '../../services/youtube';
+import { getAccessTokenFromCode } from '../../services/youtube-shared';
 import MainLayout from '../../components/layout/MainLayout';
 
 export default function YouTubeCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [message, setMessage] = useState('Autenticando com YouTube...');
+  const [message, setMessage] = useState('Configurando conta YouTube da CEU Music...');
 
   useEffect(() => {
     const code = searchParams.get('code');
@@ -25,19 +25,18 @@ export default function YouTubeCallback() {
 
     if (code) {
       getAccessTokenFromCode(code)
-        .then(({ accessToken, refreshToken }) => {
-          saveYouTubeAccessToken(accessToken, refreshToken);
+        .then(() => {
           setStatus('success');
-          setMessage('Autenticação realizada com sucesso! Redirecionando...');
+          setMessage('Conta YouTube da CEU Music configurada com sucesso! Todos os uploads usarão esta conta. Redirecionando...');
           
           setTimeout(() => {
             navigate('/projetos');
-          }, 2000);
+          }, 3000);
         })
         .catch((err) => {
           console.error('Erro ao obter token:', err);
           setStatus('error');
-          setMessage(err.message || 'Erro ao autenticar com YouTube');
+          setMessage(err.message || 'Erro ao configurar conta YouTube');
           
           setTimeout(() => {
             navigate('/projetos');
