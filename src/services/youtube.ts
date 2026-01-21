@@ -1,6 +1,13 @@
-const CLIENT_ID = import.meta.env.VITE_YOUTUBE_CLIENT_ID;
-const CLIENT_SECRET = import.meta.env.VITE_YOUTUBE_CLIENT_SECRET;
+// Usar as variáveis corretas do .env.local
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || import.meta.env.VITE_YOUTUBE_CLIENT_ID;
+const CLIENT_SECRET = import.meta.env.VITE_YOUTUBE_CLIENT_SECRET; // Client Secret não é necessário para gapi, mas mantido para compatibilidade
 const REDIRECT_URI = import.meta.env.VITE_YOUTUBE_REDIRECT_URI || `${window.location.origin}/youtube-callback`;
+
+// Validar se o Client ID está configurado
+if (!CLIENT_ID || CLIENT_ID.trim() === '') {
+  console.error('⚠️ VITE_GOOGLE_CLIENT_ID não está configurado no .env.local');
+  console.error('Configure: VITE_GOOGLE_CLIENT_ID=seu-client-id.apps.googleusercontent.com');
+}
 
 export interface YouTubeUploadOptions {
   title: string;
@@ -15,9 +22,16 @@ export interface YouTubeUploadOptions {
  * Gera URL de autenticação OAuth 2.0 do YouTube
  */
 export function getYouTubeAuthUrl(): string {
+  // Validar se o Client ID está configurado
+  if (!CLIENT_ID || CLIENT_ID.trim() === '') {
+    const errorMsg = 'Client ID não configurado. Verifique VITE_GOOGLE_CLIENT_ID no arquivo .env.local e reinicie o servidor.';
+    console.error('❌', errorMsg);
+    throw new Error(errorMsg);
+  }
+
   const scopes = ['https://www.googleapis.com/auth/youtube.upload'];
   const params = new URLSearchParams({
-    client_id: CLIENT_ID || '',
+    client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
     response_type: 'code',
     scope: scopes.join(' '),
