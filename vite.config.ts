@@ -106,7 +106,7 @@ export default defineConfig({
     port: 3000,
     host: "0.0.0.0",
     open: true,
-    strictPort: false,
+    strictPort: true, // Força usar porta 3000, falha se estiver ocupada
   },
   logLevel: 'warn', // Reduzir verbosidade dos logs
   optimizeDeps: {

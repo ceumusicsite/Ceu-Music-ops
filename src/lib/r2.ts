@@ -14,7 +14,7 @@ export const R2_BUCKETS = {
   DOCUMENTOS: import.meta.env.VITE_R2_BUCKET_DOCUMENTOS || 'ceu-music-documentos',
   ANEXOS: import.meta.env.VITE_R2_BUCKET_ANEXOS || 'ceu-music-anexos',
   COMPROVANTES: import.meta.env.VITE_R2_BUCKET_COMPROVANTES || 'ceu-music-comprovantes',
-  AUDIO: import.meta.env.VITE_R2_BUCKET_AUDIO || 'ceu-music-audio',
+  AUDIO: import.meta.env.VITE_R2_BUCKET_AUDIO || 'audio',
 };
 
 // Cliente S3 configurado para R2
@@ -39,6 +39,40 @@ export interface UploadResult {
   url: string;
   key: string;
   publicUrl?: string;
+}
+
+/**
+ * Faz upload de um arquivo para o Cloudflare R2 usando presigned URL
+ * Esta abordagem pode funcionar melhor com CORS
+ */
+async function uploadViaPresignedUrl(
+  file: File,
+  bucket: string,
+  key: string,
+  contentType: string
+): Promise<void> {
+  // Gerar presigned URL para PUT
+  const putCommand = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType,
+  });
+  
+  const presignedUrl = await getSignedUrl(s3Client, putCommand, { expiresIn: 300 }); // 5 minutos
+  
+  // Fazer upload usando fetch com presigned URL
+  const arrayBuffer = await file.arrayBuffer();
+  const response = await fetch(presignedUrl, {
+    method: 'PUT',
+    body: arrayBuffer,
+    headers: {
+      'Content-Type': contentType,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Upload falhou: ${response.status} ${response.statusText}`);
+  }
 }
 
 /**
@@ -73,22 +107,30 @@ export async function uploadToR2(
       : `${timestamp}_${sanitizedName}`;
   }
 
-  // Converter File para ArrayBuffer para compatibilidade com AWS SDK no navegador
-  const arrayBuffer = await file.arrayBuffer();
-  
-  // Preparar comando de upload
-  const command = new PutObjectCommand({
-    Bucket: bucket,
-    Key: key,
-    Body: new Uint8Array(arrayBuffer),
-    ContentType: options.contentType || file.type || 'application/octet-stream',
-    // Se makePublic for true, adicionar ACL (se o bucket permitir)
-    // Nota: R2 não suporta ACL da mesma forma que S3, então usamos URLs públicas
-  });
+  const contentType = options.contentType || file.type || 'application/octet-stream';
 
   try {
-    // Fazer upload
-    await s3Client.send(command);
+    // Tentar primeiro com presigned URL (melhor para CORS)
+    try {
+      await uploadViaPresignedUrl(file, bucket, key, contentType);
+    } catch (presignedError: any) {
+      // Se presigned URL falhar, tentar método direto
+      console.warn('Upload via presigned URL falhou, tentando método direto:', presignedError);
+      
+      // Converter File para ArrayBuffer para compatibilidade com AWS SDK no navegador
+      const arrayBuffer = await file.arrayBuffer();
+      
+      // Preparar comando de upload
+      const command = new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: new Uint8Array(arrayBuffer),
+        ContentType: contentType,
+      });
+
+      // Fazer upload
+      await s3Client.send(command);
+    }
 
     // Gerar URL pública ou signed URL
     let publicUrlFinal: string;
@@ -112,7 +154,16 @@ export async function uploadToR2(
     };
   } catch (error: any) {
     console.error('Erro ao fazer upload para R2:', error);
-    throw new Error(`Erro ao fazer upload: ${error.message || 'Erro desconhecido'}`);
+    
+    // Mensagem de erro mais detalhada
+    let errorMessage = 'Erro ao fazer upload';
+    if (error.message?.includes('CORS') || error.message?.includes('Failed to fetch')) {
+      errorMessage = `Erro de CORS: O bucket "${bucket}" precisa ter CORS configurado no Cloudflare R2 para permitir uploads de http://localhost:3000. Verifique a configuração de CORS no bucket.`;
+    } else {
+      errorMessage = `Erro ao fazer upload: ${error.message || 'Erro desconhecido'}`;
+    }
+    
+    throw new Error(errorMessage);
   }
 }
 

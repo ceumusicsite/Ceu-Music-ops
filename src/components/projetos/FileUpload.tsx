@@ -69,6 +69,9 @@ export default function FileUpload({
         r2Bucket = R2_BUCKETS.ANEXOS;
       } else if (bucket === 'comprovantes') {
         r2Bucket = R2_BUCKETS.COMPROVANTES;
+      } else if (bucket === 'faixas-audio-video') {
+        // Mapear faixas-audio-video para o bucket de áudio do R2
+        r2Bucket = R2_BUCKETS.AUDIO;
       }
 
       // Upload usando serviço unificado (R2 por padrão)

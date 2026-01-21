@@ -11,3 +11,5 @@ CREATE INDEX IF NOT EXISTS idx_documentos_arquivo_key ON documentos(arquivo_key)
 -- Comentário explicativo
 COMMENT ON COLUMN documentos.arquivo_key IS 'Key do arquivo no storage (R2 ou Supabase) para gerar novas URLs assinadas quando necessário';
 
+
+

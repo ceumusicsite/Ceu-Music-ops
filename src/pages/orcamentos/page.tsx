@@ -242,18 +242,72 @@ export default function Orcamentos() {
   };
 
   const handleAprovar = async (orcamentoId: number | string) => {
-    if (!confirm('Tem certeza que deseja aprovar este orçamento?')) return;
+    if (!confirm('Tem certeza que deseja aprovar este orçamento? Um pagamento será criado automaticamente na seção financeira.')) return;
     
     try {
-      // Tentar atualizar no Supabase
-      const { error } = await supabase
+      // Buscar dados completos do orçamento
+      const orcamento = orcamentos.find(o => o.id === orcamentoId) || 
+                       orcamentosMockState.find(o => o.id === orcamentoId);
+      
+      if (!orcamento) {
+        alert('Orçamento não encontrado.');
+        return;
+      }
+
+      // Tentar atualizar o status no Supabase
+      const { error: updateError } = await supabase
         .from('orcamentos')
         .update({ status: 'aprovado' })
         .eq('id', orcamentoId);
 
-      if (error) throw error;
+      if (updateError) throw updateError;
 
-      // Se estiver usando dados mockados, atualizar localmente
+      // Criar pagamento automaticamente na tabela pagamentos
+      const valor = orcamento.value || orcamento.valor || 0;
+      const descricao = orcamento.description || orcamento.descricao || '';
+      const tipo = orcamento.type || orcamento.tipo || '';
+      
+      // Calcular data de vencimento (30 dias a partir de hoje)
+      const dataVencimento = new Date();
+      dataVencimento.setDate(dataVencimento.getDate() + 30);
+      const dataVencimentoStr = dataVencimento.toISOString().split('T')[0];
+
+      const pagamentoData: any = {
+        descricao: descricao,
+        valor: valor,
+        data_vencimento: dataVencimentoStr,
+        orcamento: `ORÇ-${String(orcamentoId).substring(0, 8)}`,
+        parcela: '1/1',
+        status: 'pendente',
+        tipo_movimentacao: 'saida',
+        valor_orcado: valor,
+        valor_realizado: valor,
+        orcamento_id: orcamentoId,
+        categoria: tipo,
+        categoria_fluxo_caixa: tipo,
+        categoria_financeira: tipo,
+        descricao_detalhada: `Pagamento relacionado ao orçamento aprovado: ${descricao}`,
+      };
+
+      // Adicionar artista_id se existir
+      if (orcamento.artista_id) {
+        pagamentoData.artista_id = orcamento.artista_id;
+      }
+
+      // Inserir pagamento na tabela pagamentos
+      const { error: pagamentoError } = await supabase
+        .from('pagamentos')
+        .insert([pagamentoData]);
+
+      if (pagamentoError) {
+        console.error('Erro ao criar pagamento:', pagamentoError);
+        // Ainda assim, o orçamento foi aprovado, então apenas avisar
+        alert('Orçamento aprovado, mas houve um erro ao criar o pagamento automaticamente. Você pode criar o pagamento manualmente.');
+      } else {
+        alert('Orçamento aprovado e pagamento criado automaticamente na seção financeira!');
+      }
+
+      // Recarregar orçamentos
       if (orcamentos.length === 0) {
         setOrcamentosMockState(prev => prev.map(orc => 
           orc.id === orcamentoId ? { ...orc, status: 'aprovado' } : orc
@@ -262,8 +316,10 @@ export default function Orcamentos() {
         await loadOrcamentos();
       }
     } catch (error: any) {
-      // Se falhar, atualizar localmente mesmo assim
-      console.warn('Erro ao aprovar no banco, atualizando localmente:', error);
+      console.error('Erro ao aprovar orçamento:', error);
+      alert(`Erro ao aprovar orçamento: ${error.message || 'Verifique o console para mais detalhes.'}`);
+      
+      // Se falhar, tentar atualizar localmente mesmo assim
       if (orcamentos.length === 0) {
         setOrcamentosMockState(prev => prev.map(orc => 
           orc.id === orcamentoId ? { ...orc, status: 'aprovado' } : orc

@@ -241,3 +241,5 @@ COMMENT ON COLUMN pagamentos.categoria_financeira IS 'Categoria financeira para 
 
 
 
+
+

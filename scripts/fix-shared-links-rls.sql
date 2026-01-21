@@ -48,3 +48,4 @@ CREATE POLICY "Qualquer pessoa pode atualizar links válidos"
     AND dados_preenchidos IS NOT NULL
   );
 
+

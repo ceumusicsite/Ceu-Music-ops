@@ -8,3 +8,4 @@ ADD COLUMN IF NOT EXISTS nome_anexador TEXT;
 -- Adicionar comentário para documentação
 COMMENT ON COLUMN faixa_audio_video.nome_anexador IS 'Nome da pessoa que anexou o áudio/vídeo através do link compartilhável';
 
+

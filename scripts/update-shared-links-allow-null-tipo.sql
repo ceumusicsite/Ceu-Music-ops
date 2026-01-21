@@ -14,3 +14,5 @@ ALTER TABLE shared_audio_video_links
 ADD CONSTRAINT shared_audio_video_links_tipo_check 
 CHECK (tipo IS NULL OR tipo IN ('audio', 'video'));
 
+
+

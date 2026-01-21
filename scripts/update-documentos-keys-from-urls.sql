@@ -27,3 +27,5 @@ SELECT
   COUNT(*) - COUNT(arquivo_key) as documentos_sem_key
 FROM documentos;
 
+
+
