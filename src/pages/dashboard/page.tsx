@@ -128,13 +128,13 @@ export default function Dashboard() {
 
   return (
     <MainLayout>
-      <div className="p-8">
+      <div className="p-4 md:p-6 lg:p-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
             Bem-vindo, {user?.name || 'Usuário'}
           </h1>
-          <p className="text-gray-400">Visão geral da sua operação musical</p>
+          <p className="text-gray-400 text-sm md:text-base">Visão geral da sua operação musical</p>
         </div>
 
         {/* Stats Grid */}

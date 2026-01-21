@@ -1,3 +1,4 @@
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -14,7 +15,12 @@ const menuItems = [
   { path: '/configuracoes', icon: 'ri-settings-3-line', label: 'Configurações', roles: ['admin'] },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
 
@@ -22,11 +28,23 @@ export default function Sidebar() {
     user && item.roles.includes(user.role)
   );
 
+  const handleLinkClick = (e: React.MouseEvent) => {
+    // Fechar sidebar em mobile quando um link for clicado
+    if (window.innerWidth < 1024 && onClose) {
+      // Pequeno delay para garantir que a navegação aconteça antes de fechar
+      setTimeout(() => {
+        onClose();
+      }, 100);
+    }
+  };
+
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-dark-card border-r border-dark-border flex flex-col z-50">
+    <aside className={`fixed left-0 top-0 h-screen w-64 bg-dark-card border-r border-dark-border flex flex-col z-[55] transform transition-transform duration-300 pointer-events-auto ${
+      isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+    }`}>
       {/* Logo */}
       <div className="p-6 border-b border-dark-border">
-        <Link to="/dashboard" className="flex items-center gap-3">
+        <Link to="/dashboard" onClick={handleLinkClick} className="flex items-center gap-3">
           <img 
             src="https://static.readdy.ai/image/016995f7e8292e3ea703f912413c6e1c/af9e13ed434ed318d1a9a4df0aa3c822.png" 
             alt="CEU Music" 
@@ -47,6 +65,7 @@ export default function Sidebar() {
             <Link
               key={item.path}
               to={item.path}
+              onClick={handleLinkClick}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-smooth cursor-pointer ${
                 isActive
                   ? 'bg-gradient-primary text-white'

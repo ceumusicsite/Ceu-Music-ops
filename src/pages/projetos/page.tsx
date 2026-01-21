@@ -357,19 +357,19 @@ export default function Projetos() {
 
   return (
     <MainLayout>
-      <div className="p-8">
+      <div className="p-4 md:p-6 lg:p-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 md:mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Projetos</h1>
-            <p className="text-gray-400">Gerencie todos os projetos musicais</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">Projetos</h1>
+            <p className="text-gray-400 text-sm md:text-base">Gerencie todos os projetos musicais</p>
           </div>
           <button 
             onClick={() => navigate('/projetos/novo')}
-            className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
+            className="w-full sm:w-auto px-4 md:px-6 py-2 md:py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
           >
-            <i className="ri-add-line text-xl"></i>
-            Novo Projeto
+            <i className="ri-add-line text-lg md:text-xl"></i>
+            <span className="text-sm md:text-base">Novo Projeto</span>
           </button>
         </div>
 
@@ -410,7 +410,160 @@ export default function Projetos() {
         {/* List View */}
         {viewMode === 'list' && (
           <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Mobile Card View */}
+            <div className="lg:hidden space-y-4 p-4">
+              {filteredProjetos.map((projeto) => (
+                <div
+                  key={projeto.id}
+                  className="bg-dark-bg border border-dark-border rounded-lg p-4 space-y-3"
+                  onClick={() => navigate(`/projetos/${projeto.id}`)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center flex-shrink-0">
+                        <i className="ri-music-2-line text-white"></i>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-sm font-medium text-white truncate">{projeto.nome}</h3>
+                        <p className="text-xs text-gray-400 truncate">{projeto.artista?.nome || 'Sem artista'}</p>
+                      </div>
+                    </div>
+                    <div className="relative fase-dropdown-container" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenFaseDropdown(openFaseDropdown === projeto.id ? null : projeto.id);
+                        }}
+                        className={`fase-dropdown-button px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-smooth cursor-pointer flex items-center gap-1 ${getPhaseColor(projeto.fase)}`}
+                      >
+                        {getPhaseLabel(projeto.fase)}
+                        <i className={`ri-arrow-${openFaseDropdown === projeto.id ? 'up' : 'down'}-s-line text-xs`}></i>
+                      </button>
+                      {openFaseDropdown === projeto.id && (
+                        <div className="absolute top-full right-0 mt-2 bg-dark-card border border-dark-border rounded-lg shadow-xl z-50 min-w-[180px]">
+                          {fases.map((fase) => (
+                            <button
+                              key={fase.value}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateFase(projeto.id, fase.value);
+                              }}
+                              className={`w-full text-left px-4 py-2 text-sm transition-smooth cursor-pointer first:rounded-t-lg last:rounded-b-lg ${
+                                projeto.fase === fase.value
+                                  ? 'bg-blue-500/20 text-blue-400'
+                                  : 'text-gray-300 hover:bg-dark-hover hover:text-white'
+                              }`}
+                            >
+                              {fase.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-2 bg-dark-border rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-primary rounded-full transition-smooth"
+                        style={{ width: `${projeto.progresso}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-xs text-gray-400 whitespace-nowrap">{projeto.progresso}%</span>
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getPriorityColor(projeto.prioridade)}`}>
+                      {projeto.prioridade.charAt(0).toUpperCase() + projeto.prioridade.slice(1)}
+                    </span>
+                    {projeto.data_lancamento && (
+                      <span className="text-xs text-gray-400">
+                        {new Date(projeto.data_lancamento).toLocaleDateString('pt-BR')}
+                      </span>
+                    )}
+                    {projeto.tem_pre_producao !== null && (
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                        projeto.tem_pre_producao 
+                          ? 'bg-purple-500/20 text-purple-400' 
+                          : 'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        {projeto.tem_pre_producao ? 'Com Pré-Produção' : 'Sem Pré-Produção'}
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="relative actions-menu-container pt-2 border-t border-dark-border" onClick={(e) => e.stopPropagation()}>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setShowActionsMenu(showActionsMenu === projeto.id ? null : projeto.id);
+                      }}
+                      className="actions-menu-button p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
+                      type="button"
+                    >
+                      <i className="ri-more-2-fill text-gray-400"></i>
+                    </button>
+                    
+                    {showActionsMenu === projeto.id && (
+                      <div 
+                        className="absolute right-0 bottom-full mb-2 w-48 bg-dark-card border border-dark-border rounded-lg shadow-lg z-50 actions-menu-container"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setShowActionsMenu(null);
+                            navigate(`/projetos/${projeto.id}`);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2 rounded-t-lg"
+                        >
+                          <i className="ri-eye-line"></i>
+                          Ver Detalhes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            setShowActionsMenu(null);
+                            navigate(`/projetos/${projeto.id}`);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-hover transition-smooth cursor-pointer flex items-center gap-2"
+                        >
+                          <i className="ri-edit-line"></i>
+                          Editar
+                        </button>
+                        <div className="border-t border-dark-border"></div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleDeleteClick(projeto);
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-smooth cursor-pointer flex items-center gap-2 rounded-b-lg"
+                        >
+                          <i className="ri-delete-bin-line"></i>
+                          Excluir
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {filteredProjetos.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <i className="ri-music-2-line text-4xl mb-2"></i>
+                  <p className="text-sm">Nenhum projeto encontrado</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Desktop Table View */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-dark-bg border-b border-dark-border">
                   <tr>
