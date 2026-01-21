@@ -720,6 +720,31 @@ export default function ProjetoDetalhes() {
     }
   };
 
+  const handleSaveAnexoFromYouTube = async (url: string, videoId: string, faixaId?: string) => {
+    if (!id) return;
+
+    try {
+      const { error } = await supabase
+        .from('projeto_anexos')
+        .insert([{
+          projeto_id: id,
+          faixa_id: faixaId || null,
+          tipo: 'outro',
+          arquivo_url: url,
+          arquivo_nome: `YouTube: ${videoId}`,
+          descricao: `Vídeo enviado para YouTube (ID: ${videoId})`,
+        }]);
+
+      if (error) throw error;
+
+      loadProjetoData();
+      alert('Vídeo do YouTube salvo com sucesso!');
+    } catch (error) {
+      console.error('Erro ao salvar vídeo do YouTube:', error);
+      alert('Erro ao salvar vídeo do YouTube. Tente novamente.');
+    }
+  };
+
   const handleDeleteAnexo = async (anexoId: string) => {
     if (!confirm('Tem certeza que deseja excluir este anexo?')) return;
 
@@ -2768,6 +2793,7 @@ export default function ProjetoDetalhes() {
                   >
                     <option value="link">Link</option>
                     <option value="arquivo">Arquivo (R2)</option>
+                    <option value="youtube">Upload para YouTube</option>
                   </select>
                 </div>
 
@@ -2962,6 +2988,32 @@ export default function ProjetoDetalhes() {
                       name="descricao"
                       className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
                       rows={3}
+                    />
+                  </div>
+                )}
+
+                {audioVideoFormato === 'youtube' && (
+                  <div className="mt-4">
+                    <YouTubeUpload
+                      onUploadComplete={(url, videoId) => {
+                        // Salvar o vídeo do YouTube como anexo
+                        if (selectedFaixaForModal) {
+                          handleSaveAnexoFromYouTube(url, videoId, selectedFaixaForModal.id);
+                        }
+                        setShowAudioVideoModal(false);
+                        setSelectedFaixaForModal(null);
+                        setAudioVideoFormato('link');
+                      }}
+                      onError={(error) => {
+                        alert(`Erro ao fazer upload: ${error}`);
+                      }}
+                      projetoNome={projeto?.nome}
+                      artistaNome={projeto?.artista?.nome}
+                      onCancel={() => {
+                        setShowAudioVideoModal(false);
+                        setSelectedFaixaForModal(null);
+                        setAudioVideoFormato('link');
+                      }}
                     />
                   </div>
                 )}
