@@ -126,7 +126,10 @@ export default function FileUpload({
             <img
               src={preview}
               alt="Preview"
+              width={384}
+              height={192}
               className="w-full h-48 object-cover rounded-lg border border-dark-border"
+              decoding="async"
             />
             <button
               type="button"

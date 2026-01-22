@@ -415,12 +415,16 @@ export default function ArtistaDetalhes() {
                 {editMode ? (
                   <div className="w-20 h-20 rounded-full overflow-hidden bg-dark-bg border-2 border-primary-teal flex items-center justify-center relative group">
                     {fotoPreview ? (
-                      <img src={fotoPreview} alt="Preview" className="w-full h-full object-cover" />
+                      <img src={fotoPreview} alt="Preview" width={80} height={80} className="w-full h-full object-cover" decoding="async" />
                     ) : getArtistaFoto(artista.nome, artista.foto_url) ? (
                       <img 
                         src={getArtistaFoto(artista.nome, artista.foto_url) || ''} 
                         alt={artista.nome}
+                        width={80}
+                        height={80}
                         className="w-full h-full object-cover"
+                        fetchPriority="high"
+                        decoding="async"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
                           target.style.display = 'none';
@@ -449,7 +453,11 @@ export default function ArtistaDetalhes() {
                       <img 
                         src={getArtistaFoto(artista.nome, artista.foto_url) || ''} 
                         alt={artista.nome}
+                        width={80}
+                        height={80}
                         className="w-full h-full object-cover"
+                        fetchPriority="high"
+                        decoding="async"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
                           target.style.display = 'none';
@@ -548,12 +556,16 @@ export default function ArtistaDetalhes() {
                   <div className="flex items-center gap-4">
                     <div className="w-32 h-32 rounded-xl overflow-hidden bg-dark-bg border-2 border-dashed border-dark-border flex items-center justify-center">
                       {fotoPreview ? (
-                        <img src={fotoPreview} alt="Preview" className="w-full h-full object-cover" />
+                        <img src={fotoPreview} alt="Preview" width={128} height={128} className="w-full h-full object-cover" decoding="async" />
                       ) : getArtistaFoto(artista.nome, artista.foto_url) ? (
                         <img 
                           src={getArtistaFoto(artista.nome, artista.foto_url) || ''} 
                           alt={artista.nome}
+                          width={128}
+                          height={128}
                           className="w-full h-full object-cover"
+                          loading="lazy"
+                          decoding="async"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
                             target.style.display = 'none';
