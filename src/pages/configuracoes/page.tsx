@@ -473,11 +473,11 @@ export default function Configuracoes() {
                       <i className="ri-youtube-line text-2xl text-red-400"></i>
                       <div>
                         <p className="text-white font-medium">YouTube</p>
-                        <p className="text-xs text-gray-400">Integração com YouTube API</p>
+                        <p className="text-xs text-gray-400">Upload desativado (substituído por Cloudflare Stream)</p>
                       </div>
                     </div>
-                    <span className="px-3 py-1 text-xs rounded-lg bg-green-500/20 text-green-400">
-                      Conectado
+                    <span className="px-3 py-1 text-xs rounded-lg bg-gray-500/20 text-gray-300">
+                      Desativado
                     </span>
                   </div>
                   <div className="flex items-center justify-between p-4 bg-dark-bg rounded-lg">

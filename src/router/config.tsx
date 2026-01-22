@@ -17,7 +17,6 @@ import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
 import Documentos from "../pages/documentos/page";
 import Configuracoes from "../pages/configuracoes/page";
-import YouTubeCallback from "../pages/youtube-callback/page";
 import SharedAudioVideoForm from "../pages/shared-audio-video/page";
 import ProtectedRoute from "../components/ProtectedRoute";
 
@@ -93,10 +92,6 @@ const routes: RouteObject[] = [
   {
     path: "/configuracoes",
     element: <ProtectedRoute><Configuracoes /></ProtectedRoute>,
-  },
-  {
-    path: "/youtube-callback",
-    element: <YouTubeCallback />,
   },
   {
     path: "/shared/audio-video/:token",

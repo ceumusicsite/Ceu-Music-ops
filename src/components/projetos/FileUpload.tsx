@@ -5,6 +5,7 @@ interface FileUploadProps {
   bucket: string;
   folder?: string;
   onUploadComplete: (url: string, fileName: string) => void;
+  onUploadCompleteData?: (data: { url: string; fileName: string; key: string; bucket: string }) => void;
   onError?: (error: string) => void;
   accept?: string;
   maxSizeMB?: number;
@@ -19,6 +20,7 @@ export default function FileUpload({
   bucket,
   folder = '',
   onUploadComplete,
+  onUploadCompleteData,
   onError,
   accept = '*/*',
   maxSizeMB = 50,
@@ -70,8 +72,9 @@ export default function FileUpload({
       } else if (bucket === 'comprovantes') {
         r2Bucket = R2_BUCKETS.COMPROVANTES;
       } else if (bucket === 'faixas-audio-video') {
-        // Mapear faixas-audio-video para o bucket de áudio do R2
         r2Bucket = R2_BUCKETS.AUDIO;
+      } else if (bucket === 'projetos-referencias') {
+        r2Bucket = R2_BUCKETS.ANEXOS;
       }
 
       // Upload usando serviço unificado (R2 por padrão)
@@ -86,6 +89,7 @@ export default function FileUpload({
       // Usar nome customizado se fornecido, senão usar o nome original do arquivo
       const finalFileName = customFileName ? `${customFileName}.${file.name.split('.').pop()}` : file.name;
       onUploadComplete(result.url, finalFileName);
+      onUploadCompleteData?.({ url: result.url, fileName: finalFileName, key: result.key, bucket: r2Bucket });
       
       // Limpar preview e input
       setPreview(null);

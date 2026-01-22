@@ -5,7 +5,9 @@ import { supabase } from '../../lib/supabase';
 import YouTubePreview from '../../components/projetos/YouTubePreview';
 import ReferenciaForm from '../../components/projetos/ReferenciaForm';
 import FileUpload from '../../components/projetos/FileUpload';
-import YouTubeUpload from '../../components/projetos/YouTubeUpload';
+import StreamPreview from '../../components/projetos/StreamPreview';
+import { getSignedUrlR2 } from '../../lib/r2';
+import { createStreamVideoFromUrl, getStreamIframeUrl } from '../../services/stream';
 import { fornecedoresMock } from '../../data/fornecedores-mock';
 import { produtoresMock } from '../../data/produtores-mock';
 
@@ -84,6 +86,10 @@ interface FaixaAudioVideo {
   formato: 'arquivo' | 'link';
   arquivo_url?: string;
   arquivo_nome?: string;
+  arquivo_bucket?: string;
+  arquivo_key?: string;
+  stream_uid?: string;
+  stream_iframe_url?: string;
   link_url?: string;
   descricao?: string;
   versao?: string;
@@ -156,13 +162,14 @@ export default function ProjetoDetalhes() {
   const [showFichaTecnicaModal, setShowFichaTecnicaModal] = useState(false);
   const [showAudioVideoModal, setShowAudioVideoModal] = useState(false);
   const [selectedFaixaForModal, setSelectedFaixaForModal] = useState<Faixa | null>(null);
-  const [audioVideoFormato, setAudioVideoFormato] = useState<'link' | 'arquivo' | 'youtube' | 'compartilhavel'>('link');
+  const [audioVideoFormato, setAudioVideoFormato] = useState<'link' | 'arquivo' | 'compartilhavel'>('link');
   const [audioVideoTipo, setAudioVideoTipo] = useState<'audio' | 'video' | ''>('');
   const [sharedLink, setSharedLink] = useState<string | null>(null);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [playingAudioVideo, setPlayingAudioVideo] = useState<FaixaAudioVideo | null>(null);
-  const [uploadedFileData, setUploadedFileData] = useState<{ url: string; fileName: string } | null>(null);
+  const [uploadedFileData, setUploadedFileData] = useState<{ url: string; fileName: string; bucket: string; key: string } | null>(null);
+  const [creatingStream, setCreatingStream] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -720,31 +727,6 @@ export default function ProjetoDetalhes() {
     }
   };
 
-  const handleSaveAnexoFromYouTube = async (url: string, videoId: string, faixaId?: string) => {
-    if (!id) return;
-
-    try {
-      const { error } = await supabase
-        .from('projeto_anexos')
-        .insert([{
-          projeto_id: id,
-          faixa_id: faixaId || null,
-          tipo: 'outro',
-          arquivo_url: url,
-          arquivo_nome: `YouTube: ${videoId}`,
-          descricao: `Vídeo enviado para YouTube (ID: ${videoId})`,
-        }]);
-
-      if (error) throw error;
-
-      loadProjetoData();
-      alert('Vídeo do YouTube salvo com sucesso!');
-    } catch (error) {
-      console.error('Erro ao salvar vídeo do YouTube:', error);
-      alert('Erro ao salvar vídeo do YouTube. Tente novamente.');
-    }
-  };
-
   const handleDeleteAnexo = async (anexoId: string) => {
     if (!confirm('Tem certeza que deseja excluir este anexo?')) return;
 
@@ -814,6 +796,10 @@ export default function ProjetoDetalhes() {
     formato: 'arquivo' | 'link';
     arquivo_url?: string;
     arquivo_nome?: string;
+    arquivo_bucket?: string;
+    arquivo_key?: string;
+    stream_uid?: string;
+    stream_iframe_url?: string;
     link_url?: string;
     descricao?: string;
     versao?: string;
@@ -2635,6 +2621,18 @@ export default function ProjetoDetalhes() {
               <div className="space-y-4">
                 {/* Detectar se é YouTube */}
                 {(() => {
+                  // Cloudflare Stream (preferencial para vídeo interno)
+                  if (playingAudioVideo.tipo === 'video' && playingAudioVideo.stream_uid) {
+                    const iframeUrl = playingAudioVideo.stream_iframe_url || getStreamIframeUrl(playingAudioVideo.stream_uid);
+                    return (
+                      <StreamPreview
+                        uid={playingAudioVideo.stream_uid}
+                        iframeUrl={iframeUrl}
+                        title={playingAudioVideo.arquivo_nome || playingAudioVideo.descricao || 'Vídeo'}
+                      />
+                    );
+                  }
+
                   const url = playingAudioVideo.formato === 'link' ? playingAudioVideo.link_url : playingAudioVideo.arquivo_url;
                   if (!url) return null;
 
@@ -2780,7 +2778,7 @@ export default function ProjetoDetalhes() {
                     required
                     value={audioVideoFormato}
                     onChange={(e) => {
-                      const novoFormato = e.target.value as 'link' | 'arquivo' | 'youtube' | 'compartilhavel';
+                      const novoFormato = e.target.value as 'link' | 'arquivo' | 'compartilhavel';
                       setAudioVideoFormato(novoFormato);
                       setAudioVideoTipo('');
                       setUploadedFileData(null);
@@ -2793,7 +2791,6 @@ export default function ProjetoDetalhes() {
                   >
                     <option value="link">Link</option>
                     <option value="arquivo">Arquivo (R2)</option>
-                    <option value="youtube">Upload para YouTube</option>
                   </select>
                 </div>
 
@@ -2918,8 +2915,15 @@ export default function ProjetoDetalhes() {
                           bucket="faixas-audio-video"
                           folder={`faixa-${selectedFaixaForModal.id}`}
                           onUploadComplete={(url, fileName) => {
-                            // Armazenar dados do upload, mas não salvar ainda
-                            setUploadedFileData({ url, fileName });
+                            // Dados completos (bucket/key) chegam via onUploadCompleteData
+                          }}
+                          onUploadCompleteData={(data) => {
+                            setUploadedFileData({
+                              url: data.url,
+                              fileName: data.fileName,
+                              bucket: data.bucket,
+                              key: data.key,
+                            });
                           }}
                           onError={(error) => {
                             alert(`Erro: ${error}`);
@@ -2928,6 +2932,7 @@ export default function ProjetoDetalhes() {
                           accept={audioVideoTipo === 'audio' ? 'audio/*' : audioVideoTipo === 'video' ? 'video/*' : 'audio/*,video/*'}
                           maxSizeMB={200}
                           label="Selecionar arquivo"
+                          makePublic={audioVideoTipo === 'video'}
                           customFileName={audioVideoTipo === 'video' && projeto?.artista?.nome 
                             ? `video_${projeto.artista.nome.replace(/\s+/g, '_')}_ColorOK`
                             : undefined}
@@ -2963,62 +2968,32 @@ export default function ProjetoDetalhes() {
                   </p>
                 </div>
 
-                {audioVideoFormato !== 'youtube' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">
-                      Nome <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="nome_anexador"
-                      required
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                      placeholder="Digite seu nome completo"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      <i className="ri-information-line"></i> Informe seu nome para identificarmos quem anexou este áudio/vídeo
-                    </p>
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Nome <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="nome_anexador"
+                    required
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                    placeholder="Digite seu nome completo"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    <i className="ri-information-line"></i> Informe seu nome para identificarmos quem anexou este áudio/vídeo
+                  </p>
+                </div>
 
-                {audioVideoFormato !== 'youtube' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Descrição (opcional)</label>
-                    <textarea
-                      name="descricao"
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
-                      rows={3}
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Descrição (opcional)</label>
+                  <textarea
+                    name="descricao"
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth resize-none"
+                    rows={3}
+                  />
+                </div>
 
-                {audioVideoFormato === 'youtube' && (
-                  <div className="mt-4">
-                    <YouTubeUpload
-                      onUploadComplete={(url, videoId) => {
-                        // Salvar o vídeo do YouTube como anexo
-                        if (selectedFaixaForModal) {
-                          handleSaveAnexoFromYouTube(url, videoId, selectedFaixaForModal.id);
-                        }
-                        setShowAudioVideoModal(false);
-                        setSelectedFaixaForModal(null);
-                        setAudioVideoFormato('link');
-                      }}
-                      onError={(error) => {
-                        alert(`Erro ao fazer upload: ${error}`);
-                      }}
-                      projetoNome={projeto?.nome}
-                      artistaNome={projeto?.artista?.nome}
-                      onCancel={() => {
-                        setShowAudioVideoModal(false);
-                        setSelectedFaixaForModal(null);
-                        setAudioVideoFormato('link');
-                      }}
-                    />
-                  </div>
-                )}
-
-                {audioVideoFormato !== 'youtube' && audioVideoFormato !== 'compartilhavel' && (
+                {audioVideoFormato !== 'compartilhavel' && (
                   <div className="flex gap-3 pt-4">
                     <button
                       type="button"
@@ -3038,7 +3013,7 @@ export default function ProjetoDetalhes() {
                     {(audioVideoFormato === 'link' || audioVideoFormato === 'arquivo') && (
                       <button
                         type={audioVideoFormato === 'link' ? 'submit' : 'button'}
-                        onClick={audioVideoFormato === 'arquivo' ? () => {
+                        onClick={audioVideoFormato === 'arquivo' ? async () => {
                           // Verificar se todos os campos estão preenchidos
                           const tipoSelect = document.querySelector('[name="tipo"]') as HTMLSelectElement;
                           const versaoSelect = document.querySelector('[name="versao"]') as HTMLSelectElement;
@@ -3067,12 +3042,46 @@ export default function ProjetoDetalhes() {
                             return;
                           }
                           
+                          const tipoFinal = (tipoSelect?.value as 'audio' | 'video') || 'audio';
+
+                          // Se for vídeo, criar também no Cloudflare Stream (playback interno)
+                          let streamUid: string | undefined;
+                          let streamIframeUrl: string | undefined;
+                          if (tipoFinal === 'video') {
+                            try {
+                              setCreatingStream(true);
+                              // Gerar uma URL assinada mais longa para o Stream copiar (24h)
+                              const sourceUrl = await getSignedUrlR2(uploadedFileData.bucket, uploadedFileData.key, 24 * 3600);
+                              const name = `${projeto?.nome || 'Projeto'} - ${selectedFaixaForModal.nome}`;
+                              const result = await createStreamVideoFromUrl({
+                                sourceUrl,
+                                name,
+                                meta: {
+                                  projetoId: id,
+                                  faixaId: selectedFaixaForModal.id,
+                                },
+                              });
+                              streamUid = result.uid;
+                              streamIframeUrl = getStreamIframeUrl(streamUid) || undefined;
+                            } catch (e: any) {
+                              console.error('Erro ao criar vídeo no Stream:', e);
+                              alert(`Erro ao enviar para Cloudflare Stream: ${e?.message || 'Erro desconhecido'}`);
+                              return;
+                            } finally {
+                              setCreatingStream(false);
+                            }
+                          }
+
                           // Salvar os dados no sistema
-                          handleSaveAudioVideo(selectedFaixaForModal.id, {
-                            tipo: (tipoSelect?.value as 'audio' | 'video') || 'audio',
+                          await handleSaveAudioVideo(selectedFaixaForModal.id, {
+                            tipo: tipoFinal,
                             formato: 'arquivo',
-                            arquivo_url: uploadedFileData.url,
+                            arquivo_url: uploadedFileData.url, // backup no R2 (URL pode ser pública ou signed)
                             arquivo_nome: uploadedFileData.fileName,
+                            arquivo_bucket: uploadedFileData.bucket,
+                            arquivo_key: uploadedFileData.key,
+                            stream_uid: streamUid,
+                            stream_iframe_url: streamIframeUrl,
                             descricao: descricaoInput?.value || undefined,
                             versao: versaoSelect?.value || undefined,
                             nome_anexador: nomeAnexador,
@@ -3081,9 +3090,10 @@ export default function ProjetoDetalhes() {
                           // Limpar dados do upload
                           setUploadedFileData(null);
                         } : undefined}
-                        className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
+                        disabled={creatingStream}
+                        className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Salvar
+                        {creatingStream ? 'Enviando para Stream...' : 'Salvar'}
                       </button>
                     )}
                   </div>
