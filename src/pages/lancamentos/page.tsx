@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -447,16 +448,25 @@ export default function Lancamentos() {
             <h1 className="text-3xl font-bold text-white mb-2">Lançamentos</h1>
             <p className="text-gray-400">Controle completo de lançamentos musicais</p>
           </div>
-          <button 
-            onClick={() => {
-              resetForm();
-              setShowModal(true);
-            }}
-            className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
-          >
-            <i className="ri-add-line text-xl"></i>
-            Novo Lançamento
-          </button>
+          <div className="flex gap-3">
+            <Link
+              to="/lancamentos/calendario"
+              className="px-6 py-3 bg-dark-bg hover:bg-dark-hover border border-dark-border hover:border-primary-teal text-white font-medium rounded-lg transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
+            >
+              <i className="ri-calendar-line text-xl"></i>
+              Ver Calendário
+            </Link>
+            <button 
+              onClick={() => {
+                resetForm();
+                setShowModal(true);
+              }}
+              className="px-6 py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
+            >
+              <i className="ri-add-line text-xl"></i>
+              Novo Lançamento
+            </button>
+          </div>
         </div>
 
         {/* Stats */}

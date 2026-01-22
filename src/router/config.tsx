@@ -15,6 +15,7 @@ import Fornecedores from "../pages/fornecedores/page";
 import Orcamentos from "../pages/orcamentos/page";
 import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
+import CalendarioLancamentos from "../pages/lancamentos/Calendario";
 import Documentos from "../pages/documentos/page";
 import Configuracoes from "../pages/configuracoes/page";
 import SharedAudioVideoForm from "../pages/shared-audio-video/page";
@@ -84,6 +85,10 @@ const routes: RouteObject[] = [
   {
     path: "/lancamentos",
     element: <ProtectedRoute><Lancamentos /></ProtectedRoute>,
+  },
+  {
+    path: "/lancamentos/calendario",
+    element: <ProtectedRoute><CalendarioLancamentos /></ProtectedRoute>,
   },
   {
     path: "/documentos",
