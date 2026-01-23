@@ -309,7 +309,7 @@ export default function Artistas() {
 
         {/* Artists Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredArtistas.map((artista) => (
+          {filteredArtistas.map((artista, index) => (
             <div 
               key={artista.id} 
               className="bg-dark-card border border-dark-border rounded-xl overflow-hidden hover:border-primary-teal transition-smooth flex flex-col"
@@ -327,7 +327,12 @@ export default function Artistas() {
                     <img 
                       src={artista.foto} 
                       alt={artista.nome}
+                      width={208}
+                      height={256}
                       className="w-full h-full object-cover"
+                      loading={index < 6 ? "eager" : "lazy"}
+                      fetchPriority={index < 3 ? "high" : "auto"}
+                      decoding="async"
                       onError={(e) => {
                         // Se a imagem não carregar, mostra as iniciais
                         const target = e.target as HTMLImageElement;

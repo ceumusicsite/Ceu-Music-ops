@@ -50,7 +50,11 @@ export default function Login() {
           <img 
             src="https://static.readdy.ai/image/016995f7e8292e3ea703f912413c6e1c/af9e13ed434ed318d1a9a4df0aa3c822.png" 
             alt="CEU Music" 
+            width={96}
+            height={96}
             className="w-24 h-24 mx-auto mb-4 object-contain"
+            fetchPriority="high"
+            decoding="async"
           />
           <h1 className="text-3xl font-bold text-white mb-2">CEU Music Ops</h1>
           <p className="text-gray-400">Gestão completa de produção musical</p>
