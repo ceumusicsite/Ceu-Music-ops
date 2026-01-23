@@ -42,34 +42,26 @@ export interface UploadResult {
 }
 
 /**
- * Faz upload de um arquivo para o Cloudflare R2 usando presigned URL
- * Esta abordagem pode funcionar melhor com CORS
+ * Faz upload para o R2 usando presigned URL (recebe o buffer já lido)
  */
 async function uploadViaPresignedUrl(
-  file: File,
+  arrayBuffer: ArrayBuffer,
   bucket: string,
   key: string,
   contentType: string
 ): Promise<void> {
-  // Gerar presigned URL para PUT
   const putCommand = new PutObjectCommand({
     Bucket: bucket,
     Key: key,
     ContentType: contentType,
   });
-  
-  const presignedUrl = await getSignedUrl(s3Client, putCommand, { expiresIn: 300 }); // 5 minutos
-  
-  // Fazer upload usando fetch com presigned URL
-  const arrayBuffer = await file.arrayBuffer();
+  const presignedUrl = await getSignedUrl(s3Client, putCommand, { expiresIn: 300 });
+
   const response = await fetch(presignedUrl, {
     method: 'PUT',
     body: arrayBuffer,
-    headers: {
-      'Content-Type': contentType,
-    },
+    headers: { 'Content-Type': contentType },
   });
-
   if (!response.ok) {
     throw new Error(`Upload falhou: ${response.status} ${response.statusText}`);
   }
@@ -109,26 +101,30 @@ export async function uploadToR2(
 
   const contentType = options.contentType || file.type || 'application/octet-stream';
 
+  // Ler o arquivo UMA VEZ só. Segunda leitura do mesmo File pode falhar com
+  // "permission problems" (ex.: Windows, OneDrive). Fallback: slice() às vezes evita o bloqueio.
+  let arrayBuffer: ArrayBuffer;
   try {
-    // Tentar primeiro com presigned URL (melhor para CORS)
+    arrayBuffer = await file.arrayBuffer();
+  } catch (e1: any) {
     try {
-      await uploadViaPresignedUrl(file, bucket, key, contentType);
+      arrayBuffer = await file.slice(0, file.size, file.type || undefined).arrayBuffer();
+    } catch (e2: any) {
+      throw new Error(`Erro ao ler arquivo: ${(e2?.message || e1?.message) || 'Não foi possível ler o arquivo. Verifique se o arquivo não está sendo usado por outro programa.'}`);
+    }
+  }
+
+  try {
+    try {
+      await uploadViaPresignedUrl(arrayBuffer, bucket, key, contentType);
     } catch (presignedError: any) {
-      // Se presigned URL falhar, tentar método direto
       console.warn('Upload via presigned URL falhou, tentando método direto:', presignedError);
-      
-      // Converter File para ArrayBuffer para compatibilidade com AWS SDK no navegador
-      const arrayBuffer = await file.arrayBuffer();
-      
-      // Preparar comando de upload
       const command = new PutObjectCommand({
         Bucket: bucket,
         Key: key,
         Body: new Uint8Array(arrayBuffer),
         ContentType: contentType,
       });
-
-      // Fazer upload
       await s3Client.send(command);
     }
 

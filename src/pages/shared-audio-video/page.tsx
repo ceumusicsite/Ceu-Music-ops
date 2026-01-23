@@ -363,7 +363,6 @@ export default function SharedAudioVideoForm() {
                     }}
                     onError={(error) => alert(`Erro: ${error}`)}
                     accept={formData.tipo === 'audio' ? 'audio/*' : formData.tipo === 'video' ? 'video/*' : 'audio/*,video/*'}
-                    maxSizeMB={200}
                     label="Selecionar arquivo"
                   />
                   {uploadedFile && (

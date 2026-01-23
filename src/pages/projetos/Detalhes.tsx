@@ -2312,7 +2312,6 @@ export default function ProjetoDetalhes() {
                     }}
                     onError={(error) => alert(`Erro: ${error}`)}
                     accept="*/*"
-                    maxSizeMB={100}
                     label="Selecionar arquivo"
                   />
                 </div>
@@ -2930,7 +2929,6 @@ export default function ProjetoDetalhes() {
                             setUploadedFileData(null);
                           }}
                           accept={audioVideoTipo === 'audio' ? 'audio/*' : audioVideoTipo === 'video' ? 'video/*' : 'audio/*,video/*'}
-                          maxSizeMB={200}
                           label="Selecionar arquivo"
                           makePublic={audioVideoTipo === 'video'}
                           customFileName={audioVideoTipo === 'video' && projeto?.artista?.nome 

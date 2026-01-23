@@ -6,6 +6,9 @@
 
 import { supabase } from '../lib/supabase';
 
+// ⚠️ FUNCIONALIDADE DESATIVADA
+const YOUTUBE_UPLOAD_DISABLED = true;
+
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || import.meta.env.VITE_YOUTUBE_CLIENT_ID;
 const CLIENT_SECRET = import.meta.env.VITE_YOUTUBE_CLIENT_SECRET;
 
@@ -175,6 +178,11 @@ export async function uploadVideoToYouTube(
   options: YouTubeUploadOptions,
   onProgress?: (progress: number) => void
 ): Promise<YouTubeUploadResult> {
+  // ⚠️ FUNCIONALIDADE DESATIVADA
+  if (YOUTUBE_UPLOAD_DISABLED) {
+    throw new Error('Upload para YouTube está temporariamente desativado. O código foi preservado e pode ser reativado no futuro.');
+  }
+
   // Obter token válido da conta CEU Music
   const accessToken = await getValidAccessToken();
 
@@ -381,6 +389,11 @@ async function uploadVideoFile(
  * Gera URL de autenticação OAuth 2.0 do YouTube para configurar a conta CEU Music
  */
 export function getYouTubeAuthUrl(): string {
+  // ⚠️ FUNCIONALIDADE DESATIVADA
+  if (YOUTUBE_UPLOAD_DISABLED) {
+    throw new Error('Upload para YouTube está temporariamente desativado. O código foi preservado e pode ser reativado no futuro.');
+  }
+
   if (!CLIENT_ID || CLIENT_ID.trim() === '') {
     throw new Error('Client ID não configurado. Verifique VITE_GOOGLE_CLIENT_ID no arquivo .env.local');
   }
@@ -404,6 +417,11 @@ export function getYouTubeAuthUrl(): string {
  * Obtém token de acesso a partir do código de autorização e salva no Supabase
  */
 export async function getAccessTokenFromCode(code: string): Promise<void> {
+  // ⚠️ FUNCIONALIDADE DESATIVADA
+  if (YOUTUBE_UPLOAD_DISABLED) {
+    throw new Error('Upload para YouTube está temporariamente desativado. O código foi preservado e pode ser reativado no futuro.');
+  }
+
   if (!CLIENT_ID || !CLIENT_SECRET) {
     throw new Error('Client ID ou Client Secret não configurados');
   }

@@ -2,6 +2,8 @@
 
 Este sistema foi ajustado para **subir vídeos das faixas para o Cloudflare Stream** (para playback interno) e **manter o arquivo no Cloudflare R2** (para armazenamento/backup).
 
+> 📖 **Para um guia completo e detalhado, consulte:** [`GUIA_INTEGRACAO_STREAM.md`](../GUIA_INTEGRACAO_STREAM.md)
+
 Referência: [Cloudflare Stream docs](https://developers.cloudflare.com/stream/)
 
 ## 1) Pré-requisitos no Cloudflare

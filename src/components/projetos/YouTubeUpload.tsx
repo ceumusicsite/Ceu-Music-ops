@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { uploadVideoToYouTube, isYouTubeConfigured, getYouTubeAuthUrl } from '../../services/youtube-shared';
 
+// ⚠️ FUNCIONALIDADE DESATIVADA
+const YOUTUBE_UPLOAD_DISABLED = true;
+
 interface YouTubeUploadProps {
   onUploadComplete: (videoUrl: string, videoId: string) => void;
   onError?: (error: string) => void;
@@ -142,6 +145,25 @@ export default function YouTubeUpload({
         });
     }
   }, []);
+
+  // ⚠️ FUNCIONALIDADE DESATIVADA - Mostrar mensagem de desativação
+  if (YOUTUBE_UPLOAD_DISABLED) {
+    return (
+      <div className="p-4 bg-gray-500/10 border border-gray-500/30 rounded-lg">
+        <div className="flex items-start gap-3">
+          <i className="ri-youtube-line text-2xl text-gray-400"></i>
+          <div>
+            <p className="text-sm font-medium text-gray-400 mb-1">
+              Upload para YouTube Desativado
+            </p>
+            <p className="text-xs text-gray-500">
+              Esta funcionalidade está temporariamente desativada. O código foi preservado e pode ser reativado no futuro.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (checking) {
     return (

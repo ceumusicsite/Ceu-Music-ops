@@ -165,7 +165,6 @@ export default function ReferenciaForm({
               }}
               onError={(error) => alert(`Erro: ${error}`)}
               accept="*/*"
-              maxSizeMB={100}
               label="Selecionar arquivo"
             />
           )}

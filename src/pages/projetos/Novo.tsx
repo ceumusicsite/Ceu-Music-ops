@@ -851,7 +851,6 @@ export default function NovoProjeto() {
                     }}
                     onError={(error) => alert(`Erro: ${error}`)}
                     accept="*/*"
-                    maxSizeMB={100}
                     label="Selecionar arquivo"
                   />
                 </div>
@@ -958,7 +957,6 @@ export default function NovoProjeto() {
                     onUploadComplete={(url, fileName) => handleSaveAnexoProjeto(url, fileName)}
                     onError={(error) => alert(`Erro: ${error}`)}
                     accept="*/*"
-                    maxSizeMB={100}
                     label="Selecionar arquivo"
                   />
                 </div>

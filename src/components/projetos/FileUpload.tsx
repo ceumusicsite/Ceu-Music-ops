@@ -23,7 +23,7 @@ export default function FileUpload({
   onUploadCompleteData,
   onError,
   accept = '*/*',
-  maxSizeMB = 50,
+  maxSizeMB,
   label = 'Selecionar arquivo',
   className = '',
   multiple = false,
@@ -38,22 +38,52 @@ export default function FileUpload({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const file = files[0];
+    const originalFile = files[0];
     
-    // Validar tamanho
-    const maxSizeBytes = maxSizeMB * 1024 * 1024;
-    if (file.size > maxSizeBytes) {
-      onError?.(`Arquivo muito grande. Tamanho máximo: ${maxSizeMB}MB`);
-      return;
+    // Validar tamanho apenas se maxSizeMB for fornecido e maior que 0
+    if (maxSizeMB && maxSizeMB > 0) {
+      const maxSizeBytes = maxSizeMB * 1024 * 1024;
+      if (originalFile.size > maxSizeBytes) {
+        onError?.(`Arquivo muito grande. Tamanho máximo: ${maxSizeMB}MB`);
+        return;
+      }
     }
+
+    // LER ARQUIVO IMEDIATAMENTE para evitar problemas de permissão/OneDrive.
+    // O File do input pode ficar "bloqueado" ou inválido após um tempo.
+    // Criamos uma cópia em memória que não depende do arquivo original no disco.
+    let arrayBuffer: ArrayBuffer;
+    try {
+      arrayBuffer = await originalFile.arrayBuffer();
+    } catch (e1: any) {
+      // Fallback: tentar com FileReader (API diferente, às vezes funciona)
+      try {
+        arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as ArrayBuffer);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsArrayBuffer(originalFile);
+        });
+      } catch (e2: any) {
+        onError?.(`Não foi possível ler o arquivo: ${e2?.message || e1?.message || 'Erro desconhecido'}. Tente copiar o arquivo para outra pasta (fora do OneDrive) e tente novamente.`);
+        return;
+      }
+    }
+
+    // Criar novo File a partir do buffer em memória
+    const file = new File([arrayBuffer], originalFile.name, {
+      type: originalFile.type,
+      lastModified: originalFile.lastModified,
+    });
 
     // Preview para imagens
     if (file.type.startsWith('image/')) {
+      const blob = new Blob([arrayBuffer], { type: file.type });
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreview(reader.result as string);
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(blob);
     }
 
     await handleUpload(file);

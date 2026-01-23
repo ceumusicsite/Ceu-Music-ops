@@ -1,4 +1,4 @@
-import { uploadToR2, getSignedUrlR2, deleteFromR2, fileExistsR2, getPublicUrlR2, R2_BUCKETS, UploadOptions, UploadResult } from '../lib/r2';
+import { uploadToR2 as uploadToR2Storage, getSignedUrlR2, deleteFromR2, fileExistsR2, getPublicUrlR2, R2_BUCKETS, UploadOptions, UploadResult } from '../lib/r2';
 import { supabase } from '../lib/supabase';
 
 export type StorageProvider = 'r2' | 'supabase';
@@ -38,40 +38,120 @@ export class StorageService {
    * Upload para Cloudflare R2
    */
   private async uploadToR2(file: File, options: StorageUploadOptions): Promise<UploadResult> {
-    return uploadToR2(file, {
-      bucket: options.bucket,
-      folder: options.folder,
-      contentType: options.contentType,
-      makePublic: options.makePublic,
-      customFileName: options.customFileName,
-    });
+    try {
+      return await uploadToR2Storage(file, {
+        bucket: options.bucket,
+        folder: options.folder,
+        contentType: options.contentType,
+        makePublic: options.makePublic,
+        customFileName: options.customFileName,
+      });
+    } catch (error: any) {
+      // Se R2 não estiver configurado ou houver erro de autenticação, fazer fallback para Supabase
+      const errorMessage = error.message || '';
+      if (
+        errorMessage.includes('Configuração do R2 não encontrada') ||
+        errorMessage.includes('InvalidAccessKeyId') ||
+        errorMessage.includes('SignatureDoesNotMatch') ||
+        errorMessage.includes('403') ||
+        errorMessage.includes('Access Denied')
+      ) {
+        console.warn('R2 não configurado ou com erro de autenticação, usando Supabase Storage como fallback');
+        return this.uploadToSupabase(file, options);
+      }
+      throw error;
+    }
   }
 
   /**
    * Upload para Supabase Storage (fallback)
    */
   private async uploadToSupabase(file: File, options: StorageUploadOptions): Promise<UploadResult> {
-    const bucket = options.bucket || 'anexos';
+    // Mapear buckets do R2 para buckets do Supabase
+    const bucketMapping: Record<string, string> = {
+      'ceu-music-documentos': 'documentos',
+      'ceu-music-anexos': 'anexos',
+      'ceu-music-comprovantes': 'comprovantes',
+      'ceu-music-audio': 'audio',
+      'faixas-audio-video': 'audio',
+      'projetos-anexos': 'anexos',
+      'projetos-referencias': 'anexos',
+    };
+    
+    // Usar bucket mapeado ou o bucket original, ou 'anexos' como padrão
+    const r2Bucket = options.bucket || 'anexos';
+    const supabaseBucket = bucketMapping[r2Bucket] || r2Bucket || 'anexos';
     
     // Gerar nome único para o arquivo
     const fileExt = file.name.split('.').pop();
-    const timestamp = Date.now();
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const fileName = options.folder 
-      ? `${options.folder}/${timestamp}_${sanitizedName}`
-      : `${timestamp}_${sanitizedName}`;
+    let fileName: string;
+    
+    if (options.customFileName) {
+      // Usar nome customizado se fornecido
+      const sanitizedCustomName = options.customFileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+      fileName = options.folder 
+        ? `${options.folder}/${sanitizedCustomName}.${fileExt}`
+        : `${sanitizedCustomName}.${fileExt}`;
+    } else {
+      // Gerar nome único com timestamp
+      const timestamp = Date.now();
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      fileName = options.folder 
+        ? `${options.folder}/${timestamp}_${sanitizedName}`
+        : `${timestamp}_${sanitizedName}`;
+    }
 
     try {
+      // Ler o arquivo de forma segura antes de fazer upload
+      // Isso evita problemas de permissão quando o arquivo é lido múltiplas vezes
+      let fileBlob: Blob;
+      try {
+        // Criar uma cópia do arquivo como Blob para evitar problemas de referência
+        fileBlob = file.slice(0, file.size, file.type);
+      } catch (readError: any) {
+        throw new Error(`Erro ao ler arquivo: ${readError.message || 'Não foi possível ler o arquivo. Verifique se o arquivo não está sendo usado por outro programa.'}`);
+      }
+      
       // Upload para Supabase
       const { error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, file);
+        .from(supabaseBucket)
+        .upload(fileName, fileBlob, {
+          contentType: options.contentType || file.type,
+          upsert: false,
+        });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        // Se o bucket não existir, tentar criar ou usar bucket padrão
+        if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
+          console.warn(`Bucket "${supabaseBucket}" não encontrado, tentando usar "anexos"`);
+          const fallbackBucket = 'anexos';
+          // Criar cópia do arquivo para evitar problemas de referência
+          const fallbackFileBlob = file.slice(0, file.size, file.type);
+          const { error: fallbackError } = await supabase.storage
+            .from(fallbackBucket)
+            .upload(fileName, fallbackFileBlob, {
+              contentType: options.contentType || file.type,
+              upsert: false,
+            });
+          
+          if (fallbackError) throw fallbackError;
+          
+          const { data: urlData } = supabase.storage
+            .from(fallbackBucket)
+            .getPublicUrl(fileName);
+          
+          return {
+            url: urlData.publicUrl,
+            key: fileName,
+            publicUrl: urlData.publicUrl,
+          };
+        }
+        throw uploadError;
+      }
 
       // Obter URL pública
       const { data: urlData } = supabase.storage
-        .from(bucket)
+        .from(supabaseBucket)
         .getPublicUrl(fileName);
 
       return {
