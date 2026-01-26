@@ -23,6 +23,7 @@ export default function SharedAudioVideoForm() {
 
   useEffect(() => {
     loadLinkData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const loadLinkData = async () => {
@@ -33,14 +34,40 @@ export default function SharedAudioVideoForm() {
     }
 
     try {
-      // Buscar o link compartilhável
-      const { data: linkData, error: fetchError } = await supabase
+      console.log('[SharedLink] Iniciando carregamento do link com token:', token);
+      
+      // Buscar o link compartilhável - usar array ao invés de single para evitar erro "cannot coerce"
+      const { data: linkDataArray, error: fetchError } = await supabase
         .from('shared_audio_video_links')
         .select('*')
         .eq('token', token)
-        .single();
+        .limit(1); // Limitar a 1 resultado para garantir performance
 
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        console.error('[SharedLink] Erro ao buscar link:', fetchError);
+        // Verificar se é o erro específico "cannot coerce"
+        if (fetchError.message && fetchError.message.includes('coerce')) {
+          throw new Error('Erro ao processar dados do link. Por favor, tente novamente.');
+        }
+        throw fetchError;
+      }
+
+      console.log('[SharedLink] Resultado da busca:', linkDataArray ? `${linkDataArray.length} resultado(s)` : 'null');
+
+      // Verificar se encontrou exatamente um resultado
+      if (!linkDataArray || linkDataArray.length === 0) {
+        console.warn('[SharedLink] Nenhum link encontrado com o token fornecido');
+        setError('Link não encontrado ou expirado');
+        setLoading(false);
+        return;
+      }
+
+      if (linkDataArray.length > 1) {
+        console.warn('[SharedLink] Múltiplos links encontrados com o mesmo token, usando o primeiro');
+      }
+
+      const linkData = linkDataArray[0];
+      console.log('[SharedLink] Link encontrado:', { id: linkData.id, faixa_id: linkData.faixa_id, projeto_id: linkData.projeto_id });
 
       if (!linkData) {
         setError('Link não encontrado');
@@ -48,35 +75,70 @@ export default function SharedAudioVideoForm() {
         return;
       }
 
-      // Buscar dados da faixa
-      const { data: faixaData, error: faixaError } = await supabase
+      // Buscar dados da faixa - usar array ao invés de single
+      const { data: faixaDataArray, error: faixaError } = await supabase
         .from('faixas')
         .select('id, nome, projeto_id')
         .eq('id', linkData.faixa_id)
-        .single();
+        .limit(1);
 
-      if (faixaError) throw faixaError;
+      if (faixaError) {
+        console.error('[SharedLink] Erro ao buscar faixa:', faixaError);
+        if (faixaError.message && faixaError.message.includes('coerce')) {
+          throw new Error('Erro ao processar dados da faixa. Por favor, tente novamente.');
+        }
+        throw faixaError;
+      }
 
-      // Buscar dados do projeto
-      const { data: projetoData, error: projetoError } = await supabase
+      if (!faixaDataArray || faixaDataArray.length === 0) {
+        console.error('[SharedLink] Faixa não encontrada:', linkData.faixa_id);
+        setError('Faixa não encontrada');
+        setLoading(false);
+        return;
+      }
+
+      const faixaData = faixaDataArray[0];
+      console.log('[SharedLink] Faixa encontrada:', faixaData.nome);
+
+      // Buscar dados do projeto - usar array ao invés de single
+      const { data: projetoDataArray, error: projetoError } = await supabase
         .from('projetos')
         .select('id, nome, artista_id')
         .eq('id', linkData.projeto_id)
-        .single();
+        .limit(1);
 
-      if (projetoError) throw projetoError;
+      if (projetoError) {
+        console.error('[SharedLink] Erro ao buscar projeto:', projetoError);
+        if (projetoError.message && projetoError.message.includes('coerce')) {
+          throw new Error('Erro ao processar dados do projeto. Por favor, tente novamente.');
+        }
+        throw projetoError;
+      }
 
-      // Buscar dados do artista
+      if (!projetoDataArray || projetoDataArray.length === 0) {
+        console.error('[SharedLink] Projeto não encontrado:', linkData.projeto_id);
+        setError('Projeto não encontrado');
+        setLoading(false);
+        return;
+      }
+
+      const projetoData = projetoDataArray[0];
+      console.log('[SharedLink] Projeto encontrado:', projetoData.nome);
+
+      // Buscar dados do artista - usar array ao invés de single
       let artistaData = null;
       if (projetoData.artista_id) {
-        const { data: artista, error: artistaError } = await supabase
+        const { data: artistaArray, error: artistaError } = await supabase
           .from('artistas')
           .select('nome')
           .eq('id', projetoData.artista_id)
-          .single();
+          .limit(1);
         
-        if (!artistaError) {
-          artistaData = artista;
+        if (artistaError) {
+          console.warn('[SharedLink] Erro ao buscar artista (não crítico):', artistaError);
+        } else if (artistaArray && artistaArray.length > 0) {
+          artistaData = artistaArray[0];
+          console.log('[SharedLink] Artista encontrado:', artistaData.nome);
         }
       }
 
@@ -121,8 +183,25 @@ export default function SharedAudioVideoForm() {
         }));
       }
     } catch (err: any) {
-      console.error('Erro ao carregar link:', err);
-      setError(err.message || 'Erro ao carregar link');
+      console.error('[SharedLink] Erro ao carregar link:', err);
+      console.error('[SharedLink] Detalhes do erro:', {
+        message: err.message,
+        code: err.code,
+        details: err.details,
+        hint: err.hint,
+      });
+      
+      // Tratar especificamente o erro "cannot coerce"
+      if (err.message && (err.message.includes('coerce') || err.message.includes('single json object'))) {
+        setError('Erro ao processar dados. Por favor, tente novamente ou entre em contato com o suporte.');
+      } else if (err.code === 'PGRST116') {
+        // Erro específico do PostgREST quando não encontra resultado
+        setError('Link não encontrado ou expirado');
+      } else if (err.message) {
+        setError(err.message);
+      } else {
+        setError('Erro ao carregar link. Por favor, tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
