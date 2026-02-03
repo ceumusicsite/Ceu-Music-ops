@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -9,6 +9,14 @@ export default function Login() {
   const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const status = searchParams.get('status');
+    if (status === 'pending') {
+      setError('Seu cadastro está aguardando aprovação de um administrador. Você receberá um e-mail quando for aprovado.');
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -9,6 +9,7 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
+  status?: 'pending' | 'approved' | 'rejected';
 }
 
 interface AuthContextType {
@@ -69,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           name: email.split('@')[0],
           email: email,
           role: 'admin' as UserRole,
+          status: 'approved' as const,
           avatar: null,
         };
 
@@ -80,20 +82,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (createError) throw createError;
 
+        // Verificar status antes de definir o usuário
+        if (createdUser.status === 'pending' || createdUser.status === 'rejected') {
+          await supabase.auth.signOut();
+          setUser(null);
+          window.location.href = '/login?status=pending';
+          return;
+        }
+
         setUser({
           id: createdUser.id,
           name: createdUser.name,
           email: createdUser.email,
           role: createdUser.role,
           avatar: createdUser.avatar,
+          status: createdUser.status,
         });
       } else {
+        // Verificar status antes de definir o usuário
+        if (data.status === 'pending' || data.status === 'rejected') {
+          await supabase.auth.signOut();
+          setUser(null);
+          window.location.href = '/login?status=pending';
+          return;
+        }
+
         setUser({
           id: data.id,
           name: data.name,
           email: data.email,
           role: data.role,
           avatar: data.avatar,
+          status: data.status,
         });
       }
     } catch (error) {

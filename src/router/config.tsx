@@ -35,6 +35,10 @@ const routes: RouteObject[] = [
     element: <Registro />,
   },
   {
+    path: "/registro/:token",
+    element: <Registro />,
+  },
+  {
     path: "/recuperar-senha",
     element: <RecuperarSenha />,
   },

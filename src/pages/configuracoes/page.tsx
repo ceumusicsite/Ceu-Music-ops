@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import type { UserRole } from '../../contexts/AuthContext';
 
-type TabType = 'usuarios' | 'configuracoes';
+type TabType = 'usuarios' | 'pendentes' | 'convites' | 'configuracoes';
 
 export default function Configuracoes() {
   const { user } = useAuth();
@@ -12,12 +12,28 @@ export default function Configuracoes() {
 
   const [activeTab, setActiveTab] = useState<TabType>('usuarios');
   const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [usuariosPendentes, setUsuariosPendentes] = useState<any[]>([]);
+  const [convites, setConvites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingPendentes, setLoadingPendentes] = useState(false);
+  const [loadingConvites, setLoadingConvites] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [selectedUsuario, setSelectedUsuario] = useState<any>(null);
+  const [selectedPendente, setSelectedPendente] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<UserRole | 'todos'>('todos');
+  
+  const [inviteFormData, setInviteFormData] = useState({
+    expiresDays: 7,
+    maxUses: 1,
+  });
+
+  const [approveFormData, setApproveFormData] = useState({
+    role: 'operador' as UserRole,
+  });
 
   const [formData, setFormData] = useState({
     name: '',
@@ -35,8 +51,14 @@ export default function Configuracoes() {
   useEffect(() => {
     if (isAdmin) {
       loadUsuarios();
+      if (activeTab === 'pendentes') {
+        loadUsuariosPendentes();
+      }
+      if (activeTab === 'convites') {
+        loadConvites();
+      }
     }
-  }, [isAdmin]);
+  }, [isAdmin, activeTab]);
 
   const loadUsuarios = async () => {
     try {
@@ -44,6 +66,7 @@ export default function Configuracoes() {
       const { data, error } = await supabase
         .from('users')
         .select('*')
+        .neq('status', 'pending')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -56,6 +79,201 @@ export default function Configuracoes() {
       setUsuarios([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadUsuariosPendentes = async () => {
+    try {
+      setLoadingPendentes(true);
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        setUsuariosPendentes(data);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar usuários pendentes:', error);
+      setUsuariosPendentes([]);
+    } finally {
+      setLoadingPendentes(false);
+    }
+  };
+
+  const loadConvites = async () => {
+    try {
+      setLoadingConvites(true);
+      const { data, error } = await supabase
+        .from('user_invites')
+        .select(`
+          *,
+          created_by_user:users!user_invites_created_by_fkey(name, email)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        // Processar dados para garantir que created_by_user esteja disponível
+        const processedData = data.map(convite => ({
+          ...convite,
+          created_by_user: convite.created_by_user || { name: 'N/A', email: 'N/A' }
+        }));
+        setConvites(processedData);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar convites:', error);
+      // Tentar carregar sem o join se houver erro
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('user_invites')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (!fallbackError && fallbackData) {
+        const processedData = fallbackData.map(convite => ({
+          ...convite,
+          created_by_user: { name: 'N/A', email: 'N/A' }
+        }));
+        setConvites(processedData);
+      } else {
+        setConvites([]);
+      }
+    } finally {
+      setLoadingConvites(false);
+    }
+  };
+
+  const generateInviteToken = () => {
+    // Gerar token aleatório de 32 caracteres usando crypto API
+    const array = new Uint8Array(24);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      crypto.getRandomValues(array);
+    } else {
+      // Fallback para ambientes sem crypto API
+      for (let i = 0; i < array.length; i++) {
+        array[i] = Math.floor(Math.random() * 256);
+      }
+    }
+    const token = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('').substring(0, 32);
+    return token;
+  };
+
+  const handleCreateInvite = async () => {
+    try {
+      if (!user?.id) {
+        alert('Erro: Usuário não identificado.');
+        return;
+      }
+
+      const token = generateInviteToken();
+      const expiresAt = inviteFormData.expiresDays > 0
+        ? new Date(Date.now() + inviteFormData.expiresDays * 24 * 60 * 60 * 1000).toISOString()
+        : null;
+
+      const { error } = await supabase
+        .from('user_invites')
+        .insert({
+          token,
+          created_by: user.id,
+          expires_at: expiresAt,
+          max_uses: inviteFormData.maxUses,
+          current_uses: 0,
+        });
+
+      if (error) throw error;
+
+      await loadConvites();
+      setShowInviteModal(false);
+      setInviteFormData({ expiresDays: 7, maxUses: 1 });
+      
+      // Mostrar link gerado
+      const baseUrl = window.location.origin;
+      const inviteLink = `${baseUrl}/registro/${token}`;
+      alert(`Link de convite gerado com sucesso!\n\n${inviteLink}\n\nCopie e compartilhe este link.`);
+    } catch (error: any) {
+      console.error('Erro ao criar convite:', error);
+      alert(`Erro ao criar convite: ${error.message || 'Verifique o console para mais detalhes.'}`);
+    }
+  };
+
+  const handleApproveUser = async () => {
+    if (!selectedPendente) return;
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          status: 'approved',
+          role: approveFormData.role,
+        })
+        .eq('id', selectedPendente.id);
+
+      if (error) throw error;
+
+      await loadUsuariosPendentes();
+      await loadUsuarios();
+      setShowApproveModal(false);
+      setSelectedPendente(null);
+      setApproveFormData({ role: 'operador' });
+      alert('Usuário aprovado com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao aprovar usuário:', error);
+      alert(`Erro ao aprovar usuário: ${error.message || 'Verifique o console para mais detalhes.'}`);
+    }
+  };
+
+  const handleRejectUser = async (userId: string) => {
+    if (!confirm('Tem certeza que deseja rejeitar este cadastro?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          status: 'rejected',
+        })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      await loadUsuariosPendentes();
+      alert('Cadastro rejeitado.');
+    } catch (error: any) {
+      console.error('Erro ao rejeitar usuário:', error);
+      alert(`Erro ao rejeitar usuário: ${error.message || 'Verifique o console para mais detalhes.'}`);
+    }
+  };
+
+  const copyInviteLink = (token: string) => {
+    const baseUrl = window.location.origin;
+    const inviteLink = `${baseUrl}/registro/${token}`;
+    navigator.clipboard.writeText(inviteLink);
+    alert('Link copiado para a área de transferência!');
+  };
+
+  const deleteInvite = async (inviteId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este convite?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('user_invites')
+        .delete()
+        .eq('id', inviteId);
+
+      if (error) throw error;
+
+      await loadConvites();
+      alert('Convite excluído com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao excluir convite:', error);
+      alert(`Erro ao excluir convite: ${error.message || 'Verifique o console para mais detalhes.'}`);
     }
   };
 
@@ -94,6 +312,7 @@ export default function Configuracoes() {
             name: formData.name.trim(),
             email: formData.email.trim(),
             role: formData.role,
+            status: 'approved',
             avatar: null
           }], {
             onConflict: 'id'
@@ -258,7 +477,7 @@ export default function Configuracoes() {
 
         {/* Tabs */}
         <div className="bg-dark-card border border-dark-border rounded-xl p-4 mb-6">
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
               onClick={() => setActiveTab('usuarios')}
               className={`px-4 py-2 rounded-lg transition-smooth cursor-pointer flex items-center gap-2 ${
@@ -268,7 +487,34 @@ export default function Configuracoes() {
               }`}
             >
               <i className="ri-user-line"></i>
-              <span>Gerenciar Usuários</span>
+              <span>Usuários Aprovados</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('pendentes')}
+              className={`px-4 py-2 rounded-lg transition-smooth cursor-pointer flex items-center gap-2 relative ${
+                activeTab === 'pendentes'
+                  ? 'bg-gradient-primary text-white'
+                  : 'bg-dark-bg text-gray-400 hover:bg-dark-hover hover:text-white'
+              }`}
+            >
+              <i className="ri-user-add-line"></i>
+              <span>Usuários Pendentes</span>
+              {usuariosPendentes.length > 0 && (
+                <span className="ml-2 px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
+                  {usuariosPendentes.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('convites')}
+              className={`px-4 py-2 rounded-lg transition-smooth cursor-pointer flex items-center gap-2 ${
+                activeTab === 'convites'
+                  ? 'bg-gradient-primary text-white'
+                  : 'bg-dark-bg text-gray-400 hover:bg-dark-hover hover:text-white'
+              }`}
+            >
+              <i className="ri-link"></i>
+              <span>Links Compartilháveis</span>
             </button>
             <button
               onClick={() => setActiveTab('configuracoes')}
@@ -413,6 +659,204 @@ export default function Configuracoes() {
                   <div className="text-center py-12">
                     <i className="ri-user-line text-6xl text-gray-600 mb-4"></i>
                     <p className="text-gray-400">Nenhum usuário encontrado</p>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* Tab: Usuários Pendentes */}
+        {activeTab === 'pendentes' && (
+          <>
+            {loadingPendentes ? (
+              <div className="text-center py-12">
+                <i className="ri-loader-4-line text-4xl text-primary-teal animate-spin mb-4"></i>
+                <p className="text-gray-400">Carregando usuários pendentes...</p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-dark-hover">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Usuário</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Email</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Data de Cadastro</th>
+                          <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-dark-border">
+                        {usuariosPendentes.map((usuario) => (
+                          <tr key={usuario.id} className="hover:bg-dark-hover transition-smooth">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                                  <span className="text-sm font-bold text-yellow-400">
+                                    {usuario.name?.charAt(0).toUpperCase() || 'U'}
+                                  </span>
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-white">{usuario.name}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-white">{usuario.email}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-400">
+                                {new Date(usuario.created_at).toLocaleDateString('pt-BR')}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedPendente(usuario);
+                                    setApproveFormData({ role: usuario.role || 'operador' });
+                                    setShowApproveModal(true);
+                                  }}
+                                  className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-smooth cursor-pointer flex items-center gap-2"
+                                  title="Aprovar"
+                                >
+                                  <i className="ri-check-line"></i>
+                                  <span>Aprovar</span>
+                                </button>
+                                <button
+                                  onClick={() => handleRejectUser(usuario.id)}
+                                  className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-smooth cursor-pointer flex items-center gap-2"
+                                  title="Rejeitar"
+                                >
+                                  <i className="ri-close-line"></i>
+                                  <span>Rejeitar</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {usuariosPendentes.length === 0 && (
+                  <div className="text-center py-12">
+                    <i className="ri-user-add-line text-6xl text-gray-600 mb-4"></i>
+                    <p className="text-gray-400">Nenhum usuário pendente</p>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* Tab: Links Compartilháveis */}
+        {activeTab === 'convites' && (
+          <>
+            <div className="bg-dark-card border border-dark-border rounded-xl p-4 mb-6">
+              <button
+                onClick={() => setShowInviteModal(true)}
+                className="px-4 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2"
+              >
+                <i className="ri-add-line text-lg"></i>
+                <span>Gerar Novo Link</span>
+              </button>
+            </div>
+
+            {loadingConvites ? (
+              <div className="text-center py-12">
+                <i className="ri-loader-4-line text-4xl text-primary-teal animate-spin mb-4"></i>
+                <p className="text-gray-400">Carregando convites...</p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-dark-hover">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Token</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Criado por</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Expira em</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Uso</th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-dark-border">
+                        {convites.map((convite) => {
+                          const baseUrl = window.location.origin;
+                          const inviteLink = `${baseUrl}/registro/${convite.token}`;
+                          const isExpired = convite.expires_at && new Date(convite.expires_at) < new Date();
+                          const isUsed = convite.used_at !== null;
+                          const isMaxUses = convite.current_uses >= convite.max_uses;
+                          const isValid = !isExpired && !isUsed && !isMaxUses;
+
+                          return (
+                            <tr key={convite.id} className="hover:bg-dark-hover transition-smooth">
+                              <td className="px-6 py-4">
+                                <div className="text-sm font-mono text-white break-all">{convite.token}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-400">
+                                  {convite.created_by_user?.name || 'N/A'}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-400">
+                                  {convite.expires_at 
+                                    ? new Date(convite.expires_at).toLocaleDateString('pt-BR')
+                                    : 'Sem expiração'}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-white">
+                                  {convite.current_uses} / {convite.max_uses}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`px-2 py-1 text-xs rounded-lg ${
+                                  isValid 
+                                    ? 'bg-green-500/20 text-green-400' 
+                                    : 'bg-gray-500/20 text-gray-400'
+                                }`}>
+                                  {isValid ? 'Válido' : isUsed ? 'Usado' : isExpired ? 'Expirado' : 'Esgotado'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  {isValid && (
+                                    <button
+                                      onClick={() => copyInviteLink(convite.token)}
+                                      className="p-2 hover:bg-primary-teal/20 text-primary-teal rounded-lg transition-smooth cursor-pointer"
+                                      title="Copiar link"
+                                    >
+                                      <i className="ri-file-copy-line text-lg"></i>
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => deleteInvite(convite.id)}
+                                    className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-smooth cursor-pointer"
+                                    title="Excluir"
+                                  >
+                                    <i className="ri-delete-bin-line text-lg"></i>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {convites.length === 0 && (
+                  <div className="text-center py-12">
+                    <i className="ri-link text-6xl text-gray-600 mb-4"></i>
+                    <p className="text-gray-400">Nenhum link compartilhável criado</p>
                   </div>
                 )}
               </>
@@ -688,6 +1132,151 @@ export default function Configuracoes() {
                     className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer"
                   >
                     Salvar Alterações
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Aprovar Usuário */}
+        {showApproveModal && selectedPendente && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-white">Aprovar Usuário</h2>
+                <button 
+                  onClick={() => {
+                    setShowApproveModal(false);
+                    setSelectedPendente(null);
+                  }}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+
+              <div className="mb-6 p-4 bg-dark-bg rounded-lg">
+                <p className="text-sm text-gray-400 mb-2">Usuário:</p>
+                <p className="text-white font-medium">{selectedPendente.name}</p>
+                <p className="text-sm text-gray-400 mt-1">{selectedPendente.email}</p>
+              </div>
+
+              <form onSubmit={(e) => { e.preventDefault(); handleApproveUser(); }} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Perfil *</label>
+                  <select
+                    required
+                    value={approveFormData.role}
+                    onChange={(e) => setApproveFormData({ ...approveFormData, role: e.target.value as UserRole })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  >
+                    {(['admin', 'executivo', 'ar', 'producao', 'financeiro', 'operador', 'viewer'] as UserRole[]).map(role => (
+                      <option key={role} value={role}>{getRoleLabel(role)}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                  <p className="text-xs text-blue-400">
+                    <i className="ri-information-line mr-1"></i>
+                    O usuário será aprovado e poderá acessar o sistema com o perfil selecionado.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowApproveModal(false);
+                      setSelectedPendente(null);
+                    }}
+                    className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-smooth cursor-pointer"
+                  >
+                    Aprovar Usuário
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Criar Convite */}
+        {showInviteModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-white">Gerar Link Compartilhável</h2>
+                <button 
+                  onClick={() => {
+                    setShowInviteModal(false);
+                    setInviteFormData({ expiresDays: 7, maxUses: 1 });
+                  }}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateInvite(); }} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Expira em (dias)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={inviteFormData.expiresDays}
+                    onChange={(e) => setInviteFormData({ ...inviteFormData, expiresDays: parseInt(e.target.value) || 0 })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                    placeholder="0 = sem expiração"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Deixe em 0 para link sem expiração</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Máximo de usos
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={inviteFormData.maxUses}
+                    onChange={(e) => setInviteFormData({ ...inviteFormData, maxUses: parseInt(e.target.value) || 1 })}
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Número máximo de vezes que o link pode ser usado</p>
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
+                  <p className="text-xs text-blue-400">
+                    <i className="ri-information-line mr-1"></i>
+                    O link gerado permitirá que pessoas se cadastrem no sistema. Após o cadastro, você precisará aprovar o usuário na aba "Usuários Pendentes".
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInviteModal(false);
+                      setInviteFormData({ expiresDays: 7, maxUses: 1 });
+                    }}
+                    className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer"
+                  >
+                    Gerar Link
                   </button>
                 </div>
               </form>

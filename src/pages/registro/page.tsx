@@ -66,6 +66,13 @@ export default function Registro() {
     setSuccess(false);
     
     try {
+      // Se houver token, validar novamente antes de criar
+      if (token && !tokenValid) {
+        setError('Link de convite inválido.');
+        setLoading(false);
+        return;
+      }
+
       // Criar usuário no Supabase Auth
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
@@ -80,6 +87,10 @@ export default function Registro() {
       if (signUpError) throw signUpError;
 
       if (data.user) {
+        // Determinar status e role baseado no token
+        const userStatus = token ? 'pending' : 'approved';
+        const userRole = token ? 'operador' : 'admin'; // Usuários via convite começam como operador
+
         // Criar perfil do usuário na tabela users usando upsert para evitar conflitos
         const { error: profileError } = await supabase
           .from('users')
@@ -87,7 +98,8 @@ export default function Registro() {
             id: data.user.id,
             name: nome || email.split('@')[0],
             email: email,
-            role: 'admin',
+            role: userRole,
+            status: userStatus,
             avatar: null
           }], {
             onConflict: 'id'
@@ -97,10 +109,34 @@ export default function Registro() {
           throw profileError;
         }
 
-        setSuccess(true);
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
+        // Se houver token, marcar como usado
+        if (token && inviteData) {
+          const { error: inviteUpdateError } = await supabase
+            .from('user_invites')
+            .update({
+              used_at: new Date().toISOString(),
+              used_by: data.user.id,
+              current_uses: inviteData.current_uses + 1
+            })
+            .eq('token', token);
+
+          if (inviteUpdateError) {
+            console.error('Erro ao atualizar convite:', inviteUpdateError);
+            // Não bloquear o cadastro se houver erro ao atualizar o convite
+          }
+        }
+
+        if (token) {
+          setSuccess(true);
+          setTimeout(() => {
+            navigate('/login');
+          }, 3000);
+        } else {
+          setSuccess(true);
+          setTimeout(() => {
+            navigate('/login');
+          }, 2000);
+        }
       }
     } catch (err: any) {
       console.error('Erro ao criar usuário:', err);
@@ -125,12 +161,35 @@ export default function Registro() {
             decoding="async"
           />
           <h1 className="text-3xl font-bold text-white mb-2">CEU Music Ops</h1>
-          <p className="text-gray-400">Criar conta de administrador</p>
+          <p className="text-gray-400">
+            {token ? 'Cadastro via convite' : 'Criar conta de administrador'}
+          </p>
         </div>
 
         {/* Registro Form */}
         <div className="bg-dark-card border border-dark-border rounded-xl p-8">
-          <h2 className="text-xl font-semibold text-white mb-6">Criar Primeiro Usuário</h2>
+          {validatingToken ? (
+            <div className="text-center py-8">
+              <i className="ri-loader-4-line text-4xl text-primary-teal animate-spin mb-4"></i>
+              <p className="text-gray-400">Validando link de convite...</p>
+            </div>
+          ) : token && !tokenValid ? (
+            <div className="text-center py-8">
+              <i className="ri-error-warning-line text-6xl text-red-400 mb-4"></i>
+              <h2 className="text-xl font-semibold text-white mb-2">Link Inválido</h2>
+              <p className="text-gray-400 mb-6">{error}</p>
+              <button
+                onClick={() => navigate('/login')}
+                className="px-6 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer"
+              >
+                Ir para Login
+              </button>
+            </div>
+          ) : (
+            <>
+              <h2 className="text-xl font-semibold text-white mb-6">
+                {token ? 'Complete seu cadastro' : 'Criar Primeiro Usuário'}
+              </h2>
           
           {error && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
@@ -189,27 +248,38 @@ export default function Registro() {
               <p className="text-xs text-gray-500 mt-1">A senha deve ter pelo menos 6 caracteres</p>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading || success}
-              className="w-full py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer disabled:opacity-50 whitespace-nowrap"
-            >
-              {loading ? 'Criando usuário...' : success ? 'Usuário criado!' : 'Criar Usuário Admin'}
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={loading || success || (token && !tokenValid)}
+                className="w-full py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer disabled:opacity-50 whitespace-nowrap"
+              >
+                {loading ? 'Criando usuário...' : success ? (token ? 'Cadastro realizado! Aguardando aprovação...' : 'Usuário criado!') : token ? 'Criar Conta' : 'Criar Usuário Admin'}
+              </button>
+            </form>
 
-          <div className="mt-6 text-center">
-            <a 
-              href="/login" 
-              onClick={(e) => {
-                e.preventDefault();
-                navigate('/login');
-              }}
-              className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer"
-            >
-              Já tem uma conta? Faça login
-            </a>
-          </div>
+            {token && (
+              <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <p className="text-xs text-blue-400">
+                  <i className="ri-information-line mr-1"></i>
+                  Seu cadastro será revisado por um administrador. Você receberá um e-mail quando for aprovado.
+                </p>
+              </div>
+            )}
+
+            <div className="mt-6 text-center">
+              <a 
+                href="/login" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate('/login');
+                }}
+                className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer"
+              >
+                Já tem uma conta? Faça login
+              </a>
+            </div>
+            </>
+          )}
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-6">
