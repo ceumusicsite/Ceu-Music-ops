@@ -1,15 +1,63 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
 export default function Registro() {
+  const { token } = useParams<{ token?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [nome, setNome] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [validatingToken, setValidatingToken] = useState(!!token);
+  const [tokenValid, setTokenValid] = useState(false);
+  const [inviteData, setInviteData] = useState<any>(null);
   const navigate = useNavigate();
+
+  // Validar token quando a página carregar
+  useEffect(() => {
+    const validateToken = async () => {
+      if (!token) {
+        setValidatingToken(false);
+        return;
+      }
+
+      try {
+        const { data, error: inviteError } = await supabase
+          .from('user_invites')
+          .select('*')
+          .eq('token', token)
+          .is('used_at', null)
+          .single();
+
+        if (inviteError || !data) {
+          setError('Link de convite inválido ou já utilizado.');
+          setTokenValid(false);
+        } else {
+          // Verificar se expirou
+          if (data.expires_at && new Date(data.expires_at) < new Date()) {
+            setError('Este link de convite expirou.');
+            setTokenValid(false);
+          } else if (data.current_uses >= data.max_uses) {
+            setError('Este link de convite já foi utilizado o número máximo de vezes.');
+            setTokenValid(false);
+          } else {
+            setTokenValid(true);
+            setInviteData(data);
+          }
+        }
+      } catch (err: any) {
+        console.error('Erro ao validar token:', err);
+        setError('Erro ao validar link de convite.');
+        setTokenValid(false);
+      } finally {
+        setValidatingToken(false);
+      }
+    };
+
+    validateToken();
+  }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
+import CalendarioWidget from '../../components/lancamentos/CalendarioWidget';
 
 interface Stats {
   projetos_ativos: number;
@@ -183,6 +184,11 @@ export default function Dashboard() {
               <p className="text-sm text-gray-400">{stat.label}</p>
             </div>
           ))}
+        </div>
+
+        {/* Calendário de Lançamentos */}
+        <div className="mb-8">
+          <CalendarioWidget compact />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

@@ -42,6 +42,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
   const [searchTerm, setSearchTerm] = useState('');
   const [tabelaNaoExiste, setTabelaNaoExiste] = useState(false);
   const [erroCarregamento, setErroCarregamento] = useState<string | null>(null);
+  const [previewArquivo, setPreviewArquivo] = useState<Anexo | null>(null);
 
   useEffect(() => {
     loadAnexos();
@@ -329,6 +330,17 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
+  const isArquivoImagem = (arquivo: Anexo): boolean => {
+    const ext = arquivo.arquivo_extensao?.toLowerCase() || arquivo.arquivo_tipo?.toLowerCase() || '';
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].some(e => ext.includes(e)) ||
+      (arquivo.arquivo_tipo || '').startsWith('image/');
+  };
+
+  const isArquivoPdf = (arquivo: Anexo): boolean => {
+    const ext = arquivo.arquivo_extensao?.toLowerCase() || '';
+    return ext === 'pdf' || (arquivo.arquivo_tipo || '').includes('pdf');
+  };
+
   const getIconeArquivo = (extensao?: string): string => {
     const ext = extensao?.toLowerCase() || '';
     const icones: Record<string, string> = {
@@ -549,50 +561,150 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
           ))}
 
           {/* Arquivos */}
-          {arquivos.map((arquivo) => (
-            <div
-              key={arquivo.id}
-              className={`bg-dark-bg border border-dark-border rounded-lg p-4 hover:border-primary-teal transition-smooth group ${
-                viewMode === 'list' ? 'flex items-center gap-4' : ''
-              }`}
-            >
-              <div className={`flex items-center gap-3 ${viewMode === 'list' ? 'flex-1' : 'flex-col'}`}>
-                <div className="w-12 h-12 rounded-lg bg-primary-teal/20 flex items-center justify-center text-primary-teal text-2xl">
-                  <i className={getIconeArquivo(arquivo.arquivo_extensao)}></i>
-                </div>
-                <div className={`flex-1 ${viewMode === 'list' ? '' : 'text-center'}`}>
-                  <h3 className="text-white font-medium text-sm truncate">{arquivo.nome}</h3>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {arquivo.arquivo_tamanho ? formatarTamanho(arquivo.arquivo_tamanho) : '—'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {arquivo.arquivo_url && (
-                    <a
-                      href={arquivo.arquivo_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="opacity-0 group-hover:opacity-100 text-primary-teal hover:text-primary-brown transition-opacity cursor-pointer"
-                      title="Abrir arquivo"
-                    >
-                      <i className="ri-external-link-line"></i>
-                    </a>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deletarItem(arquivo);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity cursor-pointer"
-                    title="Deletar arquivo"
-                  >
-                    <i className="ri-delete-bin-line"></i>
-                  </button>
-                </div>
+          {arquivos.map((arquivo) => {
+            const ehImagem = isArquivoImagem(arquivo) && arquivo.arquivo_url;
+            return (
+              <div
+                key={arquivo.id}
+                onClick={() => arquivo.arquivo_url && setPreviewArquivo(arquivo)}
+                className={`bg-dark-bg border border-dark-border rounded-lg hover:border-primary-teal transition-smooth group cursor-pointer overflow-hidden ${
+                  viewMode === 'list' 
+                    ? 'flex items-center gap-4 p-2' 
+                    : ehImagem 
+                      ? 'flex flex-col p-0' 
+                      : 'p-3'
+                }`}
+              >
+                {viewMode === 'list' ? (
+                  /* Layout lista */
+                  <>
+                    <div className="relative w-12 h-12 rounded-lg bg-primary-teal/20 overflow-hidden flex-shrink-0">
+                      {ehImagem ? (
+                        <img src={arquivo.arquivo_url!} alt={arquivo.nome} className="absolute inset-0 w-full h-full object-cover" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; e.currentTarget.parentElement?.querySelector('.thumb-fallback')?.classList.remove('hidden'); }} />
+                      ) : null}
+                      <span className={`thumb-fallback absolute inset-0 flex items-center justify-center ${ehImagem ? 'hidden' : ''}`}>
+                        <i className={`${getIconeArquivo(arquivo.arquivo_extensao)} text-primary-teal text-xl`}></i>
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-white font-medium text-sm truncate">{arquivo.nome}</h3>
+                      <p className="text-xs text-gray-500">{arquivo.arquivo_tamanho ? formatarTamanho(arquivo.arquivo_tamanho) : '—'}</p>
+                    </div>
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      {arquivo.arquivo_url && <a href={arquivo.arquivo_url} target="_blank" rel="noopener noreferrer" className="opacity-0 group-hover:opacity-100 text-primary-teal hover:text-primary-brown transition-opacity" title="Abrir em nova aba"><i className="ri-external-link-line"></i></a>}
+                      <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity" title="Deletar"><i className="ri-delete-bin-line"></i></button>
+                    </div>
+                  </>
+                ) : ehImagem ? (
+                  /* Layout grade - imagem em destaque */
+                  <>
+                    <div className="relative aspect-[4/3] w-full min-h-[100px] bg-dark-border overflow-hidden">
+                      <img
+                        src={arquivo.arquivo_url!}
+                        alt={arquivo.nome}
+                        className="absolute inset-0 w-full h-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          target.parentElement?.querySelector('.thumb-fallback')?.classList.remove('hidden');
+                        }}
+                      />
+                      <span className={`thumb-fallback absolute inset-0 flex items-center justify-center bg-primary-teal/20 hidden`}>
+                        <i className={`${getIconeArquivo(arquivo.arquivo_extensao)} text-primary-teal text-3xl`}></i>
+                      </span>
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex items-center justify-between">
+                        <h3 className="text-white font-medium text-xs truncate flex-1 mr-2">{arquivo.nome}</h3>
+                        <span className="text-gray-300 text-xs flex-shrink-0">{arquivo.arquivo_tamanho ? formatarTamanho(arquivo.arquivo_tamanho) : ''}</span>
+                      </div>
+                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                        {arquivo.arquivo_url && <a href={arquivo.arquivo_url} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-black/60 rounded text-primary-teal hover:bg-black/80" title="Abrir"><i className="ri-external-link-line text-sm"></i></a>}
+                        <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="p-1.5 bg-black/60 rounded text-red-400 hover:bg-black/80" title="Deletar"><i className="ri-delete-bin-line text-sm"></i></button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  /* Layout grade - arquivo não-imagem */
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-12 h-12 rounded-lg bg-primary-teal/20 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      <i className={`${getIconeArquivo(arquivo.arquivo_extensao)} text-primary-teal text-2xl`}></i>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-white font-medium text-sm truncate">{arquivo.nome}</h3>
+                      <p className="text-xs text-gray-500">{arquivo.arquivo_tamanho ? formatarTamanho(arquivo.arquivo_tamanho) : '—'}</p>
+                    </div>
+                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                      {arquivo.arquivo_url && <a href={arquivo.arquivo_url} target="_blank" rel="noopener noreferrer" className="opacity-0 group-hover:opacity-100 text-primary-teal" title="Abrir"><i className="ri-external-link-line"></i></a>}
+                      <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="opacity-0 group-hover:opacity-100 text-red-400" title="Deletar"><i className="ri-delete-bin-line"></i></button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal Preview do Arquivo */}
+      {previewArquivo && previewArquivo.arquivo_url && (
+        <div
+          className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4"
+          onClick={() => setPreviewArquivo(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] w-full flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-medium truncate flex-1 mr-4">{previewArquivo.nome}</h3>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewArquivo.arquivo_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-primary-teal hover:bg-primary-brown text-white rounded-lg transition-smooth cursor-pointer flex items-center gap-2 text-sm"
+                >
+                  <i className="ri-external-link-line"></i>
+                  Abrir em nova aba
+                </a>
+                <button
+                  onClick={() => setPreviewArquivo(null)}
+                  className="p-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                  title="Fechar"
+                >
+                  <i className="ri-close-line text-xl"></i>
+                </button>
               </div>
             </div>
-          ))}
+            <div className="flex-1 overflow-auto bg-dark-bg rounded-xl p-4 flex items-center justify-center min-h-[400px]">
+              {isArquivoImagem(previewArquivo) ? (
+                <img
+                  src={previewArquivo.arquivo_url}
+                  alt={previewArquivo.nome}
+                  className="max-w-full max-h-[80vh] object-contain rounded-lg"
+                />
+              ) : isArquivoPdf(previewArquivo) ? (
+                <iframe
+                  src={previewArquivo.arquivo_url}
+                  title={previewArquivo.nome}
+                  className="w-full h-[80vh] rounded-lg border-0"
+                />
+              ) : (
+                <div className="text-center text-gray-400">
+                  <i className="ri-file-line text-6xl mb-4"></i>
+                  <p className="mb-4">Pré-visualização não disponível para este tipo de arquivo</p>
+                  <a
+                    href={previewArquivo.arquivo_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary-teal hover:text-primary-brown"
+                  >
+                    Abrir arquivo em nova aba
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

@@ -47,8 +47,7 @@ Cole a seguinte configuração JSON:
       "PUT",
       "POST",
       "DELETE",
-      "HEAD",
-      "OPTIONS"
+      "HEAD"
     ],
     "AllowedHeaders": [
       "*"
@@ -68,7 +67,7 @@ Cole a seguinte configuração JSON:
   - `http://localhost:3000` - Para desenvolvimento (Vite padrão)
   - `http://localhost:5173` - Para desenvolvimento (Vite alternativo)
   - Adicione seu domínio de produção quando fizer deploy
-- `AllowedMethods`: Inclui `OPTIONS` para requisições preflight
+- `AllowedMethods`: Não inclua `OPTIONS` (pode invalidar a política no Cloudflare R2)
 - `AllowedHeaders: ["*"]`: Permite todos os headers (necessário para AWS SDK)
 - `MaxAgeSeconds`: Tempo de cache da política CORS (1 hora)
 
