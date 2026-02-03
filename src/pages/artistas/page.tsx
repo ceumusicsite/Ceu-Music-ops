@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import { supabase } from '../../lib/supabase';
+import OptimizedImage from '../../components/OptimizedImage';
+import { preloadImages, generateBlurPlaceholder } from '../../utils/imageOptimization';
 
 interface Artista {
   id: string;
@@ -43,6 +45,18 @@ export default function Artistas() {
 
   useEffect(() => {
     loadArtistas();
+  }, []);
+
+  // Preload das primeiras imagens críticas
+  useEffect(() => {
+    const primeirasFotos = artistasComFotos
+      .slice(0, 3)
+      .map(artista => artista.foto)
+      .filter(Boolean);
+    
+    if (primeirasFotos.length > 0) {
+      preloadImages(primeirasFotos, 'high');
+    }
   }, []);
 
   // Função para normalizar nome do artista para corresponder à pasta
@@ -324,24 +338,22 @@ export default function Artistas() {
               <div className="w-full py-8 px-6 bg-dark-bg flex items-center justify-center">
                 {artista.foto ? (
                   <div className="w-52 h-64 rounded-xl overflow-hidden shadow-xl">
-                    <img 
-                      src={artista.foto} 
+                    <OptimizedImage
+                      src={artista.foto}
                       alt={artista.nome}
                       width={208}
                       height={256}
-                      className="w-full h-full object-cover"
                       loading={index < 6 ? "eager" : "lazy"}
-                      fetchPriority={index < 3 ? "high" : "auto"}
-                      decoding="async"
-                      onError={(e) => {
-                        // Se a imagem não carregar, mostra as iniciais
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        const parent = target.parentElement;
-                        if (parent) {
-                          parent.className = 'w-52 h-64 rounded-xl bg-gradient-primary flex items-center justify-center shadow-xl';
-                          parent.innerHTML = `<span class="text-5xl font-bold text-white">${getInitials(artista.nome)}</span>`;
-                        }
+                      priority={index < 3}
+                      className="rounded-xl"
+                      blurDataURL={generateBlurPlaceholder(20, 20)}
+                      fallback={
+                        <div className="w-full h-full rounded-xl bg-gradient-primary flex items-center justify-center">
+                          <span className="text-5xl font-bold text-white">{getInitials(artista.nome)}</span>
+                        </div>
+                      }
+                      onError={() => {
+                        // Fallback já é tratado pelo componente
                       }}
                     />
                   </div>

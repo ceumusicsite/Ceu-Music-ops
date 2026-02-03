@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import { supabase } from '../../lib/supabase';
+import FileManager from '../../components/artistas/FileManager';
 
 interface Artista {
   id: string;
@@ -767,6 +768,11 @@ export default function ArtistaDetalhes() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Armazenamento de Arquivos */}
+        <div className="mt-6">
+          <FileManager artistaId={id!} artistaNome={artista.nome} />
         </div>
 
         {/* Modal Observações */}
