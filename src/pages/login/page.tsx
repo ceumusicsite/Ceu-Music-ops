@@ -32,14 +32,8 @@ export default function Login() {
       
       if (err.message?.includes('Invalid login credentials')) {
         errorMessage = 'E-mail ou senha incorretos. Verifique suas credenciais.';
-        // Verificar se pode ser problema de email não confirmado
-        if (err.message?.includes('Email not confirmed') || err.status === 400) {
-          errorMessage = 'E-mail não confirmado. Verifique sua caixa de entrada e confirme seu e-mail antes de fazer login.';
-        }
-      } else if (err.message?.includes('Email not confirmed') || err.message?.includes('email_not_confirmed')) {
-        errorMessage = 'E-mail não confirmado. Verifique sua caixa de entrada e clique no link de confirmação antes de fazer login.';
-      } else if (err.message?.includes('User not found')) {
-        errorMessage = 'Usuário não encontrado. Verifique se o e-mail está correto ou crie uma conta.';
+      } else if (err.message?.includes('Email not confirmed')) {
+        errorMessage = 'E-mail não confirmado. Verifique sua caixa de entrada ou desabilite a confirmação de email no Supabase.';
       } else if (err.message) {
         errorMessage = err.message;
       }
@@ -58,11 +52,7 @@ export default function Login() {
           <img 
             src="https://static.readdy.ai/image/016995f7e8292e3ea703f912413c6e1c/af9e13ed434ed318d1a9a4df0aa3c822.png" 
             alt="CEU Music" 
-            width={96}
-            height={96}
             className="w-24 h-24 mx-auto mb-4 object-contain"
-            fetchPriority="high"
-            decoding="async"
           />
           <h1 className="text-3xl font-bold text-white mb-2">CEU Music Ops</h1>
           <p className="text-gray-400">Gestão completa de produção musical</p>

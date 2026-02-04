@@ -36,6 +36,83 @@ body {
   background: #3a3a3a;
 }
 
+button {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+button:focus,
+button:active,
+button:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* CSS Anti-Fantasma - Remove elementos de drag ghost */
+.drag-ghost,
+.drag-ghost *,
+[data-drag-ghost],
+[data-drag-ghost] * {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Remove qualquer elemento de drag que apareça fora do contexto */
+div[draggable="true"]:not(.bg-dark-card) {
+  position: relative;
+}
+
+/* Esconde elementos de drag ghost do navegador */
+::selection {
+  background: transparent !important;
+}
+
+/* Remove qualquer overlay de drag que possa aparecer */
+body > div[draggable="true"]:not([class*="bg-dark-card"]) {
+  display: none !important;
+}
+
+/* Força remoção de qualquer elemento de drag fantasma */
+*[style*="position: fixed"][style*="z-index"]:not([class*="modal"]):not([class*="dropdown"]) {
+  pointer-events: none !important;
+}
+
+/* Remove qualquer retângulo azul de foco que apareça */
+*:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove elementos de drag ghost do HTML5 */
+[draggable="true"]:not(.bg-dark-card) {
+  -webkit-user-drag: none !important;
+}
+
+/* Esconde qualquer elemento que apareça ao clicar em botões */
+div:active:not(.bg-dark-card):not([class*="modal"]):not([class*="dropdown"]) {
+  outline: none !important;
+}
+
+/* Remove qualquer overlay de drag do navegador */
+body::after,
+body::before {
+  display: none !important;
+}
+
+/* Esconde qualquer elemento teal/azul pequeno que apareça fora dos cards */
+div.bg-primary-teal:not([data-artista-badge]):not(.bg-dark-card):not([class*="header"]):not([class*="button"]):not([class*="flex"]):not([class*="gap-3"]) {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+/* Esconde apenas elementos pequenos com background teal que não sejam válidos */
+div[style*="background"]:not([data-artista-badge]):not(.bg-dark-card):not([class*="flex"]):not([class*="gap-3"]) {
+  background: transparent !important;
+}
+
 @layer utilities {
   .transition-smooth {
     transition: all 0.2s ease-in-out;

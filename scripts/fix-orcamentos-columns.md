@@ -69,3 +69,10 @@ Se a tabela já existir com algumas colunas, o script usará `ADD COLUMN IF NOT 
 
 
 
+
+
+
+
+
+
+

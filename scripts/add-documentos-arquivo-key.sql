@@ -13,3 +13,10 @@ COMMENT ON COLUMN documentos.arquivo_key IS 'Key do arquivo no storage (R2 ou Su
 
 
 
+
+
+
+
+
+
+

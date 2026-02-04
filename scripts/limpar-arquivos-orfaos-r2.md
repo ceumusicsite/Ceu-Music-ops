@@ -66,3 +66,10 @@ Se você precisa limpar arquivos que foram excluídos antes desta correção:
 **ATENÇÃO**: Certifique-se de que os arquivos realmente não são mais necessários antes de excluí-los!
 
 
+
+
+
+
+
+
+

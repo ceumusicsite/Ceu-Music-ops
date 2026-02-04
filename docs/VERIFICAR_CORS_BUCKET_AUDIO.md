@@ -151,3 +151,10 @@ Se após todos esses passos ainda não funcionar, o problema pode ser:
 **Nota:** Usar `"*"` em `AllowedOrigins` é menos seguro, mas pode funcionar para desenvolvimento.
 
 
+
+
+
+
+
+
+

@@ -82,3 +82,10 @@ VITE_R2_BUCKET_AUDIO=audio
 5. Verifique se não há erros de sintaxe no JSON (vírgulas extras, etc.)
 
 
+
+
+
+
+
+
+

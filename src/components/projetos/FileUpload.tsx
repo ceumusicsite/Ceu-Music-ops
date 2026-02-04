@@ -5,7 +5,6 @@ interface FileUploadProps {
   bucket: string;
   folder?: string;
   onUploadComplete: (url: string, fileName: string) => void;
-  onUploadCompleteData?: (data: { url: string; fileName: string; key: string; bucket: string }) => void;
   onError?: (error: string) => void;
   accept?: string;
   maxSizeMB?: number;
@@ -20,10 +19,9 @@ export default function FileUpload({
   bucket,
   folder = '',
   onUploadComplete,
-  onUploadCompleteData,
   onError,
   accept = '*/*',
-  maxSizeMB,
+  maxSizeMB = 50,
   label = 'Selecionar arquivo',
   className = '',
   multiple = false,
@@ -38,52 +36,22 @@ export default function FileUpload({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const originalFile = files[0];
+    const file = files[0];
     
-    // Validar tamanho apenas se maxSizeMB for fornecido e maior que 0
-    if (maxSizeMB && maxSizeMB > 0) {
-      const maxSizeBytes = maxSizeMB * 1024 * 1024;
-      if (originalFile.size > maxSizeBytes) {
-        onError?.(`Arquivo muito grande. Tamanho máximo: ${maxSizeMB}MB`);
-        return;
-      }
+    // Validar tamanho
+    const maxSizeBytes = maxSizeMB * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+      onError?.(`Arquivo muito grande. Tamanho máximo: ${maxSizeMB}MB`);
+      return;
     }
-
-    // LER ARQUIVO IMEDIATAMENTE para evitar problemas de permissão/OneDrive.
-    // O File do input pode ficar "bloqueado" ou inválido após um tempo.
-    // Criamos uma cópia em memória que não depende do arquivo original no disco.
-    let arrayBuffer: ArrayBuffer;
-    try {
-      arrayBuffer = await originalFile.arrayBuffer();
-    } catch (e1: any) {
-      // Fallback: tentar com FileReader (API diferente, às vezes funciona)
-      try {
-        arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as ArrayBuffer);
-          reader.onerror = () => reject(reader.error);
-          reader.readAsArrayBuffer(originalFile);
-        });
-      } catch (e2: any) {
-        onError?.(`Não foi possível ler o arquivo: ${e2?.message || e1?.message || 'Erro desconhecido'}. Tente copiar o arquivo para outra pasta (fora do OneDrive) e tente novamente.`);
-        return;
-      }
-    }
-
-    // Criar novo File a partir do buffer em memória
-    const file = new File([arrayBuffer], originalFile.name, {
-      type: originalFile.type,
-      lastModified: originalFile.lastModified,
-    });
 
     // Preview para imagens
     if (file.type.startsWith('image/')) {
-      const blob = new Blob([arrayBuffer], { type: file.type });
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreview(reader.result as string);
       };
-      reader.readAsDataURL(blob);
+      reader.readAsDataURL(file);
     }
 
     await handleUpload(file);
@@ -102,9 +70,8 @@ export default function FileUpload({
       } else if (bucket === 'comprovantes') {
         r2Bucket = R2_BUCKETS.COMPROVANTES;
       } else if (bucket === 'faixas-audio-video') {
+        // Mapear faixas-audio-video para o bucket de áudio do R2
         r2Bucket = R2_BUCKETS.AUDIO;
-      } else if (bucket === 'projetos-referencias') {
-        r2Bucket = R2_BUCKETS.ANEXOS;
       }
 
       // Upload usando serviço unificado (R2 por padrão)
@@ -119,7 +86,6 @@ export default function FileUpload({
       // Usar nome customizado se fornecido, senão usar o nome original do arquivo
       const finalFileName = customFileName ? `${customFileName}.${file.name.split('.').pop()}` : file.name;
       onUploadComplete(result.url, finalFileName);
-      onUploadCompleteData?.({ url: result.url, fileName: finalFileName, key: result.key, bucket: r2Bucket });
       
       // Limpar preview e input
       setPreview(null);
@@ -156,10 +122,7 @@ export default function FileUpload({
             <img
               src={preview}
               alt="Preview"
-              width={384}
-              height={192}
               className="w-full h-48 object-cover rounded-lg border border-dark-border"
-              decoding="async"
             />
             <button
               type="button"

@@ -16,3 +16,10 @@ CHECK (tipo IS NULL OR tipo IN ('audio', 'video'));
 
 
 
+
+
+
+
+
+
+

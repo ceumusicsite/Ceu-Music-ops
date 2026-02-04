@@ -103,3 +103,10 @@ Tente fazer upload novamente. O erro de CORS deve desaparecer.
 **Nota:** `"*"` é menos seguro, mas funciona para desenvolvimento.
 
 
+
+
+
+
+
+
+

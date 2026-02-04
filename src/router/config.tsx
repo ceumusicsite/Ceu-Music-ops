@@ -8,18 +8,9 @@ import Dashboard from "../pages/dashboard/page";
 import Artistas from "../pages/artistas/page";
 import ArtistaDetalhes from "../pages/artistas/Detalhes";
 import Projetos from "../pages/projetos/page";
-import ProjetoDetalhes from "../pages/projetos/Detalhes";
-import NovoProjeto from "../pages/projetos/Novo";
-import Produtores from "../pages/produtores/page";
-import Fornecedores from "../pages/fornecedores/page";
 import Orcamentos from "../pages/orcamentos/page";
 import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
-import CalendarioLancamentos from "../pages/lancamentos/Calendario";
-import Documentos from "../pages/documentos/page";
-import Configuracoes from "../pages/configuracoes/page";
-import SharedAudioVideoForm from "../pages/shared-audio-video/page";
-import ProtectedRoute from "../components/ProtectedRoute";
 
 const routes: RouteObject[] = [
   {
@@ -48,63 +39,31 @@ const routes: RouteObject[] = [
   },
   {
     path: "/dashboard",
-    element: <ProtectedRoute><Dashboard /></ProtectedRoute>,
+    element: <Dashboard />,
   },
   {
     path: "/artistas",
-    element: <ProtectedRoute><Artistas /></ProtectedRoute>,
+    element: <Artistas />,
   },
   {
     path: "/artistas/:id",
-    element: <ProtectedRoute><ArtistaDetalhes /></ProtectedRoute>,
+    element: <ArtistaDetalhes />,
   },
   {
     path: "/projetos",
-    element: <ProtectedRoute><Projetos /></ProtectedRoute>,
-  },
-  {
-    path: "/projetos/novo",
-    element: <ProtectedRoute><NovoProjeto /></ProtectedRoute>,
-  },
-  {
-    path: "/projetos/:id",
-    element: <ProtectedRoute><ProjetoDetalhes /></ProtectedRoute>,
-  },
-  {
-    path: "/produtores",
-    element: <ProtectedRoute><Produtores /></ProtectedRoute>,
-  },
-  {
-    path: "/fornecedores",
-    element: <ProtectedRoute><Fornecedores /></ProtectedRoute>,
+    element: <Projetos />,
   },
   {
     path: "/orcamentos",
-    element: <ProtectedRoute><Orcamentos /></ProtectedRoute>,
+    element: <Orcamentos />,
   },
   {
     path: "/financeiro",
-    element: <ProtectedRoute><Financeiro /></ProtectedRoute>,
+    element: <Financeiro />,
   },
   {
     path: "/lancamentos",
-    element: <ProtectedRoute><Lancamentos /></ProtectedRoute>,
-  },
-  {
-    path: "/lancamentos/calendario",
-    element: <ProtectedRoute><CalendarioLancamentos /></ProtectedRoute>,
-  },
-  {
-    path: "/documentos",
-    element: <ProtectedRoute><Documentos /></ProtectedRoute>,
-  },
-  {
-    path: "/configuracoes",
-    element: <ProtectedRoute><Configuracoes /></ProtectedRoute>,
-  },
-  {
-    path: "/shared/audio-video/:token",
-    element: <SharedAudioVideoForm />,
+    element: <Lancamentos />,
   },
   {
     path: "*",

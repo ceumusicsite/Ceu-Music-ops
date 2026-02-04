@@ -121,3 +121,10 @@ Se nada funcionar, o problema pode ser que o Cloudflare R2 não permite uploads 
 Isso evita completamente o problema de CORS, mas requer implementação de backend.
 
 
+
+
+
+
+
+
+

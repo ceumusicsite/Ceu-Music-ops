@@ -14,7 +14,6 @@ interface Artista {
   observacoes_internas?: string;
   created_at: string;
   updated_at?: string;
-  foto_url?: string;
 }
 
 interface Projeto {
@@ -44,9 +43,6 @@ export default function ArtistaDetalhes() {
     observacoes_internas: ''
   });
   const [observacoesEdit, setObservacoesEdit] = useState('');
-  const [fotoFile, setFotoFile] = useState<File | null>(null);
-  const [fotoPreview, setFotoPreview] = useState<string | null>(null);
-  const [uploadingFoto, setUploadingFoto] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -140,8 +136,6 @@ export default function ArtistaDetalhes() {
       if (error) throw error;
 
       setEditMode(false);
-      setFotoFile(null);
-      setFotoPreview(null);
       loadArtistaData();
     } catch (error) {
       console.error('Erro ao atualizar artista:', error);
@@ -173,153 +167,6 @@ export default function ArtistaDetalhes() {
 
   const getInitials = (nome: string) => {
     return nome.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
-
-  // Função para normalizar nome do artista para corresponder à pasta
-  const normalizeNome = (nome: string): string => {
-    return nome
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove acentos
-      .replace(/\s+/g, '-') // Substitui espaços por hífens
-      .replace(/[^a-z0-9-]/g, ''); // Remove caracteres especiais
-  };
-
-  // Função para encontrar a foto do artista
-  const getArtistaFoto = (nome: string, fotoUrl?: string): string | null => {
-    // Se houver foto_url no banco, usar ela
-    if (fotoUrl) {
-      return fotoUrl;
-    }
-
-    const normalizedNome = normalizeNome(nome);
-    
-    // Mapeamento direto de nomes conhecidos
-    const nomeMapping: Record<string, string> = {
-      'alex-lucio': 'alex-lucio',
-      'caio-torres': 'caio-torres',
-      'debora-lopes': 'debora-lopes',
-      'gabriel-magalhaes': 'gabriel-magalhaes',
-      'george-lean': 'george-lean',
-      'kaka-tavares': 'kaka-tavares',
-      'maria-pita': 'maria-pita',
-      'martinha': 'martinha',
-      'na-graca': 'na graca',
-      'nicole-lavinia': 'nicole-lavinia',
-      'no-santuario': 'no santuario',
-      'rachel-malafaia': 'rachel-malafaia',
-      'william-soares': 'william-soares',
-    };
-
-    const pastaNome = nomeMapping[normalizedNome] || normalizedNome;
-    
-    const pastasComFotos = [
-      'alex-lucio',
-      'caio-torres',
-      'debora-lopes',
-      'gabriel-magalhaes',
-      'george-lean',
-      'kaka-tavares',
-      'maria-pita',
-      'martinha',
-      'na graca',
-      'nicole-lavinia',
-      'no santuario',
-      'rachel-malafaia',
-      'william-soares',
-    ];
-
-    if (pastasComFotos.includes(pastaNome)) {
-      return `/artistas/${pastaNome}/${pastaNome === 'alex-lucio' ? 'IMG_3735.jpg' :
-        pastaNome === 'caio-torres' ? 'IMG_0273.jpg' :
-        pastaNome === 'debora-lopes' ? 'debora-lopes.png' :
-        pastaNome === 'gabriel-magalhaes' ? 'IMG_4165.jpg' :
-        pastaNome === 'george-lean' ? 'IMG_1982.jpg' :
-        pastaNome === 'kaka-tavares' ? 'IMG_3648.jpg' :
-        pastaNome === 'maria-pita' ? 'IMG_4240.jpg' :
-        pastaNome === 'martinha' ? 'Gemini_Generated_Image_o5dhzho5dhzho5dh (1).png' :
-        pastaNome === 'na graca' ? 'na graca.png' :
-        pastaNome === 'nicole-lavinia' ? 'IMG_3996.jpg' :
-        pastaNome === 'no santuario' ? 'IMG_0090.jpg' :
-        pastaNome === 'rachel-malafaia' ? 'IMG_5693.jpg' :
-        pastaNome === 'william-soares' ? 'IMG_4092.jpg' : ''}`;
-    }
-
-    return null;
-  };
-
-  const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Validar tipo de arquivo
-      if (!file.type.startsWith('image/')) {
-        alert('Por favor, selecione um arquivo de imagem.');
-        return;
-      }
-
-      // Validar tamanho (máximo 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        alert('A imagem deve ter no máximo 5MB.');
-        return;
-      }
-
-      setFotoFile(file);
-      
-      // Criar preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFotoPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleUploadFoto = async () => {
-    if (!fotoFile || !id || !artista) return;
-
-    try {
-      setUploadingFoto(true);
-
-      // Fazer upload para R2
-      const { storageService, R2_BUCKETS } = await import('../../services/storage');
-      
-      // Normalizar nome para pasta
-      const pastaNome = normalizeNome(artista.nome);
-      const fileExt = fotoFile.name.split('.').pop() || 'jpg';
-      const fileName = `${pastaNome}.${fileExt}`;
-
-      const result = await storageService.upload(fotoFile, {
-        bucket: R2_BUCKETS.ANEXOS,
-        folder: `artistas/${pastaNome}`,
-        makePublic: true,
-        customFileName: pastaNome, // Sem extensão, será adicionada automaticamente
-      });
-
-      // Salvar URL da foto no banco de dados
-      const { error } = await supabase
-        .from('artistas')
-        .update({ 
-          foto_url: result.publicUrl || result.url,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-
-      // Limpar estados
-      setFotoFile(null);
-      setFotoPreview(null);
-      
-      // Recarregar dados
-      await loadArtistaData();
-      
-      alert('Foto atualizada com sucesso!');
-    } catch (error: any) {
-      console.error('Erro ao fazer upload da foto:', error);
-      alert(`Erro ao fazer upload da foto: ${error.message || 'Verifique o console para mais detalhes.'}`);
-    } finally {
-      setUploadingFoto(false);
-    }
   };
 
   const getStatusColor = (status: string) => {
@@ -399,7 +246,7 @@ export default function ArtistaDetalhes() {
 
   return (
     <MainLayout>
-      <div className="p-4 md:p-6 lg:p-8">
+      <div className="p-8">
         {/* Header */}
         <div className="mb-8">
           <button
@@ -412,67 +259,8 @@ export default function ArtistaDetalhes() {
 
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-6">
-              <div className="relative">
-                {editMode ? (
-                  <div className="w-20 h-20 rounded-full overflow-hidden bg-dark-bg border-2 border-primary-teal flex items-center justify-center relative group">
-                    {fotoPreview ? (
-                      <img src={fotoPreview} alt="Preview" width={80} height={80} className="w-full h-full object-cover" decoding="async" />
-                    ) : getArtistaFoto(artista.nome, artista.foto_url) ? (
-                      <img 
-                        src={getArtistaFoto(artista.nome, artista.foto_url) || ''} 
-                        alt={artista.nome}
-                        width={80}
-                        height={80}
-                        className="w-full h-full object-cover"
-                        fetchPriority="high"
-                        decoding="async"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const parent = target.parentElement;
-                          if (parent) {
-                            parent.innerHTML = `<span class="text-3xl font-bold text-white">${getInitials(artista.nome)}</span>`;
-                          }
-                        }}
-                      />
-                    ) : (
-                      <span className="text-3xl font-bold text-white">{getInitials(artista.nome)}</span>
-                    )}
-                    <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                      <i className="ri-camera-line text-2xl text-white"></i>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFotoChange}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                ) : (
-                  <div className="w-20 h-20 rounded-full overflow-hidden bg-gradient-primary flex items-center justify-center">
-                    {getArtistaFoto(artista.nome, artista.foto_url) ? (
-                      <img 
-                        src={getArtistaFoto(artista.nome, artista.foto_url) || ''} 
-                        alt={artista.nome}
-                        width={80}
-                        height={80}
-                        className="w-full h-full object-cover"
-                        fetchPriority="high"
-                        decoding="async"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const parent = target.parentElement;
-                          if (parent) {
-                            parent.innerHTML = `<span class="text-3xl font-bold text-white">${getInitials(artista.nome)}</span>`;
-                          }
-                        }}
-                      />
-                    ) : (
-                      <span className="text-3xl font-bold text-white">{getInitials(artista.nome)}</span>
-                    )}
-                  </div>
-                )}
+              <div className="w-20 h-20 rounded-full bg-gradient-primary flex items-center justify-center">
+                <span className="text-3xl font-bold text-white">{getInitials(artista.nome)}</span>
               </div>
               <div>
                 {editMode ? (
@@ -510,8 +298,6 @@ export default function ArtistaDetalhes() {
                   <button
                     onClick={() => {
                       setEditMode(false);
-                      setFotoFile(null);
-                      setFotoPreview(null);
                       loadArtistaData();
                     }}
                     className="px-4 py-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
@@ -520,17 +306,9 @@ export default function ArtistaDetalhes() {
                   </button>
                   <button
                     onClick={handleUpdate}
-                    disabled={uploadingFoto}
-                    className="px-4 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="px-4 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
                   >
-                    {uploadingFoto ? (
-                      <>
-                        <i className="ri-loader-4-line animate-spin"></i>
-                        Salvando...
-                      </>
-                    ) : (
-                      'Salvar'
-                    )}
+                    Salvar
                   </button>
                 </>
               ) : (
@@ -549,75 +327,6 @@ export default function ArtistaDetalhes() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Coluna Esquerda - Informações */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Upload de Foto */}
-            {editMode && (
-              <div className="bg-dark-card border border-dark-border rounded-xl p-6">
-                <h2 className="text-xl font-semibold text-white mb-4">Foto do Artista</h2>
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-32 h-32 rounded-xl overflow-hidden bg-dark-bg border-2 border-dashed border-dark-border flex items-center justify-center">
-                      {fotoPreview ? (
-                        <img src={fotoPreview} alt="Preview" width={128} height={128} className="w-full h-full object-cover" decoding="async" />
-                      ) : getArtistaFoto(artista.nome, artista.foto_url) ? (
-                        <img 
-                          src={getArtistaFoto(artista.nome, artista.foto_url) || ''} 
-                          alt={artista.nome}
-                          width={128}
-                          height={128}
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                          decoding="async"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const parent = target.parentElement;
-                            if (parent) {
-                              parent.innerHTML = `<span class="text-4xl font-bold text-white">${getInitials(artista.nome)}</span>`;
-                            }
-                          }}
-                        />
-                      ) : (
-                        <span className="text-4xl font-bold text-white">{getInitials(artista.nome)}</span>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-400 mb-2">Selecionar Nova Foto</label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFotoChange}
-                        disabled={uploadingFoto}
-                        className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-teal file:text-white hover:file:bg-primary-brown cursor-pointer disabled:opacity-50"
-                      />
-                      <p className="text-xs text-gray-500 mt-2">
-                        Formatos aceitos: JPG, PNG, WEBP. Tamanho máximo: 5MB
-                      </p>
-                      {fotoFile && (
-                        <button
-                          type="button"
-                          onClick={handleUploadFoto}
-                          disabled={uploadingFoto}
-                          className="mt-3 px-4 py-2 bg-primary-teal hover:bg-primary-brown text-white text-sm rounded-lg transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                          {uploadingFoto ? (
-                            <>
-                              <i className="ri-loader-4-line animate-spin"></i>
-                              Fazendo upload...
-                            </>
-                          ) : (
-                            <>
-                              <i className="ri-upload-line"></i>
-                              Fazer Upload da Foto
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Informações de Contato */}
             <div className="bg-dark-card border border-dark-border rounded-xl p-6">
               <h2 className="text-xl font-semibold text-white mb-6">Informações de Contato</h2>

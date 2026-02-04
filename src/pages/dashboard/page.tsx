@@ -1,5 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import MainLayout from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -49,7 +48,11 @@ export default function Dashboard() {
   const [upcomingReleases, setUpcomingReleases] = useState<Lancamento[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadDashboardData = useCallback(async () => {
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
     try {
       // Carregar estatísticas
       const [projetos, orcamentos, tarefas, lancamentos] = await Promise.all([
@@ -69,76 +72,40 @@ export default function Dashboard() {
       });
 
       // Carregar projetos recentes
-      const { data: projetosData, error: projetosError } = await supabase
+      const { data: projetosData } = await supabase
         .from('projetos')
         .select('id, nome, fase, progresso, artista:artista_id(nome)')
         .order('updated_at', { ascending: false })
         .limit(4);
 
-      if (projetosError) {
-        console.error('Erro ao carregar projetos:', projetosError);
-      } else if (projetosData) {
-        setRecentProjects(projetosData.map((p: any) => ({
-          id: p.id,
-          nome: p.nome,
-          fase: p.fase,
-          progresso: p.progresso,
-          artista: p.artista || { nome: 'Sem artista' }
-        })));
-      }
+      if (projetosData) setRecentProjects(projetosData as any);
 
       // Carregar orçamentos pendentes
-      const { data: orcamentosData, error: orcamentosError } = await supabase
+      const { data: orcamentosData } = await supabase
         .from('orcamentos')
         .select('id, tipo, descricao, valor, created_at')
         .eq('status', 'pendente')
         .order('created_at', { ascending: false })
         .limit(3);
 
-      if (orcamentosError) {
-        console.error('Erro ao carregar orçamentos:', orcamentosError);
-      } else if (orcamentosData) {
-        setPendingApprovals(orcamentosData);
-      }
+      if (orcamentosData) setPendingApprovals(orcamentosData);
 
       // Carregar próximos lançamentos
-      const { data: lancamentosData, error: lancamentosError } = await supabase
+      const { data: lancamentosData } = await supabase
         .from('lancamentos')
-        .select(`
-          id, 
-          titulo, 
-          data_planejada, 
-          plataforma, 
-          projeto:projeto_id(id, nome, artista:artista_id(nome))
-        `)
+        .select('id, titulo, data_planejada, plataforma, projeto:projeto_id(artista:artista_id(nome))')
         .gte('data_planejada', new Date().toISOString())
         .order('data_planejada', { ascending: true })
         .limit(3);
 
-      if (lancamentosError) {
-        console.error('Erro ao carregar lançamentos:', lancamentosError);
-      } else if (lancamentosData) {
-        setUpcomingReleases(lancamentosData.map((l: any) => ({
-          id: l.id,
-          titulo: l.titulo,
-          data_planejada: l.data_planejada,
-          plataforma: l.plataforma,
-          projeto: l.projeto ? {
-            artista: l.projeto.artista ? { nome: l.projeto.artista.nome } : { nome: 'Sem artista' }
-          } : { artista: { nome: 'Sem artista' } }
-        })));
-      }
+      if (lancamentosData) setUpcomingReleases(lancamentosData as any);
 
     } catch (error) {
       console.error('Erro ao carregar dados do dashboard:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+  };
 
   const statsConfig = [
     { label: 'Projetos Ativos', value: stats.projetos_ativos, icon: 'ri-music-2-line', color: 'from-primary-teal to-primary-brown' },
@@ -162,13 +129,13 @@ export default function Dashboard() {
 
   return (
     <MainLayout>
-      <div className="p-4 md:p-6 lg:p-8">
+      <div className="p-8">
         {/* Header */}
-        <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">
             Bem-vindo, {user?.name || 'Usuário'}
           </h1>
-          <p className="text-gray-400 text-sm md:text-base">Visão geral da sua operação musical</p>
+          <p className="text-gray-400">Visão geral da sua operação musical</p>
         </div>
 
         {/* Stats Grid */}
@@ -196,14 +163,14 @@ export default function Dashboard() {
           <div className="bg-dark-card border border-dark-border rounded-xl p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-white">Projetos Recentes</h2>
-              <Link to="/projetos" className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer">
+              <a href="/projetos" className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer">
                 Ver todos
-              </Link>
+              </a>
             </div>
             <div className="space-y-4">
               {recentProjects.length > 0 ? (
                 recentProjects.map((project) => (
-                  <Link key={project.id} to={`/projetos/${project.id}`} className="block p-4 bg-dark-bg rounded-lg hover:bg-dark-hover transition-smooth cursor-pointer">
+                  <div key={project.id} className="p-4 bg-dark-bg rounded-lg hover:bg-dark-hover transition-smooth cursor-pointer">
                     <div className="flex items-center justify-between mb-2">
                       <div>
                         <h3 className="text-sm font-medium text-white">{project.nome}</h3>
@@ -222,7 +189,7 @@ export default function Dashboard() {
                       </div>
                       <span className="text-xs text-gray-400 whitespace-nowrap">{project.progresso}%</span>
                     </div>
-                  </Link>
+                  </div>
                 ))
               ) : (
                 <div className="text-center py-8 text-gray-500">
@@ -237,9 +204,9 @@ export default function Dashboard() {
           <div className="bg-dark-card border border-dark-border rounded-xl p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-white">Aprovações Pendentes</h2>
-              <Link to="/orcamentos" className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer">
+              <a href="/orcamentos" className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer">
                 Ver todos
-              </Link>
+              </a>
             </div>
             <div className="space-y-4">
               {pendingApprovals.length > 0 ? (
@@ -277,9 +244,9 @@ export default function Dashboard() {
         <div className="bg-dark-card border border-dark-border rounded-xl p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-white">Próximos Lançamentos</h2>
-            <Link to="/lancamentos/calendario" className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer">
+            <a href="/lancamentos" className="text-sm text-primary-teal hover:text-primary-brown transition-smooth cursor-pointer">
               Ver calendário
-            </Link>
+            </a>
           </div>
           {upcomingReleases.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
