@@ -792,59 +792,116 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
       {/* Modal Preview do Arquivo */}
       {previewArquivo && previewArquivo.arquivo_url && (
         <div
-          className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4"
           onClick={() => setPreviewArquivo(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            margin: 0,
+            padding: '1rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
         >
           <div
-            className="relative max-w-4xl max-h-[90vh] w-full flex flex-col"
+            className="bg-dark-card border border-dark-border rounded-xl overflow-hidden shadow-2xl flex flex-col"
             onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: '56rem',
+              maxHeight: '90vh',
+              margin: '0 auto',
+              position: 'relative'
+            }}
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between p-4 border-b border-dark-border flex-shrink-0">
               <h3 className="text-white font-medium truncate flex-1 mr-4">{previewArquivo.nome}</h3>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <a
                   href={previewArquivo.arquivo_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-4 py-2 bg-primary-teal hover:bg-primary-brown text-white rounded-lg transition-smooth cursor-pointer flex items-center gap-2 text-sm"
+                  className="px-4 py-2 bg-primary-teal hover:bg-primary-brown text-white rounded-lg transition-smooth cursor-pointer flex items-center gap-2 text-sm whitespace-nowrap"
                 >
                   <i className="ri-external-link-line"></i>
                   Abrir em nova aba
                 </a>
                 <button
                   onClick={() => setPreviewArquivo(null)}
-                  className="p-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                  className="p-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer flex-shrink-0"
                   title="Fechar"
                 >
                   <i className="ri-close-line text-xl"></i>
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-auto bg-dark-bg rounded-xl p-4 flex items-center justify-center min-h-[400px]">
+            <div 
+              className="bg-dark-bg flex-1 overflow-auto"
+              style={{ 
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '3rem 2rem',
+                minHeight: '400px',
+                width: '100%',
+                boxSizing: 'border-box'
+              }}
+            >
               {isArquivoImagem(previewArquivo) ? (
-                <img
-                  src={previewArquivo.arquivo_url}
-                  alt={previewArquivo.nome}
-                  className="max-w-full max-h-[80vh] object-contain rounded-lg"
-                />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                  <img
+                    src={previewArquivo.arquivo_url}
+                    alt={previewArquivo.nome}
+                    style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
+                    className="rounded-lg"
+                  />
+                </div>
               ) : isArquivoPdf(previewArquivo) ? (
                 <iframe
                   src={previewArquivo.arquivo_url}
                   title={previewArquivo.nome}
-                  className="w-full h-[80vh] rounded-lg border-0"
+                  style={{ width: '100%', height: '70vh', border: 'none', borderRadius: '0.5rem' }}
                 />
               ) : (
-                <div className="text-center text-gray-400">
-                  <i className="ri-file-line text-6xl mb-4"></i>
-                  <p className="mb-4">Pré-visualização não disponível para este tipo de arquivo</p>
-                  <a
-                    href={previewArquivo.arquivo_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary-teal hover:text-primary-brown"
-                  >
-                    Abrir arquivo em nova aba
-                  </a>
+                <div 
+                  className="w-full"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textAlign: 'center',
+                    width: '100%',
+                    minHeight: '400px',
+                    color: '#9ca3af',
+                    padding: '2rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.5rem' }}>
+                    <i className="ri-file-line" style={{ fontSize: '4rem', display: 'block', lineHeight: '1' }}></i>
+                    <p style={{ fontSize: '1.125rem', margin: 0, lineHeight: '1.5' }}>
+                      Pré-visualização não disponível para este tipo de arquivo
+                    </p>
+                    <a
+                      href={previewArquivo.arquivo_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-6 py-3 bg-primary-teal hover:bg-primary-brown text-white rounded-lg transition-smooth cursor-pointer"
+                      style={{ 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        gap: '0.5rem',
+                        textDecoration: 'none'
+                      }}
+                    >
+                      <i className="ri-external-link-line"></i>
+                      Abrir arquivo em nova aba
+                    </a>
+                  </div>
                 </div>
               )}
             </div>
