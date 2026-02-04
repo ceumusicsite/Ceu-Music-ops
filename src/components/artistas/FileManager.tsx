@@ -527,6 +527,20 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
     return ext === 'pdf' || (arquivo.arquivo_tipo || '').includes('pdf');
   };
 
+  const isArquivoAudio = (arquivo: Anexo): boolean => {
+    const ext = arquivo.arquivo_extensao?.toLowerCase() || '';
+    const tipo = arquivo.arquivo_tipo?.toLowerCase() || '';
+    return ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a', 'wma'].includes(ext) ||
+      tipo.startsWith('audio/');
+  };
+
+  const isArquivoVideo = (arquivo: Anexo): boolean => {
+    const ext = arquivo.arquivo_extensao?.toLowerCase() || '';
+    const tipo = arquivo.arquivo_tipo?.toLowerCase() || '';
+    return ['mp4', 'webm', 'ogg', 'mov', 'avi', 'wmv', 'flv', 'mkv'].includes(ext) ||
+      tipo.startsWith('video/');
+  };
+
   const getIconeArquivo = (extensao?: string): string => {
     const ext = extensao?.toLowerCase() || '';
     const icones: Record<string, string> = {
@@ -934,6 +948,58 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                       }
                     }}
                   />
+                </div>
+              ) : isArquivoAudio(previewArquivo) ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '2rem' }}>
+                  <div style={{ width: '100%', maxWidth: '600px' }}>
+                    <div style={{ marginBottom: '1.5rem', textAlign: 'center' }}>
+                      <i className="ri-music-line" style={{ fontSize: '4rem', color: '#14b8a6', display: 'block', marginBottom: '1rem' }}></i>
+                      <p style={{ color: '#9ca3af', fontSize: '1rem', margin: 0 }}>{previewArquivo.nome}</p>
+                    </div>
+                    <audio
+                      controls
+                      style={{ width: '100%', outline: 'none' }}
+                      onError={async () => {
+                        // Se o áudio falhar ao carregar, tentar gerar nova URL
+                        try {
+                          const novaUrl = await getValidUrl(previewArquivo);
+                          const audio = document.querySelector('audio') as HTMLAudioElement;
+                          if (audio) {
+                            audio.src = novaUrl;
+                            audio.load();
+                          }
+                        } catch (error) {
+                          console.error('Erro ao recarregar áudio:', error);
+                        }
+                      }}
+                    >
+                      <source src={previewArquivo.arquivo_url || ''} type={previewArquivo.arquivo_tipo || 'audio/mpeg'} />
+                      Seu navegador não suporta o elemento de áudio.
+                    </audio>
+                  </div>
+                </div>
+              ) : isArquivoVideo(previewArquivo) ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', padding: '2rem' }}>
+                  <video
+                    controls
+                    style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: '0.5rem' }}
+                    onError={async () => {
+                      // Se o vídeo falhar ao carregar, tentar gerar nova URL
+                      try {
+                        const novaUrl = await getValidUrl(previewArquivo);
+                        const video = document.querySelector('video') as HTMLVideoElement;
+                        if (video) {
+                          video.src = novaUrl;
+                          video.load();
+                        }
+                      } catch (error) {
+                        console.error('Erro ao recarregar vídeo:', error);
+                      }
+                    }}
+                  >
+                    <source src={previewArquivo.arquivo_url || ''} type={previewArquivo.arquivo_tipo || 'video/mp4'} />
+                    Seu navegador não suporta o elemento de vídeo.
+                  </video>
                 </div>
               ) : isArquivoPdf(previewArquivo) ? (
                 <iframe
