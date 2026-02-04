@@ -35,7 +35,15 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
   ]);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showEditFolderModal, setShowEditFolderModal] = useState(false);
+  const [showEditFileModal, setShowEditFileModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [editingFolder, setEditingFolder] = useState<Anexo | null>(null);
+  const [editingFile, setEditingFile] = useState<Anexo | null>(null);
+  const [editFolderName, setEditFolderName] = useState('');
+  const [editFileName, setEditFileName] = useState('');
+  const [editFileReplacement, setEditFileReplacement] = useState<File | null>(null);
+  const [replacingFile, setReplacingFile] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -283,6 +291,127 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
     setBreadcrumbs(novoBreadcrumbs);
     const pastaId = novoBreadcrumbs[novoBreadcrumbs.length - 1].id;
     setPastaAtual(pastaId);
+  };
+
+  const editarPasta = async () => {
+    if (!editingFolder || !editFolderName.trim()) {
+      alert('Digite um nome para a pasta');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('artistas_anexos')
+        .update({ nome: editFolderName.trim() })
+        .eq('id', editingFolder.id);
+
+      if (error) throw error;
+
+      // Atualizar breadcrumbs se a pasta editada estiver no caminho atual
+      const breadcrumbIndex = breadcrumbs.findIndex(b => b.id === editingFolder.id);
+      if (breadcrumbIndex !== -1) {
+        const novosBreadcrumbs = [...breadcrumbs];
+        novosBreadcrumbs[breadcrumbIndex].nome = editFolderName.trim();
+        setBreadcrumbs(novosBreadcrumbs);
+      }
+
+      setShowEditFolderModal(false);
+      setEditingFolder(null);
+      setEditFolderName('');
+      loadAnexos();
+    } catch (error: any) {
+      console.error('Erro ao editar pasta:', error);
+      alert(`Erro ao editar pasta: ${error.message || 'Tente novamente'}`);
+    }
+  };
+
+  const editarArquivo = async () => {
+    if (!editingFile || !editFileName.trim()) {
+      alert('Digite um nome para o arquivo');
+      return;
+    }
+
+    try {
+      setReplacingFile(true);
+      const pastaNormalizada = normalizeNome(artistaNome);
+      let pastaPath = pastaNormalizada;
+      
+      if (pastaAtual) {
+        const caminhoCompleto = await getCaminhoPastaCompleto(pastaAtual);
+        pastaPath = caminhoCompleto;
+      }
+
+      let arquivoKey = editingFile.arquivo_key;
+      let arquivoUrl = editingFile.arquivo_url;
+      let arquivoTamanho = editingFile.arquivo_tamanho;
+      let arquivoTipo = editingFile.arquivo_tipo;
+      let arquivoExtensao = editingFile.arquivo_extensao;
+
+      // Se um novo arquivo foi selecionado, fazer upload
+      if (editFileReplacement) {
+        // Deletar arquivo antigo do R2 se existir
+        if (editingFile.arquivo_key) {
+          try {
+            await storageService.delete(R2_BUCKETS.ANEXOS, editingFile.arquivo_key);
+          } catch (error) {
+            console.warn('Erro ao deletar arquivo antigo (pode não existir):', error);
+          }
+        }
+
+        // Fazer upload do novo arquivo
+        const result = await uploadToR2(editFileReplacement, {
+          bucket: R2_BUCKETS.ANEXOS,
+          folder: `artistas/${pastaPath}`,
+          makePublic: false,
+        });
+
+        arquivoKey = result.key;
+        arquivoUrl = result.url;
+        arquivoTamanho = editFileReplacement.size;
+        arquivoTipo = editFileReplacement.type;
+        arquivoExtensao = editFileReplacement.name.split('.').pop()?.toLowerCase();
+      }
+
+      // Atualizar no banco de dados
+      const { error } = await supabase
+        .from('artistas_anexos')
+        .update({
+          nome: editFileName.trim(),
+          arquivo_key: arquivoKey,
+          arquivo_url: arquivoUrl,
+          arquivo_tamanho: arquivoTamanho,
+          arquivo_tipo: arquivoTipo,
+          arquivo_extensao: arquivoExtensao,
+        })
+        .eq('id', editingFile.id);
+
+      if (error) throw error;
+
+      setShowEditFileModal(false);
+      setEditingFile(null);
+      setEditFileName('');
+      setEditFileReplacement(null);
+      loadAnexos();
+      alert('Arquivo atualizado com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao editar arquivo:', error);
+      alert(`Erro ao editar arquivo: ${error.message || 'Tente novamente'}`);
+    } finally {
+      setReplacingFile(false);
+    }
+  };
+
+  const abrirModalEditar = (item: Anexo) => {
+    if (item.tipo === 'pasta') {
+      setEditingFolder(item);
+      setEditFolderName(item.nome);
+      setShowEditFolderModal(true);
+    } else {
+      setEditingFile(item);
+      setEditFileName(item.nome);
+      setEditFileReplacement(null);
+      setShowEditFileModal(true);
+    }
   };
 
   const deletarItem = async (item: Anexo) => {
@@ -546,16 +675,28 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                   <h3 className="text-white font-medium text-sm truncate">{pasta.nome}</h3>
                   <p className="text-xs text-gray-500 mt-1">Pasta</p>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deletarItem(pasta);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity cursor-pointer"
-                  title="Deletar pasta"
-                >
-                  <i className="ri-delete-bin-line"></i>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      abrirModalEditar(pasta);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-primary-teal hover:text-primary-brown transition-opacity cursor-pointer"
+                    title="Editar pasta"
+                  >
+                    <i className="ri-edit-line"></i>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deletarItem(pasta);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity cursor-pointer"
+                    title="Deletar pasta"
+                  >
+                    <i className="ri-delete-bin-line"></i>
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -592,6 +733,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                     </div>
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {arquivo.arquivo_url && <a href={arquivo.arquivo_url} target="_blank" rel="noopener noreferrer" className="opacity-0 group-hover:opacity-100 text-primary-teal hover:text-primary-brown transition-opacity" title="Abrir em nova aba"><i className="ri-external-link-line"></i></a>}
+                      <button onClick={(e) => { e.stopPropagation(); abrirModalEditar(arquivo); }} className="opacity-0 group-hover:opacity-100 text-primary-teal hover:text-primary-brown transition-opacity" title="Editar"><i className="ri-edit-line"></i></button>
                       <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity" title="Deletar"><i className="ri-delete-bin-line"></i></button>
                     </div>
                   </>
@@ -619,6 +761,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                       </div>
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                         {arquivo.arquivo_url && <a href={arquivo.arquivo_url} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-black/60 rounded text-primary-teal hover:bg-black/80" title="Abrir"><i className="ri-external-link-line text-sm"></i></a>}
+                        <button onClick={(e) => { e.stopPropagation(); abrirModalEditar(arquivo); }} className="p-1.5 bg-black/60 rounded text-primary-teal hover:bg-black/80" title="Editar"><i className="ri-edit-line text-sm"></i></button>
                         <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="p-1.5 bg-black/60 rounded text-red-400 hover:bg-black/80" title="Deletar"><i className="ri-delete-bin-line text-sm"></i></button>
                       </div>
                     </div>
@@ -635,6 +778,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                     </div>
                     <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                       {arquivo.arquivo_url && <a href={arquivo.arquivo_url} target="_blank" rel="noopener noreferrer" className="opacity-0 group-hover:opacity-100 text-primary-teal" title="Abrir"><i className="ri-external-link-line"></i></a>}
+                      <button onClick={(e) => { e.stopPropagation(); abrirModalEditar(arquivo); }} className="opacity-0 group-hover:opacity-100 text-primary-teal" title="Editar"><i className="ri-edit-line"></i></button>
                       <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="opacity-0 group-hover:opacity-100 text-red-400" title="Deletar"><i className="ri-delete-bin-line"></i></button>
                     </div>
                   </div>
@@ -752,6 +896,151 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                   className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer"
                 >
                   Criar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Pasta */}
+      {showEditFolderModal && editingFolder && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-white">Editar Pasta</h3>
+              <button
+                onClick={() => {
+                  setShowEditFolderModal(false);
+                  setEditingFolder(null);
+                  setEditFolderName('');
+                }}
+                className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Nome da Pasta</label>
+                <input
+                  type="text"
+                  value={editFolderName}
+                  onChange={(e) => setEditFolderName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && editarPasta()}
+                  className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                  placeholder="Digite o nome da pasta"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowEditFolderModal(false);
+                    setEditingFolder(null);
+                    setEditFolderName('');
+                  }}
+                  className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={editarPasta}
+                  className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer"
+                >
+                  Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Arquivo */}
+      {showEditFileModal && editingFile && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-semibold text-white">Editar Arquivo</h3>
+              <button
+                onClick={() => {
+                  setShowEditFileModal(false);
+                  setEditingFile(null);
+                  setEditFileName('');
+                  setEditFileReplacement(null);
+                }}
+                className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Nome do Arquivo</label>
+                <input
+                  type="text"
+                  value={editFileName}
+                  onChange={(e) => setEditFileName(e.target.value)}
+                  className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                  placeholder="Digite o nome do arquivo"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Substituir Arquivo (opcional)
+                </label>
+                <input
+                  type="file"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    setEditFileReplacement(file || null);
+                  }}
+                  className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-teal file:text-white hover:file:bg-primary-brown cursor-pointer"
+                />
+                {editFileReplacement && (
+                  <div className="mt-2 p-3 bg-primary-teal/10 border border-primary-teal/30 rounded-lg">
+                    <p className="text-sm text-primary-teal">
+                      <i className="ri-file-line mr-2"></i>
+                      Novo arquivo: {editFileReplacement.name} ({(editFileReplacement.size / 1024 / 1024).toFixed(2)} MB)
+                    </p>
+                  </div>
+                )}
+                {editingFile.arquivo_tamanho && !editFileReplacement && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Arquivo atual: {formatarTamanho(editingFile.arquivo_tamanho)}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowEditFileModal(false);
+                    setEditingFile(null);
+                    setEditFileName('');
+                    setEditFileReplacement(null);
+                  }}
+                  disabled={replacingFile}
+                  className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={editarArquivo}
+                  disabled={replacingFile || !editFileName.trim()}
+                  className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {replacingFile ? (
+                    <>
+                      <i className="ri-loader-4-line animate-spin"></i>
+                      Atualizando...
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-save-line"></i>
+                      Salvar
+                    </>
+                  )}
                 </button>
               </div>
             </div>
