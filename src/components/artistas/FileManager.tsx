@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { storageService, R2_BUCKETS } from '../../services/storage';
-import { uploadToR2 } from '../../lib/r2';
+import { uploadToR2, getSignedUrlR2 } from '../../lib/r2';
 
 interface Anexo {
   id: string;
@@ -150,6 +150,63 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/\s+/g, '-')
       .replace(/[^a-z0-9-]/g, '');
+  };
+
+  // Função para gerar nova URL assinada quando necessário
+  const getValidUrl = async (anexo: Anexo): Promise<string> => {
+    // Se temos arquivo_key, gerar nova URL assinada
+    if (anexo.arquivo_key) {
+      try {
+        const novaUrl = await getSignedUrlR2(
+          R2_BUCKETS.ANEXOS,
+          anexo.arquivo_key,
+          86400 // URL válida por 24 horas
+        );
+        
+        // Atualizar a URL no banco de dados (opcional, mas útil para cache)
+        try {
+          await supabase
+            .from('artistas_anexos')
+            .update({ arquivo_url: novaUrl })
+            .eq('id', anexo.id);
+        } catch (updateError) {
+          // Não é crítico se a atualização falhar
+          console.warn('Erro ao atualizar URL no banco:', updateError);
+        }
+        
+        return novaUrl;
+      } catch (error: any) {
+        console.error('Erro ao gerar nova URL assinada:', error);
+        // Se falhar, tentar usar a URL existente (pode estar expirada)
+        if (anexo.arquivo_url) {
+          return anexo.arquivo_url;
+        }
+        throw error;
+      }
+    }
+    
+    // Se não temos key, usar a URL existente
+    if (anexo.arquivo_url) {
+      return anexo.arquivo_url;
+    }
+    
+    throw new Error('Arquivo não possui URL ou key válida');
+  };
+
+  // Handler para abrir arquivo com URL renovada
+  const handleOpenFile = async (anexo: Anexo, event?: React.MouseEvent) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
+    try {
+      const url = await getValidUrl(anexo);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error: any) {
+      console.error('Erro ao abrir arquivo:', error);
+      alert(`Erro ao abrir arquivo: ${error.message || 'Não foi possível gerar URL válida'}`);
+    }
   };
 
   const criarPasta = async () => {
@@ -707,7 +764,18 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
             return (
               <div
                 key={arquivo.id}
-                onClick={() => arquivo.arquivo_url && setPreviewArquivo(arquivo)}
+                onClick={async () => {
+                  if (arquivo.arquivo_url) {
+                    // Gerar nova URL antes de abrir preview
+                    try {
+                      const url = await getValidUrl(arquivo);
+                      setPreviewArquivo({ ...arquivo, arquivo_url: url });
+                    } catch (error) {
+                      // Se falhar, tentar com URL existente
+                      setPreviewArquivo(arquivo);
+                    }
+                  }
+                }}
                 className={`bg-dark-bg border border-dark-border rounded-lg hover:border-primary-teal transition-smooth group cursor-pointer overflow-hidden ${
                   viewMode === 'list' 
                     ? 'flex items-center gap-4 p-2' 
@@ -732,7 +800,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                       <p className="text-xs text-gray-500">{arquivo.arquivo_tamanho ? formatarTamanho(arquivo.arquivo_tamanho) : '—'}</p>
                     </div>
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      {arquivo.arquivo_url && <a href={arquivo.arquivo_url} target="_blank" rel="noopener noreferrer" className="opacity-0 group-hover:opacity-100 text-primary-teal hover:text-primary-brown transition-opacity" title="Abrir em nova aba"><i className="ri-external-link-line"></i></a>}
+                      {arquivo.arquivo_url && <button onClick={(e) => handleOpenFile(arquivo, e)} className="opacity-0 group-hover:opacity-100 text-primary-teal hover:text-primary-brown transition-opacity cursor-pointer" title="Abrir em nova aba"><i className="ri-external-link-line"></i></button>}
                       <button onClick={(e) => { e.stopPropagation(); abrirModalEditar(arquivo); }} className="opacity-0 group-hover:opacity-100 text-primary-teal hover:text-primary-brown transition-opacity" title="Editar"><i className="ri-edit-line"></i></button>
                       <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity" title="Deletar"><i className="ri-delete-bin-line"></i></button>
                     </div>
@@ -760,7 +828,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                         <span className="text-gray-300 text-xs flex-shrink-0">{arquivo.arquivo_tamanho ? formatarTamanho(arquivo.arquivo_tamanho) : ''}</span>
                       </div>
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                        {arquivo.arquivo_url && <a href={arquivo.arquivo_url} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-black/60 rounded text-primary-teal hover:bg-black/80" title="Abrir"><i className="ri-external-link-line text-sm"></i></a>}
+                        {arquivo.arquivo_url && <button onClick={(e) => handleOpenFile(arquivo, e)} className="p-1.5 bg-black/60 rounded text-primary-teal hover:bg-black/80 cursor-pointer" title="Abrir"><i className="ri-external-link-line text-sm"></i></button>}
                         <button onClick={(e) => { e.stopPropagation(); abrirModalEditar(arquivo); }} className="p-1.5 bg-black/60 rounded text-primary-teal hover:bg-black/80" title="Editar"><i className="ri-edit-line text-sm"></i></button>
                         <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="p-1.5 bg-black/60 rounded text-red-400 hover:bg-black/80" title="Deletar"><i className="ri-delete-bin-line text-sm"></i></button>
                       </div>
@@ -777,7 +845,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                       <p className="text-xs text-gray-500">{arquivo.arquivo_tamanho ? formatarTamanho(arquivo.arquivo_tamanho) : '—'}</p>
                     </div>
                     <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                      {arquivo.arquivo_url && <a href={arquivo.arquivo_url} target="_blank" rel="noopener noreferrer" className="opacity-0 group-hover:opacity-100 text-primary-teal" title="Abrir"><i className="ri-external-link-line"></i></a>}
+                      {arquivo.arquivo_url && <button onClick={(e) => handleOpenFile(arquivo, e)} className="opacity-0 group-hover:opacity-100 text-primary-teal cursor-pointer" title="Abrir"><i className="ri-external-link-line"></i></button>}
                       <button onClick={(e) => { e.stopPropagation(); abrirModalEditar(arquivo); }} className="opacity-0 group-hover:opacity-100 text-primary-teal" title="Editar"><i className="ri-edit-line"></i></button>
                       <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="opacity-0 group-hover:opacity-100 text-red-400" title="Deletar"><i className="ri-delete-bin-line"></i></button>
                     </div>
@@ -821,15 +889,13 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
             <div className="flex items-center justify-between p-4 border-b border-dark-border flex-shrink-0">
               <h3 className="text-white font-medium truncate flex-1 mr-4">{previewArquivo.nome}</h3>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <a
-                  href={previewArquivo.arquivo_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  onClick={() => handleOpenFile(previewArquivo)}
                   className="px-4 py-2 bg-primary-teal hover:bg-primary-brown text-white rounded-lg transition-smooth cursor-pointer flex items-center gap-2 text-sm whitespace-nowrap"
                 >
                   <i className="ri-external-link-line"></i>
                   Abrir em nova aba
-                </a>
+                </button>
                 <button
                   onClick={() => setPreviewArquivo(null)}
                   className="p-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer flex-shrink-0"
@@ -854,17 +920,38 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
               {isArquivoImagem(previewArquivo) ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
                   <img
-                    src={previewArquivo.arquivo_url}
+                    src={previewArquivo.arquivo_url || ''}
                     alt={previewArquivo.nome}
                     style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
                     className="rounded-lg"
+                    onError={async (e) => {
+                      // Se a imagem falhar ao carregar, tentar gerar nova URL
+                      try {
+                        const novaUrl = await getValidUrl(previewArquivo);
+                        (e.target as HTMLImageElement).src = novaUrl;
+                      } catch (error) {
+                        console.error('Erro ao recarregar imagem:', error);
+                      }
+                    }}
                   />
                 </div>
               ) : isArquivoPdf(previewArquivo) ? (
                 <iframe
-                  src={previewArquivo.arquivo_url}
+                  src={previewArquivo.arquivo_url || ''}
                   title={previewArquivo.nome}
                   style={{ width: '100%', height: '70vh', border: 'none', borderRadius: '0.5rem' }}
+                  onError={async () => {
+                    // Se o iframe falhar, tentar gerar nova URL
+                    try {
+                      const novaUrl = await getValidUrl(previewArquivo);
+                      const iframe = document.querySelector('iframe[title="' + previewArquivo.nome + '"]') as HTMLIFrameElement;
+                      if (iframe) {
+                        iframe.src = novaUrl;
+                      }
+                    } catch (error) {
+                      console.error('Erro ao recarregar PDF:', error);
+                    }
+                  }}
                 />
               ) : (
                 <div 
@@ -886,21 +973,18 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                     <p style={{ fontSize: '1.125rem', margin: 0, lineHeight: '1.5' }}>
                       Pré-visualização não disponível para este tipo de arquivo
                     </p>
-                    <a
-                      href={previewArquivo.arquivo_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => handleOpenFile(previewArquivo)}
                       className="px-6 py-3 bg-primary-teal hover:bg-primary-brown text-white rounded-lg transition-smooth cursor-pointer"
                       style={{ 
                         display: 'inline-flex', 
                         alignItems: 'center', 
-                        gap: '0.5rem',
-                        textDecoration: 'none'
+                        gap: '0.5rem'
                       }}
                     >
                       <i className="ri-external-link-line"></i>
                       Abrir arquivo em nova aba
-                    </a>
+                    </button>
                   </div>
                 </div>
               )}
