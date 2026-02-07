@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../../contexts/ToastContext';
 import FileUpload from '../../components/projetos/FileUpload';
+import { createStreamVideoFromUrl, getStreamIframeUrl } from '../../services/stream';
 
 export default function SharedAudioVideoForm() {
+  const toast = useToast();
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -262,6 +265,20 @@ export default function SharedAudioVideoForm() {
       } else if (formData.formato === 'arquivo' && uploadedFile) {
         dadosParaSalvar.arquivo_url = uploadedFile.url;
         dadosParaSalvar.arquivo_nome = uploadedFile.fileName;
+        // Para vídeo: enviar também para Cloudflare Stream para reprodução otimizada
+        if (tipoFinal === 'video') {
+          try {
+            const result = await createStreamVideoFromUrl({
+              sourceUrl: uploadedFile.url,
+              name: uploadedFile.fileName,
+            });
+            dadosParaSalvar.stream_uid = result.uid;
+            dadosParaSalvar.stream_iframe_url = getStreamIframeUrl(result.uid) || undefined;
+          } catch (e: any) {
+            console.warn('Stream não disponível, vídeo será reproduzido direto:', e?.message);
+            toast?.info('Vídeo salvo; a reprodução pode usar transmissão otimizada depois.');
+          }
+        }
       }
 
       // Salvar na tabela faixa_audio_video
@@ -440,7 +457,7 @@ export default function SharedAudioVideoForm() {
                     onUploadComplete={(url, fileName) => {
                       setUploadedFile({ url, fileName });
                     }}
-                    onError={(error) => alert(`Erro: ${error}`)}
+                    onError={(error) => toast.error(`Erro: ${error}`)}
                     accept={formData.tipo === 'audio' ? 'audio/*' : formData.tipo === 'video' ? 'video/*' : 'audio/*,video/*'}
                     label="Selecionar arquivo"
                   />

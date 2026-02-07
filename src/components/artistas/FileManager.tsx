@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { storageService, R2_BUCKETS } from '../../services/storage';
-import { uploadToR2, getSignedUrlR2 } from '../../lib/r2';
+import { getSignedUrlR2 } from '../../lib/r2';
+import { getBrowserViewableUrl } from '../../utils/storageUrl';
+import { useToast } from '../../contexts/ToastContext';
 
 interface Anexo {
   id: string;
@@ -45,12 +47,23 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
   const [editFileReplacement, setEditFileReplacement] = useState<File | null>(null);
   const [replacingFile, setReplacingFile] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const progressByFileRef = useRef<number[]>([]);
+  const toast = useToast();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [tabelaNaoExiste, setTabelaNaoExiste] = useState(false);
   const [erroCarregamento, setErroCarregamento] = useState<string | null>(null);
   const [previewArquivo, setPreviewArquivo] = useState<Anexo | null>(null);
+  // Clipboard para copiar/cortar/colar
+  const [clipboard, setClipboard] = useState<{ items: Anexo[]; action: 'copy' | 'cut' } | null>(null);
+  // Menu de contexto (clique direito)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: Anexo | null; targetFolderId: string | null } | null>(null);
+  // Drag and drop
+  const [dragState, setDragState] = useState<{ item: Anexo; dragOverFolderId: string | null; dragOverArea: boolean } | null>(null);
+  const [colando, setColando] = useState(false);
+  const justDraggedRef = useRef(false);
 
   useEffect(() => {
     loadAnexos();
@@ -61,6 +74,30 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
     setPastaAtual(null);
     setBreadcrumbs([{ id: null, nome: 'Raiz' }]);
   }, [artistaId]);
+
+  // Atalhos de teclado: Ctrl+V colar na pasta atual
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'v') {
+        e.preventDefault();
+        if (clipboard) colarItem(pastaAtual);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [clipboard, pastaAtual]);
+
+  // Fechar menu de contexto ao clicar fora
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [contextMenu]);
 
   const loadAnexos = async () => {
     try {
@@ -194,6 +231,8 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
   };
 
   // Handler para abrir arquivo com URL renovada
+  // Usa URL pública (r2.dev) quando disponível, pois o endpoint r2.cloudflarestorage.com
+  // causa ERR_SSL_VERSION_OR_CIPHER_MISMATCH em navegadores
   const handleOpenFile = async (anexo: Anexo, event?: React.MouseEvent) => {
     if (event) {
       event.preventDefault();
@@ -202,7 +241,8 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
     
     try {
       const url = await getValidUrl(anexo);
-      window.open(url, '_blank', 'noopener,noreferrer');
+      const urlBrowser = getBrowserViewableUrl(url, R2_BUCKETS.ANEXOS, anexo.arquivo_key);
+      window.open(urlBrowser, '_blank', 'noopener,noreferrer');
     } catch (error: any) {
       console.error('Erro ao abrir arquivo:', error);
       alert(`Erro ao abrir arquivo: ${error.message || 'Não foi possível gerar URL válida'}`);
@@ -338,6 +378,173 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
     return `${normalizeNome(artistaNome)}/${caminho.join('/')}`;
   };
 
+  // Verifica se destPastaId é o próprio item ou está dentro dele (evitar ciclo)
+  const ehDescendenteOuProprio = useCallback(async (itemId: string, destPastaId: string | null): Promise<boolean> => {
+    if (!destPastaId || destPastaId === itemId) return true;
+    let currentId: string | null = destPastaId;
+    while (currentId) {
+      if (currentId === itemId) return true;
+      const { data } = await supabase
+        .from('artistas_anexos')
+        .select('pasta_pai_id')
+        .eq('id', currentId)
+        .single();
+      currentId = data?.pasta_pai_id ?? null;
+    }
+    return false;
+  }, []);
+
+  const copiarItem = (item: Anexo) => {
+    setClipboard({ items: [item], action: 'copy' });
+    setContextMenu(null);
+  };
+
+  const cortarItem = (item: Anexo) => {
+    setClipboard({ items: [item], action: 'cut' });
+    setContextMenu(null);
+  };
+
+  const obterProximaOrdem = async (pastaPaiId: string | null): Promise<number> => {
+    let query = supabase
+      .from('artistas_anexos')
+      .select('ordem')
+      .eq('artista_id', artistaId);
+    if (pastaPaiId === null) {
+      query = query.is('pasta_pai_id', null);
+    } else {
+      query = query.eq('pasta_pai_id', pastaPaiId);
+    }
+    const { data } = await query.order('ordem', { ascending: false }).limit(1).maybeSingle();
+    return (data?.ordem ?? -1) + 1;
+  };
+
+  const duplicarArquivo = async (anexo: Anexo, destPastaId: string | null): Promise<Anexo | null> => {
+    if (!anexo.arquivo_key) return null;
+    try {
+      const url = await getSignedUrlR2(R2_BUCKETS.ANEXOS, anexo.arquivo_key, 3600);
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const baseName = anexo.nome.replace(/\.[^/.]+$/, '') || anexo.nome;
+      const ext = anexo.arquivo_extensao || anexo.nome.split('.').pop() || '';
+      const nomeCopia = `${baseName} (cópia)${ext ? '.' + ext : ''}`;
+      const file = new File([blob], nomeCopia, { type: anexo.arquivo_tipo || blob.type });
+      const pastaPath = destPastaId
+        ? await getCaminhoPastaCompleto(destPastaId)
+        : normalizeNome(artistaNome);
+      const result = await storageService.upload(file, {
+        bucket: R2_BUCKETS.ANEXOS,
+        folder: `artistas/${pastaPath}`,
+        makePublic: false,
+      });
+      const ordem = await obterProximaOrdem(destPastaId);
+      const { data: newRow, error } = await supabase
+        .from('artistas_anexos')
+        .insert({
+          artista_id: artistaId,
+          tipo: 'arquivo',
+          nome: nomeCopia,
+          pasta_pai_id: destPastaId,
+          arquivo_key: result.key,
+          arquivo_url: result.url,
+          arquivo_tamanho: anexo.arquivo_tamanho,
+          arquivo_tipo: anexo.arquivo_tipo,
+          arquivo_extensao: anexo.arquivo_extensao,
+          ordem,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return newRow;
+    } catch (e) {
+      console.error('Erro ao duplicar arquivo:', e);
+      throw e;
+    }
+  };
+
+  const duplicarPasta = async (anexo: Anexo, destPastaId: string | null): Promise<Anexo | null> => {
+    const ordem = await obterProximaOrdem(destPastaId);
+    const { data: novaPasta, error: errPasta } = await supabase
+      .from('artistas_anexos')
+      .insert({
+        artista_id: artistaId,
+        tipo: 'pasta',
+        nome: `${anexo.nome} (cópia)`,
+        pasta_pai_id: destPastaId,
+        ordem,
+      })
+      .select()
+      .single();
+    if (errPasta || !novaPasta) throw errPasta || new Error('Falha ao criar pasta');
+    const { data: filhos } = await supabase
+      .from('artistas_anexos')
+      .select('*')
+      .eq('pasta_pai_id', anexo.id)
+      .order('ordem', { ascending: true });
+    for (const filho of filhos || []) {
+      if (filho.tipo === 'arquivo') {
+        await duplicarArquivo(filho, novaPasta.id);
+      } else {
+        await duplicarPasta(filho, novaPasta.id);
+      }
+    }
+    return novaPasta;
+  };
+
+  const colarItem = async (destPastaId: string | null) => {
+    if (!clipboard || clipboard.items.length === 0) return;
+    setColando(true);
+    setContextMenu(null);
+    try {
+      for (const item of clipboard.items) {
+        const seriaCiclo = item.tipo === 'pasta' && (await ehDescendenteOuProprio(item.id, destPastaId));
+        if (seriaCiclo) {
+          alert(`Não é possível colar "${item.nome}" dentro de si mesma.`);
+          continue;
+        }
+        if (clipboard.action === 'cut') {
+          const ordem = await obterProximaOrdem(destPastaId);
+          await supabase
+            .from('artistas_anexos')
+            .update({ pasta_pai_id: destPastaId, ordem })
+            .eq('id', item.id);
+        } else {
+          if (item.tipo === 'arquivo') {
+            await duplicarArquivo(item, destPastaId);
+          } else {
+            await duplicarPasta(item, destPastaId);
+          }
+        }
+      }
+      if (clipboard.action === 'cut') setClipboard(null);
+      loadAnexos();
+    } catch (e: any) {
+      console.error('Erro ao colar:', e);
+      alert(`Erro ao colar: ${e.message || 'Tente novamente'}`);
+    } finally {
+      setColando(false);
+    }
+  };
+
+  const moverItemParaPasta = async (item: Anexo, destPastaId: string | null) => {
+    if (item.pasta_pai_id === destPastaId) return;
+    const seriaCiclo = item.tipo === 'pasta' && (await ehDescendenteOuProprio(item.id, destPastaId));
+    if (seriaCiclo) {
+      alert('Não é possível mover uma pasta para dentro de si mesma.');
+      return;
+    }
+    try {
+      const ordem = await obterProximaOrdem(destPastaId);
+      await supabase
+        .from('artistas_anexos')
+        .update({ pasta_pai_id: destPastaId, ordem })
+        .eq('id', item.id);
+      loadAnexos();
+    } catch (e: any) {
+      console.error('Erro ao mover:', e);
+      alert(`Erro ao mover: ${e.message || 'Tente novamente'}`);
+    }
+  };
+
   const entrarNaPasta = (pastaId: string, nomePasta: string) => {
     setPastaAtual(pastaId);
     setBreadcrumbs([...breadcrumbs, { id: pastaId, nome: nomePasta }]);
@@ -416,7 +623,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
         }
 
         // Fazer upload do novo arquivo
-        const result = await uploadToR2(editFileReplacement, {
+        const result = await storageService.upload(editFileReplacement, {
           bucket: R2_BUCKETS.ANEXOS,
           folder: `artistas/${pastaPath}`,
           makePublic: false,
@@ -449,10 +656,10 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
       setEditFileName('');
       setEditFileReplacement(null);
       loadAnexos();
-      alert('Arquivo atualizado com sucesso!');
+      toast.success('Arquivo atualizado com sucesso!');
     } catch (error: any) {
       console.error('Erro ao editar arquivo:', error);
-      alert(`Erro ao editar arquivo: ${error.message || 'Tente novamente'}`);
+      toast.error(`Erro ao editar arquivo: ${error.message || 'Tente novamente'}`);
     } finally {
       setReplacingFile(false);
     }
@@ -571,7 +778,84 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
   const arquivos = anexosFiltrados.filter(a => a.tipo === 'arquivo');
 
   return (
-    <div className="bg-dark-card border border-dark-border rounded-xl p-6">
+    <div className="bg-dark-card border border-dark-border rounded-xl p-6 relative">
+      {/* Menu de contexto (clique direito) - use React Portal para ficar por cima de tudo */}
+      {contextMenu && (
+        <div
+          role="menu"
+          className="fixed z-[9999] min-w-[200px] py-1 bg-dark-card border border-dark-border rounded-lg shadow-2xl"
+          style={{ left: Math.min(contextMenu.x, window.innerWidth - 220), top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contextMenu.item && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { contextMenu.item && copiarItem(contextMenu.item); setContextMenu(null); }}
+                className="w-full px-4 py-2 text-left text-sm text-white hover:bg-dark-hover flex items-center gap-2 cursor-pointer"
+              >
+                <i className="ri-file-copy-line"></i>
+                Copiar
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { contextMenu.item && cortarItem(contextMenu.item); setContextMenu(null); }}
+                className="w-full px-4 py-2 text-left text-sm text-white hover:bg-dark-hover flex items-center gap-2 cursor-pointer"
+              >
+                <i className="ri-scissors-line"></i>
+                Cortar
+              </button>
+              <div className="border-t border-dark-border my-1"></div>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { contextMenu.item && abrirModalEditar(contextMenu.item); setContextMenu(null); }}
+                className="w-full px-4 py-2 text-left text-sm text-white hover:bg-dark-hover flex items-center gap-2 cursor-pointer"
+              >
+                <i className="ri-edit-line"></i>
+                Renomear
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { contextMenu.item && deletarItem(contextMenu.item); setContextMenu(null); }}
+                className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-dark-hover flex items-center gap-2 cursor-pointer"
+              >
+                <i className="ri-delete-bin-line"></i>
+                Excluir
+              </button>
+              <div className="border-t border-dark-border my-1"></div>
+            </>
+          )}
+          {contextMenu.targetFolderId != null && contextMenu.targetFolderId !== '' && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { colarItem(contextMenu.targetFolderId); setContextMenu(null); }}
+              disabled={!clipboard || colando}
+              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-dark-hover flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <i className="ri-file-copy-line"></i>
+              Colar nesta pasta
+            </button>
+          )}
+          {!contextMenu.item && contextMenu.targetFolderId === null && clipboard && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { colarItem(pastaAtual); setContextMenu(null); }}
+              disabled={colando}
+              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-dark-hover flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <i className="ri-file-copy-line"></i>
+              Colar aqui
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Aviso se tabela não existe */}
       {tabelaNaoExiste && (
         <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
@@ -637,6 +921,20 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
           <p className="text-sm text-gray-400">Gerencie pastas e arquivos do artista</p>
         </div>
         <div className="flex items-center gap-3">
+          {clipboard && (
+            <span className="text-xs text-gray-400 mr-1">
+              {clipboard.action === 'cut' ? '1 item para mover' : '1 item copiado'}
+            </span>
+          )}
+          <button
+            onClick={() => clipboard && colarItem(pastaAtual)}
+            disabled={!clipboard || colando}
+            className="px-4 py-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Colar aqui (Ctrl+V)"
+          >
+            {colando ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-file-copy-line"></i>}
+            <span>Colar</span>
+          </button>
           <button
             onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
             className="px-3 py-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
@@ -728,25 +1026,121 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
           )}
         </div>
       ) : (
-        <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'}>
+        <div
+          className={`${viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4' : 'space-y-2'} rounded-lg min-h-[120px] transition-colors ${
+            dragState?.dragOverArea ? 'bg-primary-teal/10 border-2 border-dashed border-primary-teal' : ''
+          }`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = 'move';
+            if (dragState) setDragState(s => s ? { ...s, dragOverFolderId: null, dragOverArea: true } : null);
+          }}
+          onDragLeave={(e) => {
+            const related = e.relatedTarget as Node | null;
+            if (!related || !e.currentTarget.contains(related)) {
+              setDragState(s => s ? { ...s, dragOverArea: false } : null);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = e.dataTransfer.getData('text/plain');
+            const item = anexos.find(a => a.id === id);
+            if (item) moverItemParaPasta(item, pastaAtual);
+            setDragState(null);
+          }}
+          onContextMenu={(e) => {
+            if ((e.target as HTMLElement).closest('[data-file-manager-item]')) return;
+            e.preventDefault();
+            setContextMenu({ x: e.clientX, y: e.clientY, item: null, targetFolderId: null });
+          }}
+        >
           {/* Pastas */}
           {pastas.map((pasta) => (
             <div
               key={pasta.id}
-              className={`bg-dark-bg border border-dark-border rounded-lg p-4 hover:border-primary-teal transition-smooth cursor-pointer group ${
+              data-file-manager-item
+              draggable
+              onDragStart={(e) => {
+                const target = e.target as HTMLElement;
+                if (target.closest('[data-drag-handle]')) return;
+                justDraggedRef.current = true;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', pasta.id);
+                e.dataTransfer.setData('application/json', JSON.stringify({ id: pasta.id, tipo: pasta.tipo }));
+                setDragState({ item: pasta, dragOverFolderId: null, dragOverArea: false });
+              }}
+              onDragEnd={() => {
+                setDragState(null);
+                setTimeout(() => { justDraggedRef.current = false; }, 0);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = 'move';
+                if (dragState && dragState.item.id !== pasta.id) {
+                  setDragState(s => s ? { ...s, dragOverFolderId: pasta.id, dragOverArea: false } : null);
+                }
+              }}
+              onDragLeave={() => setDragState(s => s ? { ...s, dragOverFolderId: s.dragOverFolderId === pasta.id ? null : s.dragOverFolderId } : null)}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = e.dataTransfer.getData('text/plain');
+                const item = anexos.find(a => a.id === id);
+                if (item && item.id !== pasta.id) moverItemParaPasta(item, pasta.id);
+                setDragState(null);
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setContextMenu({ x: e.clientX, y: e.clientY, item: pasta, targetFolderId: pasta.id });
+              }}
+              className={`bg-dark-bg border rounded-lg p-4 hover:border-primary-teal transition-smooth cursor-pointer group select-none ${
                 viewMode === 'list' ? 'flex items-center gap-4' : ''
+              } ${
+                dragState?.dragOverFolderId === pasta.id
+                  ? 'border-primary-teal border-2 bg-primary-teal/10'
+                  : 'border-dark-border'
               }`}
-              onClick={() => entrarNaPasta(pasta.id, pasta.nome)}
+              onClick={() => {
+                if (justDraggedRef.current) return;
+                entrarNaPasta(pasta.id, pasta.nome);
+              }}
             >
               <div className={`flex items-center gap-3 ${viewMode === 'list' ? 'flex-1' : 'flex-col'}`}>
-                <div className="w-12 h-12 rounded-lg bg-primary-teal/20 flex items-center justify-center text-primary-teal text-2xl">
+                <div className="w-12 h-12 rounded-lg bg-primary-teal/20 flex items-center justify-center text-primary-teal text-2xl flex-shrink-0">
                   <i className="ri-folder-line"></i>
                 </div>
-                <div className={`flex-1 ${viewMode === 'list' ? '' : 'text-center'}`}>
+                <div className={`flex-1 ${viewMode === 'list' ? '' : 'text-center'} min-w-0`}>
                   <h3 className="text-white font-medium text-sm truncate">{pasta.nome}</h3>
                   <p className="text-xs text-gray-500 mt-1">Pasta</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div
+                    data-drag-handle
+                    draggable
+                    onDragStart={(e) => {
+                      e.stopPropagation();
+                      justDraggedRef.current = true;
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData('text/plain', pasta.id);
+                      e.dataTransfer.setData('application/json', JSON.stringify({ id: pasta.id, tipo: pasta.tipo }));
+                      setDragState({ item: pasta, dragOverFolderId: null, dragOverArea: false });
+                    }}
+                    onDragEnd={() => {
+                      setDragState(null);
+                      setTimeout(() => { justDraggedRef.current = false; }, 0);
+                    }}
+                    className="cursor-grab active:cursor-grabbing p-1.5 rounded text-gray-400 hover:text-primary-teal hover:bg-dark-border/50 select-none touch-none min-w-[28px] min-h-[28px] flex items-center justify-center"
+                    title="Arrastar para mover"
+                    onClick={(e) => e.stopPropagation()}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <i className="ri-draggable pointer-events-none" aria-hidden></i>
+                  </div>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -778,19 +1172,38 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
             return (
               <div
                 key={arquivo.id}
+                data-file-manager-item
+                draggable
+                onDragStart={(e) => {
+                  const target = e.target as HTMLElement;
+                  if (target.closest('[data-drag-handle]')) return;
+                  justDraggedRef.current = true;
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('text/plain', arquivo.id);
+                  e.dataTransfer.setData('application/json', JSON.stringify({ id: arquivo.id, tipo: arquivo.tipo }));
+                  setDragState({ item: arquivo, dragOverFolderId: null, dragOverArea: false });
+                }}
+                onDragEnd={() => {
+                  setDragState(null);
+                  setTimeout(() => { justDraggedRef.current = false; }, 0);
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextMenu({ x: e.clientX, y: e.clientY, item: arquivo, targetFolderId: null });
+                }}
                 onClick={async () => {
+                  if (justDraggedRef.current) return;
                   if (arquivo.arquivo_url) {
-                    // Gerar nova URL antes de abrir preview
                     try {
                       const url = await getValidUrl(arquivo);
                       setPreviewArquivo({ ...arquivo, arquivo_url: url });
                     } catch (error) {
-                      // Se falhar, tentar com URL existente
                       setPreviewArquivo(arquivo);
                     }
                   }
                 }}
-                className={`bg-dark-bg border border-dark-border rounded-lg hover:border-primary-teal transition-smooth group cursor-pointer overflow-hidden ${
+                className={`bg-dark-bg border border-dark-border rounded-lg hover:border-primary-teal transition-smooth group cursor-pointer overflow-hidden select-none ${
                   viewMode === 'list' 
                     ? 'flex items-center gap-4 p-2' 
                     : ehImagem 
@@ -803,7 +1216,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                   <>
                     <div className="relative w-12 h-12 rounded-lg bg-primary-teal/20 overflow-hidden flex-shrink-0">
                       {ehImagem ? (
-                        <img src={arquivo.arquivo_url!} alt={arquivo.nome} className="absolute inset-0 w-full h-full object-cover" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; e.currentTarget.parentElement?.querySelector('.thumb-fallback')?.classList.remove('hidden'); }} />
+                        <img draggable={false} src={arquivo.arquivo_url!} alt={arquivo.nome} className="absolute inset-0 w-full h-full object-cover pointer-events-none" loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; e.currentTarget.parentElement?.querySelector('.thumb-fallback')?.classList.remove('hidden'); }} />
                       ) : null}
                       <span className={`thumb-fallback absolute inset-0 flex items-center justify-center ${ehImagem ? 'hidden' : ''}`}>
                         <i className={`${getIconeArquivo(arquivo.arquivo_extensao)} text-primary-teal text-xl`}></i>
@@ -814,9 +1227,31 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                       <p className="text-xs text-gray-500">{arquivo.arquivo_tamanho ? formatarTamanho(arquivo.arquivo_tamanho) : '—'}</p>
                     </div>
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <div
+                        data-drag-handle
+                        draggable
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          justDraggedRef.current = true;
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', arquivo.id);
+                          e.dataTransfer.setData('application/json', JSON.stringify({ id: arquivo.id, tipo: arquivo.tipo }));
+                          setDragState({ item: arquivo, dragOverFolderId: null, dragOverArea: false });
+                        }}
+                        onDragEnd={() => {
+                          setDragState(null);
+                          setTimeout(() => { justDraggedRef.current = false; }, 0);
+                        }}
+                        className="cursor-grab active:cursor-grabbing p-1.5 rounded text-gray-400 hover:text-primary-teal select-none touch-none min-w-[28px] min-h-[28px] flex items-center justify-center shrink-0"
+                        title="Arrastar para mover"
+                        onClick={(e) => e.stopPropagation()}
+                        role="button"
+                      >
+                        <i className="ri-draggable pointer-events-none" aria-hidden></i>
+                      </div>
                       {arquivo.arquivo_url && <button onClick={(e) => handleOpenFile(arquivo, e)} className="opacity-0 group-hover:opacity-100 text-primary-teal hover:text-primary-brown transition-opacity cursor-pointer" title="Abrir em nova aba"><i className="ri-external-link-line"></i></button>}
-                      <button onClick={(e) => { e.stopPropagation(); abrirModalEditar(arquivo); }} className="opacity-0 group-hover:opacity-100 text-primary-teal hover:text-primary-brown transition-opacity" title="Editar"><i className="ri-edit-line"></i></button>
-                      <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-opacity" title="Deletar"><i className="ri-delete-bin-line"></i></button>
+                      <button onClick={(e) => { e.stopPropagation(); abrirModalEditar(arquivo); }} className="text-primary-teal hover:text-primary-brown transition-opacity" title="Editar"><i className="ri-edit-line"></i></button>
+                      <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="text-red-400 hover:text-red-300 transition-opacity" title="Deletar"><i className="ri-delete-bin-line"></i></button>
                     </div>
                   </>
                 ) : ehImagem ? (
@@ -824,9 +1259,10 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                   <>
                     <div className="relative aspect-[4/3] w-full min-h-[100px] bg-dark-border overflow-hidden">
                       <img
+                        draggable={false}
                         src={arquivo.arquivo_url!}
                         alt={arquivo.nome}
-                        className="absolute inset-0 w-full h-full object-cover"
+                        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                         loading="lazy"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
@@ -840,6 +1276,30 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex items-center justify-between">
                         <h3 className="text-white font-medium text-xs truncate flex-1 mr-2">{arquivo.nome}</h3>
                         <span className="text-gray-300 text-xs flex-shrink-0">{arquivo.arquivo_tamanho ? formatarTamanho(arquivo.arquivo_tamanho) : ''}</span>
+                      </div>
+                      <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                        <div
+                          data-drag-handle
+                          draggable
+                          onDragStart={(e) => {
+                            e.stopPropagation();
+                            justDraggedRef.current = true;
+                            e.dataTransfer.effectAllowed = 'move';
+                            e.dataTransfer.setData('text/plain', arquivo.id);
+                            e.dataTransfer.setData('application/json', JSON.stringify({ id: arquivo.id, tipo: arquivo.tipo }));
+                            setDragState({ item: arquivo, dragOverFolderId: null, dragOverArea: false });
+                          }}
+                          onDragEnd={() => {
+                            setDragState(null);
+                            setTimeout(() => { justDraggedRef.current = false; }, 0);
+                          }}
+                          className="p-1.5 bg-black/60 rounded text-gray-300 hover:text-primary-teal hover:bg-black/80 cursor-grab active:cursor-grabbing select-none touch-none min-w-[28px] min-h-[28px] inline-flex items-center justify-center"
+                          title="Arrastar para mover"
+                          onClick={(e) => e.stopPropagation()}
+                          role="button"
+                        >
+                          <i className="ri-draggable text-sm pointer-events-none" aria-hidden></i>
+                        </div>
                       </div>
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                         {arquivo.arquivo_url && <button onClick={(e) => handleOpenFile(arquivo, e)} className="p-1.5 bg-black/60 rounded text-primary-teal hover:bg-black/80 cursor-pointer" title="Abrir"><i className="ri-external-link-line text-sm"></i></button>}
@@ -858,7 +1318,29 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                       <h3 className="text-white font-medium text-sm truncate">{arquivo.nome}</h3>
                       <p className="text-xs text-gray-500">{arquivo.arquivo_tamanho ? formatarTamanho(arquivo.arquivo_tamanho) : '—'}</p>
                     </div>
-                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <div
+                        data-drag-handle
+                        draggable
+                        onDragStart={(e) => {
+                          e.stopPropagation();
+                          justDraggedRef.current = true;
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', arquivo.id);
+                          e.dataTransfer.setData('application/json', JSON.stringify({ id: arquivo.id, tipo: arquivo.tipo }));
+                          setDragState({ item: arquivo, dragOverFolderId: null, dragOverArea: false });
+                        }}
+                        onDragEnd={() => {
+                          setDragState(null);
+                          setTimeout(() => { justDraggedRef.current = false; }, 0);
+                        }}
+                        className="cursor-grab active:cursor-grabbing p-1.5 rounded text-gray-400 hover:text-primary-teal select-none touch-none min-w-[28px] min-h-[28px] flex items-center justify-center shrink-0"
+                        title="Arrastar para mover"
+                        onClick={(e) => e.stopPropagation()}
+                        role="button"
+                      >
+                        <i className="ri-draggable pointer-events-none" aria-hidden></i>
+                      </div>
                       {arquivo.arquivo_url && <button onClick={(e) => handleOpenFile(arquivo, e)} className="opacity-0 group-hover:opacity-100 text-primary-teal cursor-pointer" title="Abrir"><i className="ri-external-link-line"></i></button>}
                       <button onClick={(e) => { e.stopPropagation(); abrirModalEditar(arquivo); }} className="opacity-0 group-hover:opacity-100 text-primary-teal" title="Editar"><i className="ri-edit-line"></i></button>
                       <button onClick={(e) => { e.stopPropagation(); deletarItem(arquivo); }} className="opacity-0 group-hover:opacity-100 text-red-400" title="Deletar"><i className="ri-delete-bin-line"></i></button>
@@ -1294,6 +1776,20 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                   </div>
                 )}
               </div>
+              {uploading && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm text-gray-400">
+                    <span>Progresso</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-dark-bg rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary-teal transition-all duration-300 ease-out"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="flex gap-3">
                 <button
                   onClick={() => {

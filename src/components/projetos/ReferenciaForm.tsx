@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import YouTubePreview from './YouTubePreview';
 import FileUpload from './FileUpload';
+import { useToast } from '../../contexts/ToastContext';
 
 interface ReferenciaFormProps {
   projetoId: string;
@@ -31,6 +32,7 @@ export default function ReferenciaForm({
   onCancel,
   initialData,
 }: ReferenciaFormProps) {
+  const toast = useToast();
   const [tipo, setTipo] = useState<'youtube_url' | 'arquivo'>(initialData?.tipo || 'youtube_url');
   const [url, setUrl] = useState(initialData?.url || '');
   const [arquivoUrl, setArquivoUrl] = useState(initialData?.arquivo_url || '');
@@ -163,7 +165,7 @@ export default function ReferenciaForm({
                 setArquivoUrl(url);
                 setArquivoNome(fileName);
               }}
-              onError={(error) => alert(`Erro: ${error}`)}
+              onError={(error) => toast.error(`Erro: ${error}`)}
               accept="*/*"
               label="Selecionar arquivo"
             />

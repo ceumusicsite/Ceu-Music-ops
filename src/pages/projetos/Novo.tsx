@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
+import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import { fornecedoresMock } from '../../data/fornecedores-mock';
 import { produtoresMock } from '../../data/produtores-mock';
@@ -16,6 +17,7 @@ interface FaixaForm {
 
 export default function NovoProjeto() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [artistas, setArtistas] = useState<any[]>([]);
   const [fornecedores, setFornecedores] = useState(fornecedoresMock);
@@ -849,7 +851,7 @@ export default function NovoProjeto() {
                       const urlInput = document.getElementById('url-ref-projeto') as HTMLInputElement;
                       if (urlInput) urlInput.value = url;
                     }}
-                    onError={(error) => alert(`Erro: ${error}`)}
+                    onError={(error) => toast.error(`Erro: ${error}`)}
                     accept="*/*"
                     label="Selecionar arquivo"
                   />
@@ -955,7 +957,7 @@ export default function NovoProjeto() {
                     bucket="projetos-anexos"
                     folder={`temp/${Date.now()}`}
                     onUploadComplete={(url, fileName) => handleSaveAnexoProjeto(url, fileName)}
-                    onError={(error) => alert(`Erro: ${error}`)}
+                    onError={(error) => toast.error(`Erro: ${error}`)}
                     accept="*/*"
                     label="Selecionar arquivo"
                   />

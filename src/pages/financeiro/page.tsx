@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 
 type FilterTab = 'todos' | 'pendente' | 'pago' | 'atrasado';
@@ -25,6 +26,8 @@ export default function Financeiro() {
   const [projetos, setProjetos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const toast = useToast();
   
   const [formData, setFormData] = useState({
     description: '',
@@ -385,16 +388,16 @@ export default function Financeiro() {
 
     try {
       setUploading(true);
+      setUploadProgress(0);
       
-      // Upload para Cloudflare R2
       const { storageService, R2_BUCKETS } = await import('../../services/storage');
       const result = await storageService.upload(file, {
         bucket: R2_BUCKETS.COMPROVANTES,
         folder: 'comprovantes',
-        makePublic: false, // Usar signed URLs (mais seguro)
+        makePublic: false,
+        onProgress: (percent) => setUploadProgress(percent),
       });
 
-      // Atualizar pagamento com URL do comprovante
       const { error: updateError } = await supabase
         .from('pagamentos')
         .update({ comprovante_url: result.url })
@@ -405,12 +408,13 @@ export default function Financeiro() {
       await loadPagamentos();
       setShowUploadModal(false);
       setSelectedPagamento(null);
-      alert('Comprovante enviado com sucesso!');
+      toast.success('Comprovante enviado com sucesso!');
     } catch (error: any) {
       console.error('Erro ao fazer upload:', error);
-      alert(`Erro ao fazer upload: ${error.message || 'Verifique o console para mais detalhes.'}`);
+      toast.error(`Erro ao fazer upload: ${error.message || 'Verifique o console para mais detalhes.'}`);
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -1474,9 +1478,17 @@ export default function Financeiro() {
                 </div>
 
                 {uploading && (
-                  <div className="text-center py-4">
-                    <i className="ri-loader-4-line text-2xl text-primary-teal animate-spin"></i>
-                    <p className="text-sm text-gray-400 mt-2">Enviando comprovante...</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-gray-400">
+                      <span>Progresso</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-dark-bg rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary-teal transition-all duration-300 ease-out"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
                   </div>
                 )}
 

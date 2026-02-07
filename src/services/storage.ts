@@ -9,6 +9,7 @@ const DEFAULT_STORAGE_PROVIDER: StorageProvider = (import.meta.env.VITE_STORAGE_
 export interface StorageUploadOptions extends UploadOptions {
   provider?: StorageProvider;
   customFileName?: string; // Nome customizado para o arquivo
+  onProgress?: (percent: number) => void;
 }
 
 /**
@@ -45,6 +46,7 @@ export class StorageService {
         contentType: options.contentType,
         makePublic: options.makePublic,
         customFileName: options.customFileName,
+        onProgress: options.onProgress,
       });
     } catch (error: any) {
       // Se R2 não estiver configurado ou houver erro de autenticação, fazer fallback para Supabase
@@ -112,6 +114,17 @@ export class StorageService {
         throw new Error(`Erro ao ler arquivo: ${readError.message || 'Não foi possível ler o arquivo. Verifique se o arquivo não está sendo usado por outro programa.'}`);
       }
       
+      // Supabase não expõe progresso nativo - simulamos para feedback visual
+      let progressInterval: ReturnType<typeof setInterval> | null = null;
+      if (options.onProgress) {
+        let p = 0;
+        options.onProgress(0);
+        progressInterval = setInterval(() => {
+          p = Math.min(p + 5, 90);
+          options.onProgress?.(p);
+        }, 150);
+      }
+      
       // Upload para Supabase
       const { error: uploadError } = await supabase.storage
         .from(supabaseBucket)
@@ -119,6 +132,11 @@ export class StorageService {
           contentType: options.contentType || file.type,
           upsert: false,
         });
+      
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        options.onProgress?.(100);
+      }
 
       if (uploadError) {
         // Se o bucket não existir, tentar criar ou usar bucket padrão
