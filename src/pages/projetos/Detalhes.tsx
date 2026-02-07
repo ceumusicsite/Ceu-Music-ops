@@ -219,6 +219,7 @@ export default function ProjetoDetalhes() {
         if (av.arquivo_bucket && av.arquivo_key) {
           sourceUrl = await getSignedUrlR2(av.arquivo_bucket, av.arquivo_key, 24 * 3600);
         } else {
+          // Vídeos antigos sem bucket/key: URL no banco pode estar expirada; Stream pode falhar
           sourceUrl = getUrlParaAbrir(av.arquivo_url, av.arquivo_bucket, av.arquivo_key);
         }
         const result = await createStreamVideoFromUrl({
@@ -2725,6 +2726,26 @@ export default function ProjetoDetalhes() {
                       playingAudioVideo.versao === 'masterizado' ? 'Masterizado' :
                       playingAudioVideo.versao}`}
                   </p>
+                  {playingAudioVideo.tipo === 'video' && (
+                    <span className={`inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-md text-xs font-medium ${
+                      playingAudioVideo.stream_uid
+                        ? 'bg-primary-teal/20 text-primary-teal'
+                        : streamPlaybackLoading
+                          ? 'bg-amber-500/20 text-amber-400'
+                          : 'bg-gray-500/20 text-gray-400'
+                    }`}>
+                      <i className={
+                        playingAudioVideo.stream_uid ? 'ri-live-line'
+                          : streamPlaybackLoading ? 'ri-loader-4-line animate-spin'
+                          : 'ri-folder-open-line'
+                      } />
+                      {playingAudioVideo.stream_uid
+                        ? 'Reproduzindo via Cloudflare Stream'
+                        : streamPlaybackLoading
+                          ? 'Preparando transmissão...'
+                          : 'Reproduzindo via armazenamento'}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {((playingAudioVideo.formato === 'arquivo' && playingAudioVideo.arquivo_url) || (playingAudioVideo.formato === 'link' && playingAudioVideo.link_url)) && (

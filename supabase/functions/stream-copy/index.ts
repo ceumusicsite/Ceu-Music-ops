@@ -87,11 +87,12 @@ export default {
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
+        const errMsg = data?.errors?.[0]?.message || data?.error || `HTTP ${res.status}`;
         return json(
           {
             error: 'Cloudflare Stream API error',
             status: res.status,
-            details: data,
+            details: { cloudflareMessage: errMsg, raw: data },
           },
           { status: 502 }
         );
@@ -114,7 +115,8 @@ export default {
         }
       );
     } catch (e) {
-      return json({ error: 'Failed to call Cloudflare Stream API', details: String(e) }, { status: 502 });
+      const errMsg = e instanceof Error ? e.message : String(e);
+      return json({ error: 'Failed to call Cloudflare Stream API', details: errMsg }, { status: 502 });
     }
   },
 };

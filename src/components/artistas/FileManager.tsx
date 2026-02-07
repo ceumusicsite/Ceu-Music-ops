@@ -298,26 +298,35 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
 
   const fazerUpload = async () => {
     if (selectedFiles.length === 0) {
-      alert('Selecione pelo menos um arquivo');
+      toast.warning('Selecione pelo menos um arquivo');
       return;
     }
 
     try {
       setUploading(true);
+      setUploadProgress(0);
+      progressByFileRef.current = selectedFiles.map(() => 0);
+
       const pastaNormalizada = normalizeNome(artistaNome);
-      // Construir caminho da pasta
       let pastaPath = pastaNormalizada;
       if (pastaAtual) {
         const caminhoCompleto = await getCaminhoPastaCompleto(pastaAtual);
         pastaPath = caminhoCompleto;
       }
 
-      const uploads = selectedFiles.map(async (file) => {
-        // Upload para R2
-        const result = await uploadToR2(file, {
+      const updateOverallProgress = (index: number, percent: number) => {
+        progressByFileRef.current[index] = percent;
+        const total = progressByFileRef.current.reduce((a, b) => a + b, 0);
+        const avg = Math.round(total / progressByFileRef.current.length);
+        setUploadProgress(avg);
+      };
+
+      const uploads = selectedFiles.map(async (file, index) => {
+        const result = await storageService.upload(file, {
           bucket: R2_BUCKETS.ANEXOS,
           folder: `artistas/${pastaPath}`,
-          makePublic: false, // URLs assinadas são mais seguras
+          makePublic: false,
+          onProgress: (percent) => updateOverallProgress(index, percent),
         });
 
         // Salvar metadados no banco
@@ -347,12 +356,13 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
       setSelectedFiles([]);
       setShowUploadModal(false);
       loadAnexos();
-      alert('Arquivos enviados com sucesso!');
+      toast.success('Arquivos enviados com sucesso!');
     } catch (error: any) {
       console.error('Erro ao fazer upload:', error);
-      alert(`Erro ao fazer upload: ${error.message || 'Tente novamente'}`);
+      toast.error(`Erro ao fazer upload: ${error.message || 'Tente novamente'}`);
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 

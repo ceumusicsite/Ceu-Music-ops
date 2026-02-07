@@ -38,8 +38,15 @@ export async function createStreamVideoFromUrl(params: {
     },
   });
 
+  // Erro da Edge Function (4xx/5xx): o body vem em data com { error, details? }
+  if (data && typeof data === 'object' && 'error' in data && !data?.uid) {
+    const msg = (data as { error?: string; details?: unknown }).error || 'Erro na função stream-copy';
+    const details = (data as { details?: unknown }).details;
+    const detailStr = details != null ? (typeof details === 'object' ? JSON.stringify(details) : String(details)) : '';
+    throw new Error(detailStr ? `${msg} — ${detailStr}` : msg);
+  }
+
   if (error) {
-    // supabase-js retorna error em alguns casos, mas body pode ter mais detalhes
     throw new Error(error.message || 'Falha ao chamar função stream-copy');
   }
 
