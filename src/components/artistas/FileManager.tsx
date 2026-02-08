@@ -72,6 +72,9 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
   const [colando, setColando] = useState(false);
   // Menu de ações (três pontinhos) para mobile/touch
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  // Modo Organizar (mobile): ativado pelo botão "Organizar"; toque seleciona item, toque no destino move
+  const [modoOrganizar, setModoOrganizar] = useState(false);
+  const [itemSelecionadoParaMover, setItemSelecionadoParaMover] = useState<Anexo | null>(null);
   // URLs renovadas para miniaturas de vídeo (evita thumbnail quebrado por URL expirada)
   const [videoThumbUrls, setVideoThumbUrls] = useState<Record<string, string>>({});
 
@@ -1076,7 +1079,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                 className="w-full px-4 py-2 text-left text-sm text-primary-teal hover:bg-dark-hover flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <i className="ri-file-copy-line"></i>
-                Colar nesta pasta {clipboard.operacao === 'cortar' ? '(mover)' : '(copiar)'}
+                Colar nesta pasta {clipboard.action === 'cut' ? '(mover)' : '(copiar)'}
               </button>
             </>
           )}
@@ -1161,26 +1164,54 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
           <p className="text-sm text-gray-400">Gerencie pastas e arquivos do artista</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {clipboard && (
-            <span className="text-xs text-gray-400 w-full sm:w-auto">
-              {clipboard.action === 'cut' ? '1 item para mover' : '1 item copiado'}
-            </span>
+          {clipboard && clipboard.items.length > 0 && (
+            <>
+              <span className="text-xs text-gray-400 w-full sm:w-auto">
+                {clipboard.action === 'cut' ? '1 item para mover' : '1 item copiado'}
+              </span>
+              <button
+                onClick={() => clipboard && colarItem(pastaAtual)}
+                disabled={colando}
+                className="px-3 py-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm shrink-0"
+                title="Colar aqui (Ctrl+V)"
+              >
+                {colando ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-file-copy-line"></i>}
+                <span className="whitespace-nowrap">Colar</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setClipboard(null);
+                  toast.success('Colagem cancelada.');
+                }}
+                className="p-2 bg-dark-bg hover:bg-red-500/20 text-gray-400 hover:text-red-300 rounded-lg transition-smooth cursor-pointer shrink-0"
+                title="Cancelar colagem (descartar item do clipboard)"
+                aria-label="Cancelar colagem"
+              >
+                <i className="ri-close-line text-lg"></i>
+              </button>
+            </>
           )}
-          <button
-            onClick={() => clipboard && colarItem(pastaAtual)}
-            disabled={!clipboard || colando}
-            className="px-3 py-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm shrink-0"
-            title="Colar aqui (Ctrl+V)"
-          >
-            {colando ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-file-copy-line"></i>}
-            <span className="whitespace-nowrap">Colar</span>
-          </button>
           <button
             onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
             className="p-2 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer shrink-0"
             title={viewMode === 'grid' ? 'Visualização em lista' : 'Visualização em grade'}
           >
             <i className={viewMode === 'grid' ? 'ri-list-check' : 'ri-grid-line'}></i>
+          </button>
+          {/* Organizar: só mobile; ativa modo toque-para-mover */}
+          <button
+            onClick={() => {
+              setModoOrganizar((prev) => !prev);
+              setItemSelecionadoParaMover(null);
+            }}
+            className={`lg:hidden px-3 py-2 rounded-lg transition-smooth cursor-pointer flex items-center gap-2 text-sm shrink-0 ${
+              modoOrganizar ? 'bg-primary-teal text-white' : 'bg-dark-bg hover:bg-dark-hover text-white'
+            }`}
+            title={modoOrganizar ? 'Concluir e sair do modo organizar' : 'Organizar: toque em um item e depois na pasta de destino'}
+          >
+            <i className={modoOrganizar ? 'ri-check-line' : 'ri-draggable'}></i>
+            <span className="whitespace-nowrap">{modoOrganizar ? 'Concluir' : 'Organizar'}</span>
           </button>
           <button
             onClick={() => setShowCreateFolderModal(true)}
@@ -1219,6 +1250,27 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
           </div>
         ))}
       </div>
+
+      {/* Aviso modo Organizar (mobile) */}
+      {modoOrganizar && (
+        <div className="mb-4 p-3 bg-primary-teal/15 border border-primary-teal/40 rounded-lg flex items-center justify-between gap-2 lg:hidden">
+          <p className="text-sm text-primary-teal">
+            {itemSelecionadoParaMover ? (
+              <>Toque na pasta de destino ou na área vazia para mover &quot;{itemSelecionadoParaMover.nome}&quot;</>
+            ) : (
+              <>Toque em um item para selecionar e depois na pasta de destino</>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => { setModoOrganizar(false); setItemSelecionadoParaMover(null); }}
+            className="shrink-0 p-1.5 rounded-lg bg-primary-teal/30 hover:bg-primary-teal/50 text-white"
+            aria-label="Fechar"
+          >
+            <i className="ri-close-line text-lg"></i>
+          </button>
+        </div>
+      )}
 
       {/* Busca */}
       <div className="mb-4">
@@ -1294,6 +1346,15 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
             e.preventDefault();
             setContextMenu({ x: e.clientX, y: e.clientY, item: null, targetFolderId: null });
           }}
+          onClick={(e) => {
+            if (!modoOrganizar || !itemSelecionadoParaMover) return;
+            if ((e.target as HTMLElement).closest('[data-file-manager-item]')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            moverItemParaPasta(itemSelecionadoParaMover, pastaAtual);
+            toast.success(`"${itemSelecionadoParaMover.nome}" movido para ${pastaAtual ? 'a pasta atual' : 'a raiz'}.`);
+            setItemSelecionadoParaMover(null);
+          }}
         >
           {/* Pastas */}
           {pastas.map((pasta) => (
@@ -1354,8 +1415,29 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                 console.log('[onContextMenu] Menu de contexto para pasta:', pasta.nome, 'ID:', pasta.id);
                 setContextMenu({ x: e.clientX, y: e.clientY, item: pasta, targetFolderId: pasta.id });
               }}
+              onClick={async (e) => {
+                if (!modoOrganizar) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setOpenActionMenuId(null);
+                if (itemSelecionadoParaMover) {
+                  if (itemSelecionadoParaMover.id === pasta.id) {
+                    setItemSelecionadoParaMover(null);
+                    return;
+                  }
+                  if (itemSelecionadoParaMover.tipo === 'pasta' && (await ehDescendenteOuProprio(itemSelecionadoParaMover.id, pasta.id))) {
+                    toast.error('Não é possível mover uma pasta para dentro de si mesma.');
+                    return;
+                  }
+                  moverItemParaPasta(itemSelecionadoParaMover, pasta.id);
+                  toast.success(`"${itemSelecionadoParaMover.nome}" movido para "${pasta.nome}".`);
+                  setItemSelecionadoParaMover(null);
+                } else {
+                  setItemSelecionadoParaMover(pasta);
+                }
+              }}
               onDoubleClick={(e) => {
-                // Entrar na pasta no duplo clique
+                if (modoOrganizar) return;
                 entrarNaPasta(pasta.id, pasta.nome);
               }}
               className={`bg-dark-bg border rounded-lg p-3 sm:p-4 hover:border-primary-teal transition-smooth cursor-move group min-w-0 overflow-hidden relative ${
@@ -1364,7 +1446,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                 dragState?.dragOverFolderId === pasta.id
                   ? 'border-primary-teal border-2 bg-primary-teal/10'
                   : 'border-dark-border'
-              }`}
+              } ${modoOrganizar && itemSelecionadoParaMover?.id === pasta.id ? 'ring-2 ring-primary-teal ring-offset-2 ring-offset-dark-bg' : ''}`}
             >
               {/* Botão ações (três pontinhos) - somente mobile */}
               <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-10 lg:hidden pointer-events-auto" onClick={(e) => e.stopPropagation()}>
@@ -1471,8 +1553,28 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                   console.log('[onContextMenu] Menu de contexto para arquivo:', arquivo.nome);
                   setContextMenu({ x: e.clientX, y: e.clientY, item: arquivo, targetFolderId: null });
                 }}
+                onClick={(e) => {
+                  if (!modoOrganizar) return;
+                  const target = e.target as HTMLElement;
+                  if (target.closest('button, [role="button"]')) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setOpenActionMenuId(null);
+                  if (itemSelecionadoParaMover) {
+                    if (itemSelecionadoParaMover.id === arquivo.id) {
+                      setItemSelecionadoParaMover(null);
+                      return;
+                    }
+                    // Arquivo não é pasta: destino = pasta atual (mover selecionado para a raiz da pasta atual)
+                    moverItemParaPasta(itemSelecionadoParaMover, pastaAtual);
+                    toast.success(`"${itemSelecionadoParaMover.nome}" movido para ${pastaAtual ? 'a pasta atual' : 'a raiz'}.`);
+                    setItemSelecionadoParaMover(null);
+                    return;
+                  }
+                  setItemSelecionadoParaMover(arquivo);
+                }}
                 onDoubleClick={async (e) => {
-                  // Abrir preview no duplo clique para não interferir com drag
+                  if (modoOrganizar) return;
                   if (arquivo.arquivo_url) {
                     // Gerar nova URL antes de abrir preview (sempre usa URL pública r2.dev quando disponível)
                     try {
@@ -1497,7 +1599,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                     : ehImagem 
                       ? 'flex flex-col p-0' 
                       : 'p-2 sm:p-3'
-                }`}
+                } ${modoOrganizar && itemSelecionadoParaMover?.id === arquivo.id ? 'ring-2 ring-primary-teal ring-offset-2 ring-offset-dark-bg' : ''}`}
               >
                 {/* Botão ações (três pontinhos) - somente mobile */}
                 <div className="absolute top-2 right-2 z-10 lg:hidden pointer-events-auto" onClick={(e) => e.stopPropagation()}>
