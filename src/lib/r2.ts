@@ -187,6 +187,7 @@ export async function uploadToR2(
 
 /**
  * Gera uma URL assinada para download de um arquivo
+ * (SignedUrlR2Options permite ResponseContentDisposition para forçar download no iPhone)
  */
 export interface SignedUrlR2Options {
   responseContentDisposition?: string;
