@@ -198,7 +198,10 @@ export default function ProjetoDetalhes() {
     }
   };
 
-  const handleDownloadVideo = async (audioVideo: FaixaAudioVideo) => {
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+  /** urlPronta: se o modal já converteu a URL (playingAudioVideoUrl), passar aqui para evitar demora */
+  const handleDownloadVideo = async (audioVideo: FaixaAudioVideo, urlPronta?: string | null) => {
     try {
       const url = audioVideo.formato === 'link' ? audioVideo.link_url : audioVideo.arquivo_url;
       if (!url) {
@@ -206,49 +209,45 @@ export default function ProjetoDetalhes() {
         return;
       }
 
-      console.log('Iniciando download de:', url);
-      
-      // Mostrar feedback de processamento
-      const loadingToast = document.createElement('div');
-      loadingToast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#3b82f6;color:white;padding:12px 20px;border-radius:8px;z-index:9999;box-shadow:0 4px 6px rgba(0,0,0,0.1);display:flex;align-items:center;gap:10px;';
-      loadingToast.innerHTML = '<i class="ri-loader-4-line animate-spin" style="font-size:18px;"></i><span>Preparando download...</span>';
-      document.body.appendChild(loadingToast);
-      
-      const downloadUrl = await getViewableUrlAsync(
-        url,
-        audioVideo.formato === 'arquivo' ? audioVideo.arquivo_bucket : undefined,
-        audioVideo.formato === 'arquivo' ? audioVideo.arquivo_key : undefined
-      );
+      let downloadUrl: string;
 
-      console.log('URL convertida para download:', downloadUrl);
+      if (urlPronta) {
+        downloadUrl = urlPronta;
+      } else {
+        const loadingToast = document.createElement('div');
+        loadingToast.style.cssText = 'position:fixed;bottom:20px;right:20px;left:20px;background:#3b82f6;color:white;padding:12px 20px;border-radius:8px;z-index:9999;box-shadow:0 4px 6px rgba(0,0,0,0.1);display:flex;align-items:center;gap:10px;';
+        loadingToast.innerHTML = '<i class="ri-loader-4-line animate-spin" style="font-size:18px;"></i><span>Preparando...</span>';
+        document.body.appendChild(loadingToast);
 
-      // Remover toast de loading
-      loadingToast.remove();
+        downloadUrl = await getViewableUrlAsync(
+          url,
+          audioVideo.formato === 'arquivo' ? audioVideo.arquivo_bucket : undefined,
+          audioVideo.formato === 'arquivo' ? audioVideo.arquivo_key : undefined
+        );
+        loadingToast.remove();
+      }
 
       const nomeArquivo = audioVideo.arquivo_nome || `video_${audioVideo.id}`;
 
-      // Download direto via <a> (mostra popup imediatamente)
+      // iPhone/Safari: abrir em nova aba (download direto não mostra popup rápido)
+      if (isIOS) {
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+        const msg = document.createElement('div');
+        msg.style.cssText = 'position:fixed;bottom:20px;left:20px;right:20px;background:#1e293b;color:white;padding:16px;border-radius:8px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:14px;line-height:1.5;';
+        msg.innerHTML = '✓ Abra na nova aba. Para salvar: <strong>segure no vídeo</strong> e escolha <strong>Salvar no dispositivo</strong> ou use o ícone de compartilhar.';
+        document.body.appendChild(msg);
+        setTimeout(() => msg.remove(), 6000);
+        return;
+      }
+
+      // Desktop: download via <a> (popup imediato)
       const a = document.createElement('a');
       a.href = downloadUrl;
       a.download = nomeArquivo;
-      
-      // Para iOS/Safari: adicionar target blank
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      if (isIOS) {
-        a.target = '_blank';
-      }
-      
       document.body.appendChild(a);
       a.click();
-      
-      // Dar tempo para o download iniciar antes de remover o elemento
-      setTimeout(() => {
-        document.body.removeChild(a);
-      }, 100);
+      setTimeout(() => document.body.removeChild(a), 100);
 
-      console.log('Download iniciado');
-
-      // Feedback de sucesso
       const successToast = document.createElement('div');
       successToast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#10b981;color:white;padding:12px 20px;border-radius:8px;z-index:9999;box-shadow:0 4px 6px rgba(0,0,0,0.1);';
       successToast.textContent = '✓ Download iniciado';
@@ -256,7 +255,7 @@ export default function ProjetoDetalhes() {
       setTimeout(() => successToast.remove(), 3000);
     } catch (error: any) {
       console.error('Erro ao baixar vídeo:', error);
-      alert(`Erro ao baixar: ${error.message || 'Tente "Abrir em nova aba" e salvar pelo navegador'}`);
+      alert(`Erro ao baixar: ${error.message || 'Use "Abrir em nova aba" e salve pelo navegador.'}`);
     }
   };
 
@@ -2769,16 +2768,17 @@ export default function ProjetoDetalhes() {
                       playingAudioVideo.versao}`}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {((playingAudioVideo.formato === 'arquivo' && playingAudioVideo.arquivo_url) || (playingAudioVideo.formato === 'link' && playingAudioVideo.link_url)) && (
                     <button
+                      type="button"
                       onClick={() => copiarLinkExterno(
                         playingAudioVideo.formato === 'link' ? playingAudioVideo.link_url! : playingAudioVideo.arquivo_url!,
                         'modal-player',
                         playingAudioVideo.formato === 'arquivo' ? playingAudioVideo.arquivo_bucket : undefined,
                         playingAudioVideo.formato === 'arquivo' ? playingAudioVideo.arquivo_key : undefined
                       )}
-                      className="flex items-center gap-2 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-white"
+                      className="flex items-center gap-2 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-white cursor-pointer"
                       title="Copiar link para compartilhar"
                     >
                       <i className={`${copiedLinkId === 'modal-player' ? 'ri-check-line text-green-400' : 'ri-link'} text-lg`}></i>
@@ -2789,26 +2789,29 @@ export default function ProjetoDetalhes() {
                     <>
                       <button
                         type="button"
-                        onClick={() => {
-                          console.log('Botão Baixar clicado!', playingAudioVideo);
-                          handleDownloadVideo(playingAudioVideo);
-                        }}
+                        onClick={() => handleDownloadVideo(playingAudioVideo, playingAudioVideoUrl)}
                         className="flex items-center gap-2 px-3 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth text-sm cursor-pointer"
-                        title="Baixar vídeo"
+                        title={isIOS ? 'Abrir em nova aba para salvar no dispositivo' : 'Baixar vídeo'}
                       >
                         <i className="ri-download-line"></i>
-                        Baixar
+                        <span>{isIOS ? 'Abrir para salvar' : 'Baixar'}</span>
                       </button>
                       <button
                         type="button"
-                        onClick={() => playingAudioVideo.formato === 'link'
-                          ? window.open(playingAudioVideo.link_url || '#', '_blank')
-                          : handleAbrirExterno(playingAudioVideo.arquivo_url!, playingAudioVideo.arquivo_bucket, playingAudioVideo.arquivo_key)}
+                        onClick={() => {
+                          if (playingAudioVideoUrl) {
+                            window.open(playingAudioVideoUrl, '_blank', 'noopener,noreferrer');
+                          } else if (playingAudioVideo.formato === 'link') {
+                            window.open(playingAudioVideo.link_url || '#', '_blank');
+                          } else {
+                            handleAbrirExterno(playingAudioVideo.arquivo_url!, playingAudioVideo.arquivo_bucket, playingAudioVideo.arquivo_key);
+                          }
+                        }}
                         className="flex items-center gap-2 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-primary-teal cursor-pointer"
                         title="Abrir em nova aba"
                       >
                         <i className="ri-external-link-line"></i>
-                        Abrir em nova aba
+                        <span>Abrir em nova aba</span>
                       </button>
                     </>
                   )}
