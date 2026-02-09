@@ -172,6 +172,8 @@ export default function ProjetoDetalhes() {
   const [linkCopied, setLinkCopied] = useState(false);
   const [showSharedLinkModal, setShowSharedLinkModal] = useState(false);
   const [playingAudioVideo, setPlayingAudioVideo] = useState<FaixaAudioVideo | null>(null);
+  const [playingAudioVideoUrl, setPlayingAudioVideoUrl] = useState<string | null>(null);
+  const [loadingVideoUrl, setLoadingVideoUrl] = useState(false);
   const [uploadedFileData, setUploadedFileData] = useState<{ url: string; fileName: string; bucket: string; key: string } | null>(null);
   const [creatingStream, setCreatingStream] = useState(false);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
@@ -193,6 +195,68 @@ export default function ProjetoDetalhes() {
       window.open(urlParaAbrir, '_blank', 'noopener,noreferrer');
     } catch (err) {
       alert('Não foi possível abrir o link. Tente copiar o link e abrir manualmente.');
+    }
+  };
+
+  const handleDownloadVideo = async (audioVideo: FaixaAudioVideo) => {
+    try {
+      const url = audioVideo.formato === 'link' ? audioVideo.link_url : audioVideo.arquivo_url;
+      if (!url) {
+        alert('URL do vídeo não encontrada');
+        return;
+      }
+
+      console.log('Iniciando download de:', url);
+      
+      // Mostrar feedback de processamento
+      const loadingToast = document.createElement('div');
+      loadingToast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#3b82f6;color:white;padding:12px 20px;border-radius:8px;z-index:9999;box-shadow:0 4px 6px rgba(0,0,0,0.1);display:flex;align-items:center;gap:10px;';
+      loadingToast.innerHTML = '<i class="ri-loader-4-line animate-spin" style="font-size:18px;"></i><span>Preparando download...</span>';
+      document.body.appendChild(loadingToast);
+      
+      const downloadUrl = await getViewableUrlAsync(
+        url,
+        audioVideo.formato === 'arquivo' ? audioVideo.arquivo_bucket : undefined,
+        audioVideo.formato === 'arquivo' ? audioVideo.arquivo_key : undefined
+      );
+
+      console.log('URL convertida para download:', downloadUrl);
+
+      // Remover toast de loading
+      loadingToast.remove();
+
+      const nomeArquivo = audioVideo.arquivo_nome || `video_${audioVideo.id}`;
+
+      // Download direto via <a> (mostra popup imediatamente)
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = nomeArquivo;
+      
+      // Para iOS/Safari: adicionar target blank
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS) {
+        a.target = '_blank';
+      }
+      
+      document.body.appendChild(a);
+      a.click();
+      
+      // Dar tempo para o download iniciar antes de remover o elemento
+      setTimeout(() => {
+        document.body.removeChild(a);
+      }, 100);
+
+      console.log('Download iniciado');
+
+      // Feedback de sucesso
+      const successToast = document.createElement('div');
+      successToast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#10b981;color:white;padding:12px 20px;border-radius:8px;z-index:9999;box-shadow:0 4px 6px rgba(0,0,0,0.1);';
+      successToast.textContent = '✓ Download iniciado';
+      document.body.appendChild(successToast);
+      setTimeout(() => successToast.remove(), 3000);
+    } catch (error: any) {
+      console.error('Erro ao baixar vídeo:', error);
+      alert(`Erro ao baixar: ${error.message || 'Tente "Abrir em nova aba" e salvar pelo navegador'}`);
     }
   };
 
@@ -219,6 +283,44 @@ export default function ProjetoDetalhes() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioVideoFormato, selectedFaixaForModal?.id, showAudioVideoModal]);
+
+  // Converter URL do vídeo/áudio quando o modal abrir
+  useEffect(() => {
+    if (playingAudioVideo) {
+      const url = playingAudioVideo.formato === 'link' ? playingAudioVideo.link_url : playingAudioVideo.arquivo_url;
+      if (!url) {
+        setPlayingAudioVideoUrl(null);
+        return;
+      }
+      
+      // Se é YouTube ou Cloudflare Stream, usar URL direta
+      if (isYouTubeUrl(url) || playingAudioVideo.stream_uid) {
+        setPlayingAudioVideoUrl(url);
+        return;
+      }
+      
+      // Converter URL para formato que funciona no navegador
+      setLoadingVideoUrl(true);
+      getViewableUrlAsync(
+        url,
+        playingAudioVideo.formato === 'arquivo' ? playingAudioVideo.arquivo_bucket : undefined,
+        playingAudioVideo.formato === 'arquivo' ? playingAudioVideo.arquivo_key : undefined
+      )
+        .then(convertedUrl => {
+          setPlayingAudioVideoUrl(convertedUrl);
+        })
+        .catch(err => {
+          console.error('Erro ao converter URL:', err);
+          // Fallback: usar URL original
+          setPlayingAudioVideoUrl(url);
+        })
+        .finally(() => {
+          setLoadingVideoUrl(false);
+        });
+    } else {
+      setPlayingAudioVideoUrl(null);
+    }
+  }, [playingAudioVideo]);
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
@@ -2684,20 +2786,38 @@ export default function ProjetoDetalhes() {
                     </button>
                   )}
                   {((playingAudioVideo.formato === 'arquivo' && playingAudioVideo.arquivo_url) || (playingAudioVideo.formato === 'link' && playingAudioVideo.link_url)) && !playingAudioVideo.stream_uid && (
-                    <button
-                      type="button"
-                      onClick={() => playingAudioVideo.formato === 'link'
-                        ? window.open(playingAudioVideo.link_url || '#', '_blank')
-                        : handleAbrirExterno(playingAudioVideo.arquivo_url!, playingAudioVideo.arquivo_bucket, playingAudioVideo.arquivo_key)}
-                      className="flex items-center gap-2 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-primary-teal cursor-pointer"
-                      title="Abrir em nova aba"
-                    >
-                      <i className="ri-external-link-line"></i>
-                      Abrir em nova aba
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          console.log('Botão Baixar clicado!', playingAudioVideo);
+                          handleDownloadVideo(playingAudioVideo);
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth text-sm cursor-pointer"
+                        title="Baixar vídeo"
+                      >
+                        <i className="ri-download-line"></i>
+                        Baixar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => playingAudioVideo.formato === 'link'
+                          ? window.open(playingAudioVideo.link_url || '#', '_blank')
+                          : handleAbrirExterno(playingAudioVideo.arquivo_url!, playingAudioVideo.arquivo_bucket, playingAudioVideo.arquivo_key)}
+                        className="flex items-center gap-2 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-primary-teal cursor-pointer"
+                        title="Abrir em nova aba"
+                      >
+                        <i className="ri-external-link-line"></i>
+                        Abrir em nova aba
+                      </button>
+                    </>
                   )}
                   <button
-                    onClick={() => setPlayingAudioVideo(null)}
+                    onClick={() => {
+                      setPlayingAudioVideo(null);
+                      setPlayingAudioVideoUrl(null);
+                      setLoadingVideoUrl(false);
+                    }}
                     className="p-2 text-gray-400 hover:text-white transition-smooth cursor-pointer"
                   >
                     <i className="ri-close-line text-2xl"></i>
@@ -2733,6 +2853,16 @@ export default function ProjetoDetalhes() {
                     );
                   }
 
+                  // Mostrar loading enquanto converte URL
+                  if (loadingVideoUrl || !playingAudioVideoUrl) {
+                    return (
+                      <div className="bg-dark-bg border border-dark-border rounded-lg p-12 text-center">
+                        <i className="ri-loader-4-line text-4xl text-primary-teal animate-spin mb-4"></i>
+                        <p className="text-gray-400">Carregando vídeo...</p>
+                      </div>
+                    );
+                  }
+
                   // Player HTML5 para áudio ou vídeo
                   if (playingAudioVideo.tipo === 'audio') {
                     return (
@@ -2741,11 +2871,12 @@ export default function ProjetoDetalhes() {
                           controls 
                           className="w-full"
                           style={{ outline: 'none' }}
+                          crossOrigin="anonymous"
                         >
-                          <source src={url || ''} type="audio/mpeg" />
-                          <source src={url || ''} type="audio/wav" />
-                          <source src={url || ''} type="audio/ogg" />
-                          <source src={url || ''} type="audio/mp4" />
+                          <source src={playingAudioVideoUrl} type="audio/mpeg" />
+                          <source src={playingAudioVideoUrl} type="audio/wav" />
+                          <source src={playingAudioVideoUrl} type="audio/ogg" />
+                          <source src={playingAudioVideoUrl} type="audio/mp4" />
                           Seu navegador não suporta o elemento de áudio.
                         </audio>
                         {playingAudioVideo.arquivo_nome && (
@@ -2767,11 +2898,13 @@ export default function ProjetoDetalhes() {
                           controls 
                           className="w-full"
                           style={{ maxHeight: '70vh' }}
+                          crossOrigin="anonymous"
+                          preload="metadata"
                         >
-                          <source src={url || ''} type="video/mp4" />
-                          <source src={url || ''} type="video/webm" />
-                          <source src={url || ''} type="video/ogg" />
-                          <source src={url || ''} type="video/quicktime" />
+                          <source src={playingAudioVideoUrl} type="video/mp4" />
+                          <source src={playingAudioVideoUrl} type="video/webm" />
+                          <source src={playingAudioVideoUrl} type="video/ogg" />
+                          <source src={playingAudioVideoUrl} type="video/quicktime" />
                           Seu navegador não suporta o elemento de vídeo.
                         </video>
                         {(playingAudioVideo.arquivo_nome || playingAudioVideo.descricao) && (
