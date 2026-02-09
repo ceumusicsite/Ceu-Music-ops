@@ -394,35 +394,23 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
       event.preventDefault();
       event.stopPropagation();
     }
+    // Download usa sempre o arquivo original (R2); vídeos em Stream também têm arquivo_url
     if (anexo.tipo !== 'arquivo' || !anexo.arquivo_url) return;
     try {
       const url = await getValidUrl(anexo);
-      // getValidUrl já retorna URL pública (r2.dev) se PUBLIC_URL estiver configurado
-      // Se retornar URL do S3 (r2.cloudflarestorage.com), converter para r2.dev
       const urlToUse = url.includes('r2.cloudflarestorage.com')
         ? getBrowserViewableUrl(url, R2_BUCKETS.ANEXOS, anexo.arquivo_key)
         : url;
-      try {
-        const res = await fetch(urlToUse, { mode: 'cors' });
-        if (!res.ok) throw new Error(`Falha ao baixar: ${res.status}`);
-        const blob = await res.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = objectUrl;
-        a.download = anexo.nome || 'download';
-        a.click();
-        URL.revokeObjectURL(objectUrl);
-        toast.success('Download iniciado');
-      } catch (fetchErr) {
-        // Fallback: abrir link com download (útil quando CORS bloqueia o fetch)
-        const a = document.createElement('a');
-        a.href = urlToUse;
-        a.download = anexo.nome || 'download';
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.click();
-        toast.success('Download iniciado. Se não baixar, use "Abrir em nova aba" e salve pelo navegador.');
-      }
+      // Link direto: o navegador inicia o download na hora (sem buscar o arquivo inteiro antes)
+      const a = document.createElement('a');
+      a.href = urlToUse;
+      a.download = anexo.nome || 'download';
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success('Download iniciado');
     } catch (error: any) {
       console.error('Erro ao baixar arquivo:', error);
       toast.error(error.message || 'Não foi possível baixar o arquivo');
@@ -1862,11 +1850,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                   type="button"
                   onClick={async () => {
                     try {
-                      if (previewArquivo.stream_uid) {
-                        const url = previewArquivo.stream_iframe_url || getStreamIframeUrl(previewArquivo.stream_uid);
-                        if (url) window.open(url, '_blank', 'noopener,noreferrer');
-                        return;
-                      }
+                      // Sempre abrir o arquivo (R2), não o player Stream — assim no iPhone dá para segurar e salvar
                       const url = await getValidUrl(previewArquivo);
                       const urlPublica = url.includes('r2.cloudflarestorage.com')
                         ? getBrowserViewableUrl(url, R2_BUCKETS.ANEXOS, previewArquivo.arquivo_key)
@@ -1880,7 +1864,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                     }
                   }}
                   className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-dark-bg hover:bg-dark-hover border border-dark-border text-primary-teal rounded-lg transition-smooth cursor-pointer flex items-center justify-center gap-2 text-xs sm:text-sm whitespace-nowrap"
-                  title="Abrir em nova aba (no celular: segure no vídeo para salvar)"
+                  title="Abrir arquivo em nova aba (no iPhone: segure no vídeo e escolha Salvar no dispositivo)"
                 >
                   <i className="ri-external-link-line"></i>
                   <span>Abrir em nova aba</span>
