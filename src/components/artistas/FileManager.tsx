@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { storageService, R2_BUCKETS } from '../../services/storage';
 import { getSignedUrlR2 } from '../../lib/r2';
@@ -72,6 +73,9 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
   const [colando, setColando] = useState(false);
   // Menu de ações (três pontinhos) para mobile/touch
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [openActionMenuAnchor, setOpenActionMenuAnchor] = useState<DOMRect | null>(null);
+  const [openActionMenuArquivo, setOpenActionMenuArquivo] = useState<Anexo | null>(null);
+  const [openActionMenuPasta, setOpenActionMenuPasta] = useState<Anexo | null>(null);
   // Modo Organizar (mobile): ativado pelo botão "Organizar"; toque seleciona item, toque no destino move
   const [modoOrganizar, setModoOrganizar] = useState(false);
   const [itemSelecionadoParaMover, setItemSelecionadoParaMover] = useState<Anexo | null>(null);
@@ -93,7 +97,12 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
   // Fechar menu de ações ao clicar fora
   useEffect(() => {
     if (!openActionMenuId) return;
-    const close = () => setOpenActionMenuId(null);
+    const close = () => {
+      setOpenActionMenuId(null);
+      setOpenActionMenuAnchor(null);
+      setOpenActionMenuArquivo(null);
+      setOpenActionMenuPasta(null);
+    };
     window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
   }, [openActionMenuId]);
@@ -1416,10 +1425,15 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                 setContextMenu({ x: e.clientX, y: e.clientY, item: pasta, targetFolderId: pasta.id });
               }}
               onClick={async (e) => {
-                if (!modoOrganizar) return;
+                const target = e.target as HTMLElement;
+                if (target.closest('button, [role="button"]')) return;
                 e.preventDefault();
                 e.stopPropagation();
                 setOpenActionMenuId(null);
+                if (!modoOrganizar) {
+                  entrarNaPasta(pasta.id, pasta.nome);
+                  return;
+                }
                 if (itemSelecionadoParaMover) {
                   if (itemSelecionadoParaMover.id === pasta.id) {
                     setItemSelecionadoParaMover(null);
@@ -1436,10 +1450,6 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                   setItemSelecionadoParaMover(pasta);
                 }
               }}
-              onDoubleClick={(e) => {
-                if (modoOrganizar) return;
-                entrarNaPasta(pasta.id, pasta.nome);
-              }}
               className={`bg-dark-bg border rounded-lg p-3 sm:p-4 hover:border-primary-teal transition-smooth cursor-move group min-w-0 overflow-hidden relative ${
                 viewMode === 'list' ? 'flex items-center gap-4' : ''
               } ${
@@ -1452,22 +1462,24 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
               <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 z-10 lg:hidden pointer-events-auto" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === pasta.id ? null : pasta.id); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (openActionMenuId === pasta.id) {
+                      setOpenActionMenuId(null);
+                      setOpenActionMenuAnchor(null);
+                      setOpenActionMenuPasta(null);
+                    } else {
+                      setOpenActionMenuId(pasta.id);
+                      setOpenActionMenuAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                      setOpenActionMenuArquivo(null);
+                      setOpenActionMenuPasta(pasta);
+                    }
+                  }}
                   className="p-1.5 sm:p-2 rounded-lg bg-black/40 hover:bg-black/60 text-white cursor-pointer"
                   aria-label="Ações"
                 >
                   <i className="ri-more-2-fill text-base sm:text-lg"></i>
                 </button>
-                {openActionMenuId === pasta.id && (
-                  <div className="absolute right-0 top-full mt-1 py-1 min-w-[160px] bg-dark-card border border-dark-border rounded-lg shadow-xl z-20">
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(null); abrirModalEditar(pasta); }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-dark-hover flex items-center gap-2 cursor-pointer">
-                      <i className="ri-edit-line"></i> Renomear
-                    </button>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(null); deletarItem(pasta); }} className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-dark-hover flex items-center gap-2 cursor-pointer">
-                      <i className="ri-delete-bin-line"></i> Excluir
-                    </button>
-                  </div>
-                )}
               </div>
               <div className={`flex items-center gap-2 sm:gap-3 pointer-events-none ${viewMode === 'list' ? 'flex-1' : 'flex-col'}`}>
                 <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-primary-teal/20 flex items-center justify-center text-primary-teal text-xl sm:text-2xl flex-shrink-0">
@@ -1553,45 +1565,40 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                   console.log('[onContextMenu] Menu de contexto para arquivo:', arquivo.nome);
                   setContextMenu({ x: e.clientX, y: e.clientY, item: arquivo, targetFolderId: null });
                 }}
-                onClick={(e) => {
-                  if (!modoOrganizar) return;
+                onClick={async (e) => {
                   const target = e.target as HTMLElement;
                   if (target.closest('button, [role="button"]')) return;
                   e.preventDefault();
                   e.stopPropagation();
                   setOpenActionMenuId(null);
+                  if (!modoOrganizar) {
+                    if (arquivo.arquivo_url) {
+                      try {
+                        const url = await getValidUrl(arquivo);
+                        const urlPublica = url.includes('r2.cloudflarestorage.com')
+                          ? getBrowserViewableUrl(url, R2_BUCKETS.ANEXOS, arquivo.arquivo_key)
+                          : url;
+                        setPreviewArquivo({ ...arquivo, arquivo_url: urlPublica });
+                      } catch {
+                        const urlPublica = arquivo.arquivo_url.includes('r2.cloudflarestorage.com')
+                          ? getBrowserViewableUrl(arquivo.arquivo_url, R2_BUCKETS.ANEXOS, arquivo.arquivo_key)
+                          : arquivo.arquivo_url;
+                        setPreviewArquivo({ ...arquivo, arquivo_url: urlPublica });
+                      }
+                    }
+                    return;
+                  }
                   if (itemSelecionadoParaMover) {
                     if (itemSelecionadoParaMover.id === arquivo.id) {
                       setItemSelecionadoParaMover(null);
                       return;
                     }
-                    // Arquivo não é pasta: destino = pasta atual (mover selecionado para a raiz da pasta atual)
                     moverItemParaPasta(itemSelecionadoParaMover, pastaAtual);
                     toast.success(`"${itemSelecionadoParaMover.nome}" movido para ${pastaAtual ? 'a pasta atual' : 'a raiz'}.`);
                     setItemSelecionadoParaMover(null);
                     return;
                   }
                   setItemSelecionadoParaMover(arquivo);
-                }}
-                onDoubleClick={async (e) => {
-                  if (modoOrganizar) return;
-                  if (arquivo.arquivo_url) {
-                    // Gerar nova URL antes de abrir preview (sempre usa URL pública r2.dev quando disponível)
-                    try {
-                      const url = await getValidUrl(arquivo);
-                      // Garantir que a URL seja pública (r2.dev) para evitar ERR_SSL_VERSION_OR_CIPHER_MISMATCH
-                      const urlPublica = url.includes('r2.cloudflarestorage.com')
-                        ? getBrowserViewableUrl(url, R2_BUCKETS.ANEXOS, arquivo.arquivo_key)
-                        : url;
-                      setPreviewArquivo({ ...arquivo, arquivo_url: urlPublica });
-                    } catch (error) {
-                      // Se falhar, tentar converter URL existente para pública
-                      const urlPublica = arquivo.arquivo_url.includes('r2.cloudflarestorage.com')
-                        ? getBrowserViewableUrl(arquivo.arquivo_url, R2_BUCKETS.ANEXOS, arquivo.arquivo_key)
-                        : arquivo.arquivo_url;
-                      setPreviewArquivo({ ...arquivo, arquivo_url: urlPublica });
-                    }
-                  }
                 }}
                 className={`bg-dark-bg border border-dark-border rounded-lg hover:border-primary-teal transition-smooth group cursor-move overflow-hidden min-w-0 relative ${
                   viewMode === 'list' 
@@ -1601,31 +1608,28 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                       : 'p-2 sm:p-3'
                 } ${modoOrganizar && itemSelecionadoParaMover?.id === arquivo.id ? 'ring-2 ring-primary-teal ring-offset-2 ring-offset-dark-bg' : ''}`}
               >
-                {/* Botão ações (três pontinhos) - somente mobile */}
+                {/* Botão ações (três pontinhos) - somente mobile; menu renderizado fora do card via portal */}
                 <div className="absolute top-2 right-2 z-10 lg:hidden pointer-events-auto" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === arquivo.id ? null : arquivo.id); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (openActionMenuId === arquivo.id) {
+                        setOpenActionMenuId(null);
+                        setOpenActionMenuAnchor(null);
+                        setOpenActionMenuArquivo(null);
+                      } else {
+                        setOpenActionMenuId(arquivo.id);
+                        setOpenActionMenuAnchor((e.currentTarget as HTMLElement).getBoundingClientRect());
+                        setOpenActionMenuArquivo(arquivo);
+                        setOpenActionMenuPasta(null);
+                      }
+                    }}
                     className="p-2 rounded-lg bg-black/40 hover:bg-black/60 text-white cursor-pointer"
                     aria-label="Ações"
                   >
                     <i className="ri-more-2-fill text-lg"></i>
                   </button>
-                  {openActionMenuId === arquivo.id && (
-                    <div className="absolute right-0 top-full mt-1 py-1 min-w-[160px] bg-dark-card border border-dark-border rounded-lg shadow-xl z-20">
-                      {arquivo.arquivo_url && (
-                        <button type="button" onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(null); handleDownloadFile(arquivo, e); }} className="w-full px-4 py-2 text-left text-sm text-primary-teal hover:bg-dark-hover flex items-center gap-2 cursor-pointer">
-                          <i className="ri-download-line"></i> Download
-                        </button>
-                      )}
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(null); abrirModalEditar(arquivo); }} className="w-full px-4 py-2 text-left text-sm text-white hover:bg-dark-hover flex items-center gap-2 cursor-pointer">
-                        <i className="ri-edit-line"></i> Renomear
-                      </button>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(null); deletarItem(arquivo); }} className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-dark-hover flex items-center gap-2 cursor-pointer">
-                        <i className="ri-delete-bin-line"></i> Excluir
-                      </button>
-                    </div>
-                  )}
                 </div>
                 {viewMode === 'list' ? (
                   /* Layout lista */
@@ -1846,13 +1850,40 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
           >
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border-b border-dark-border flex-shrink-0 gap-3">
               <h3 className="text-white font-medium text-sm sm:text-base break-words flex-1 min-w-0 pr-2">{previewArquivo.nome}</h3>
-              <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto">
+              <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto flex-wrap">
                 <button
                   onClick={() => handleDownloadFile(previewArquivo)}
                   className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-primary-teal hover:bg-primary-brown text-white rounded-lg transition-smooth cursor-pointer flex items-center justify-center gap-2 text-xs sm:text-sm whitespace-nowrap"
                 >
                   <i className="ri-download-line"></i>
                   <span>Download</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      if (previewArquivo.stream_uid) {
+                        const url = previewArquivo.stream_iframe_url || getStreamIframeUrl(previewArquivo.stream_uid);
+                        if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                        return;
+                      }
+                      const url = await getValidUrl(previewArquivo);
+                      const urlPublica = url.includes('r2.cloudflarestorage.com')
+                        ? getBrowserViewableUrl(url, R2_BUCKETS.ANEXOS, previewArquivo.arquivo_key)
+                        : url;
+                      window.open(urlPublica, '_blank', 'noopener,noreferrer');
+                    } catch (e) {
+                      const urlPublica = previewArquivo.arquivo_url?.includes('r2.cloudflarestorage.com')
+                        ? getBrowserViewableUrl(previewArquivo.arquivo_url, R2_BUCKETS.ANEXOS, previewArquivo.arquivo_key)
+                        : previewArquivo.arquivo_url;
+                      if (urlPublica) window.open(urlPublica, '_blank', 'noopener,noreferrer');
+                    }
+                  }}
+                  className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-dark-bg hover:bg-dark-hover border border-dark-border text-primary-teal rounded-lg transition-smooth cursor-pointer flex items-center justify-center gap-2 text-xs sm:text-sm whitespace-nowrap"
+                  title="Abrir em nova aba (no celular: segure no vídeo para salvar)"
+                >
+                  <i className="ri-external-link-line"></i>
+                  <span>Abrir em nova aba</span>
                 </button>
                 <button
                   onClick={() => {
@@ -2330,6 +2361,94 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
             </div>
           </div>
         </div>
+      )}
+
+      {/* Menu de 3 pontinhos renderizado fora do card (portal) para não ser cortado pelo overflow */}
+      {openActionMenuAnchor && createPortal(
+        <div
+          className="fixed py-1 min-w-[160px] bg-dark-card border border-dark-border rounded-lg shadow-xl z-[9999]"
+          style={{
+            top: openActionMenuAnchor.bottom + 4,
+            left: Math.max(8, Math.min(openActionMenuAnchor.right - 160, window.innerWidth - 168)),
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {openActionMenuArquivo ? (
+            <>
+              {openActionMenuArquivo.arquivo_url && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpenActionMenuId(null);
+                    setOpenActionMenuAnchor(null);
+                    setOpenActionMenuArquivo(null);
+                    handleDownloadFile(openActionMenuArquivo, e);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-primary-teal hover:bg-dark-hover flex items-center gap-2 cursor-pointer"
+                >
+                  <i className="ri-download-line"></i> Download
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenActionMenuId(null);
+                  setOpenActionMenuAnchor(null);
+                  setOpenActionMenuArquivo(null);
+                  abrirModalEditar(openActionMenuArquivo);
+                }}
+                className="w-full px-4 py-2 text-left text-sm text-white hover:bg-dark-hover flex items-center gap-2 cursor-pointer"
+              >
+                <i className="ri-edit-line"></i> Renomear
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenActionMenuId(null);
+                  setOpenActionMenuAnchor(null);
+                  setOpenActionMenuArquivo(null);
+                  deletarItem(openActionMenuArquivo);
+                }}
+                className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-dark-hover flex items-center gap-2 cursor-pointer"
+              >
+                <i className="ri-delete-bin-line"></i> Excluir
+              </button>
+            </>
+          ) : openActionMenuPasta ? (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenActionMenuId(null);
+                  setOpenActionMenuAnchor(null);
+                  setOpenActionMenuPasta(null);
+                  abrirModalEditar(openActionMenuPasta);
+                }}
+                className="w-full px-4 py-2 text-left text-sm text-white hover:bg-dark-hover flex items-center gap-2 cursor-pointer"
+              >
+                <i className="ri-edit-line"></i> Renomear
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenActionMenuId(null);
+                  setOpenActionMenuAnchor(null);
+                  setOpenActionMenuPasta(null);
+                  deletarItem(openActionMenuPasta);
+                }}
+                className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-dark-hover flex items-center gap-2 cursor-pointer"
+              >
+                <i className="ri-delete-bin-line"></i> Excluir
+              </button>
+            </>
+          ) : null}
+        </div>,
+        document.body
       )}
     </div>
   );
