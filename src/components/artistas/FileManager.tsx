@@ -92,12 +92,15 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
     totalBytes: number;
     fileName: string;
     status: 'loading' | 'done' | 'error';
+    directUrl?: string;
     errorMessage?: string;
-  }>({ show: false, progress: 0, indeterminate: false, receivedBytes: 0, totalBytes: 0, fileName: '', status: 'loading' });
+  }>({ show: false, progress: 0, indeterminate: false, receivedBytes: 0, totalBytes: 0, fileName: '', status: 'loading', directUrl: undefined });
 
-  const isMobileDevice =
+  // Modal/fluxo "Drive-like" só em tela pequena (mobile). Em desktop/web: download direto e imediato.
+  const shouldUseMobileDownloadFlow =
     typeof window !== 'undefined' &&
-    (('ontouchstart' in window) || (navigator?.maxTouchPoints ?? 0) > 0);
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(max-width: 768px)').matches;
 
   const isIOSDevice =
     typeof navigator !== 'undefined' &&
@@ -436,7 +439,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
         : url;
 
       // Web/desktop: iniciar rápido via link direto (sem "baixar invisível" e sem modal)
-      if (!isMobileDevice) {
+      if (!shouldUseMobileDownloadFlow) {
         const a = document.createElement('a');
         a.href = urlToUse;
         a.download = fileName;
@@ -449,6 +452,23 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
         return;
       }
 
+      // iPhone + arquivo grande: evitar Blob (Safari recarrega a página por memória). Baixar pelo navegador.
+      const IOS_MAX_IN_MEMORY_BYTES = 40 * 1024 * 1024; // 40MB (conservador)
+      const tamanho = anexo.arquivo_tamanho || 0;
+      if (isIOSDevice && tamanho > IOS_MAX_IN_MEMORY_BYTES) {
+        setDownloadModal({
+          show: true,
+          progress: 100,
+          indeterminate: false,
+          receivedBytes: 0,
+          totalBytes: tamanho,
+          fileName,
+          status: 'done',
+          directUrl: urlToUse,
+        });
+        return;
+      }
+
       // Mobile: comportamento estilo Drive (carrega internamente + modal de progresso, depois salvar)
       setDownloadModal({
         show: true,
@@ -458,6 +478,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
         totalBytes: 0,
         fileName,
         status: 'loading',
+        directUrl: undefined,
       });
 
       const res = await fetch(urlToUse, { mode: 'cors' });
@@ -476,6 +497,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
           receivedBytes: blob.size || 0,
           progress: 100,
           status: 'done',
+          directUrl: undefined,
         }));
         return;
       }
@@ -509,6 +531,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
         totalBytes: total || blob.size || 0,
         progress: 100,
         status: 'done',
+        directUrl: undefined,
       }));
     } catch (error: any) {
       console.error('Erro ao baixar arquivo:', error);
@@ -519,6 +542,11 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
   };
 
   const handleSaveDownloadedFile = useCallback(async () => {
+    // Se for caso "arquivo grande no iPhone", a gente não cria Blob: abre o download no navegador
+    if (downloadModal.directUrl) {
+      window.open(downloadModal.directUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
     const blob = downloadBlobRef.current;
     if (!blob) return;
     const fileName = downloadModal.fileName || 'download';
@@ -554,7 +582,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
     a.click();
     document.body.removeChild(a);
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
-  }, [downloadModal.fileName, isIOSDevice]);
+  }, [downloadModal.directUrl, downloadModal.fileName, isIOSDevice]);
 
   const criarPasta = async () => {
     if (!newFolderName.trim()) {
@@ -2204,7 +2232,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
       )}
 
       {/* Modal "Fazendo download..." com progresso (estilo Google Drive; no iPhone mostra e depois salva) */}
-      {downloadModal.show && isMobileDevice && (
+      {downloadModal.show && shouldUseMobileDownloadFlow && (
         <div className="fixed inset-0 bg-black/80 z-[101] flex items-center justify-center p-4" onClick={() => downloadModal.status !== 'loading' && setDownloadModal((m) => ({ ...m, show: false }))}>
           <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
             {downloadModal.status === 'loading' && (
@@ -2251,9 +2279,11 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                   </div>
                 </div>
                 <p className="text-gray-400 text-sm mb-4">
-                  {isIOSDevice
-                    ? 'Toque em “Salvar no iPhone” e escolha “Salvar em Arquivos”.'
-                    : 'Toque em “Salvar” para finalizar o download.'}
+                  {downloadModal.directUrl
+                    ? 'Arquivo grande detectado. Para evitar reiniciar a página no iPhone, o download será feito pelo navegador. Depois, use “Compartilhar” → “Salvar em Arquivos”.'
+                    : isIOSDevice
+                      ? 'Toque em “Salvar no iPhone” e escolha “Salvar em Arquivos”.'
+                      : 'Toque em “Salvar” para finalizar o download.'}
                 </p>
                 <div className="flex gap-3">
                   <button
@@ -2261,7 +2291,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                     onClick={handleSaveDownloadedFile}
                     className="flex-1 py-3 bg-primary-teal hover:bg-primary-brown text-white rounded-lg transition-smooth cursor-pointer font-medium"
                   >
-                    {isIOSDevice ? 'Salvar no iPhone' : 'Salvar'}
+                    {downloadModal.directUrl ? 'Baixar no navegador' : (isIOSDevice ? 'Salvar no iPhone' : 'Salvar')}
                   </button>
                   <button
                     type="button"
