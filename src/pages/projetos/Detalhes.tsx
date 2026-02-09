@@ -8,7 +8,7 @@ import ReferenciaForm from '../../components/projetos/ReferenciaForm';
 import FileUpload from '../../components/projetos/FileUpload';
 import StreamPreview from '../../components/projetos/StreamPreview';
 import { getSignedUrlR2 } from '../../lib/r2';
-import { getBrowserViewableUrl } from '../../utils/storageUrl';
+import { getBrowserViewableUrl, getViewableUrlAsync } from '../../utils/storageUrl';
 import { createStreamVideoFromUrl, getStreamIframeUrl } from '../../services/stream';
 import { fornecedoresMock } from '../../data/fornecedores-mock';
 import { produtoresMock } from '../../data/produtores-mock';
@@ -170,21 +170,29 @@ export default function ProjetoDetalhes() {
   const [sharedLink, setSharedLink] = useState<string | null>(null);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [showSharedLinkModal, setShowSharedLinkModal] = useState(false);
   const [playingAudioVideo, setPlayingAudioVideo] = useState<FaixaAudioVideo | null>(null);
   const [uploadedFileData, setUploadedFileData] = useState<{ url: string; fileName: string; bucket: string; key: string } | null>(null);
   const [creatingStream, setCreatingStream] = useState(false);
-  const [streamPlaybackLoading, setStreamPlaybackLoading] = useState(false);
-  const [streamPlaybackError, setStreamPlaybackError] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
 
   const copiarLinkExterno = async (url: string, id: string, bucket?: string, key?: string) => {
     try {
-      const urlBrowser = getBrowserViewableUrl(url, bucket, key);
-      await navigator.clipboard.writeText(urlBrowser);
+      const urlParaCopiar = await getViewableUrlAsync(url, bucket, key);
+      await navigator.clipboard.writeText(urlParaCopiar);
       setCopiedLinkId(id);
       setTimeout(() => setCopiedLinkId(null), 2000);
     } catch (err) {
       alert('Não foi possível copiar o link');
+    }
+  };
+
+  const handleAbrirExterno = async (url: string, bucket?: string, key?: string) => {
+    try {
+      const urlParaAbrir = await getViewableUrlAsync(url, bucket, key);
+      window.open(urlParaAbrir, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      alert('Não foi possível abrir o link. Tente copiar o link e abrir manualmente.');
     }
   };
 
@@ -196,72 +204,6 @@ export default function ProjetoDetalhes() {
       loadProjetoData();
     }
   }, [id]);
-
-  // Criar vídeo no Cloudflare Stream sob demanda quando abrir reprodução de vídeo que ainda não tem stream_uid
-  useEffect(() => {
-    const av = playingAudioVideo;
-    if (
-      !av ||
-      av.tipo !== 'video' ||
-      av.formato !== 'arquivo' ||
-      !av.arquivo_url ||
-      av.stream_uid
-    ) {
-      setStreamPlaybackError(null);
-      return;
-    }
-    let cancelled = false;
-    setStreamPlaybackError(null);
-    setStreamPlaybackLoading(true);
-    (async () => {
-      try {
-        let sourceUrl: string;
-        if (av.arquivo_bucket && av.arquivo_key) {
-          sourceUrl = await getSignedUrlR2(av.arquivo_bucket, av.arquivo_key, 24 * 3600);
-        } else {
-          // Vídeos antigos sem bucket/key: URL no banco pode estar expirada; Stream pode falhar
-          sourceUrl = getUrlParaAbrir(av.arquivo_url, av.arquivo_bucket, av.arquivo_key);
-        }
-        const result = await createStreamVideoFromUrl({
-          sourceUrl,
-          name: av.arquivo_nome || undefined,
-          meta: { faixaAudioVideoId: av.id },
-        });
-        const streamIframeUrl = getStreamIframeUrl(result.uid) || undefined;
-        if (cancelled) return;
-        await supabase
-          .from('faixa_audio_video')
-          .update({ stream_uid: result.uid, stream_iframe_url: streamIframeUrl })
-          .eq('id', av.id);
-        if (cancelled) return;
-        setPlayingAudioVideo((prev) =>
-          prev?.id === av.id
-            ? { ...prev, stream_uid: result.uid, stream_iframe_url: streamIframeUrl }
-            : prev
-        );
-        // Atualizar também na lista de faixas para manter consistência
-        setFaixas((prev) =>
-          prev.map((f) => ({
-            ...f,
-            audio_video: f.audio_video?.map((item) =>
-              item.id === av.id
-                ? { ...item, stream_uid: result.uid, stream_iframe_url: streamIframeUrl }
-                : item
-            ) || [],
-          }))
-        );
-      } catch (e: any) {
-        if (!cancelled) {
-          setStreamPlaybackError(e?.message || 'Falha ao preparar transmissão.');
-        }
-      } finally {
-        if (!cancelled) setStreamPlaybackLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [playingAudioVideo?.id, playingAudioVideo?.tipo, playingAudioVideo?.formato, playingAudioVideo?.arquivo_url, playingAudioVideo?.stream_uid]);
 
   // Carregar link compartilhável quando o formato for selecionado
   useEffect(() => {
@@ -985,6 +927,7 @@ export default function ProjetoDetalhes() {
       const baseUrl = window.location.origin;
       const sharedUrl = `${baseUrl}/shared/audio-video/${token}`;
       setSharedLink(sharedUrl);
+      setShowSharedLinkModal(true);
 
     } catch (error: any) {
       console.error('Erro ao gerar link compartilhável:', error);
@@ -1664,15 +1607,14 @@ export default function ProjetoDetalhes() {
                                                 >
                                                   <i className={`${copiedLinkId === `av-${av.id}` ? 'ri-check-line text-green-400' : 'ri-link'} text-base`}></i>
                                                 </button>
-                                                <a 
-                                                  href={getUrlParaAbrir(av.arquivo_url!, av.arquivo_bucket, av.arquivo_key)} 
-                                                  target="_blank" 
-                                                  rel="noopener noreferrer" 
-                                                  className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleAbrirExterno(av.arquivo_url!, av.arquivo_bucket, av.arquivo_key)}
+                                                  className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth cursor-pointer"
                                                   title="Abrir/Visualizar em nova aba"
                                                 >
                                                   <i className="ri-external-link-line text-base"></i>
-                                                </a>
+                                                </button>
                                               </>
                                             )}
                                             <button
@@ -2128,16 +2070,15 @@ export default function ProjetoDetalhes() {
                   )}
                   {referencia.tipo === 'arquivo' && referencia.arquivo_url && (
                     <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      <a
-                        href={getUrlParaAbrir(referencia.arquivo_url!)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-2 bg-dark-card border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-white flex-1 min-w-0"
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirExterno(referencia.arquivo_url!)}
+                        className="flex items-center gap-2 px-3 py-2 bg-dark-card border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-white flex-1 min-w-0 cursor-pointer text-left"
                       >
                         <i className="ri-file-line text-primary-teal"></i>
                         <span className="truncate">{referencia.arquivo_nome || 'Ver arquivo'}</span>
                         <i className="ri-external-link-line ml-auto flex-shrink-0"></i>
-                      </a>
+                      </button>
                       <button
                         onClick={() => copiarLinkExterno(referencia.arquivo_url!, `ref-${referencia.id}`)}
                         className="p-2 bg-dark-card border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-primary-teal"
@@ -2210,15 +2151,14 @@ export default function ProjetoDetalhes() {
                     >
                       <i className={`${copiedLinkId === `anexo-${anexo.id}` ? 'ri-check-line text-green-400' : 'ri-link'} text-gray-400 hover:text-primary-teal`}></i>
                     </button>
-                    <a
-                      href={getUrlParaAbrir(anexo.arquivo_url)}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => handleAbrirExterno(anexo.arquivo_url)}
                       className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
                       title="Abrir/Visualizar em nova aba"
                     >
                       <i className="ri-external-link-line text-gray-400 hover:text-primary-teal"></i>
-                    </a>
+                    </button>
                     <button
                       onClick={() => handleDeleteAnexo(anexo.id)}
                       className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
@@ -2726,26 +2666,6 @@ export default function ProjetoDetalhes() {
                       playingAudioVideo.versao === 'masterizado' ? 'Masterizado' :
                       playingAudioVideo.versao}`}
                   </p>
-                  {playingAudioVideo.tipo === 'video' && (
-                    <span className={`inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-md text-xs font-medium ${
-                      playingAudioVideo.stream_uid
-                        ? 'bg-primary-teal/20 text-primary-teal'
-                        : streamPlaybackLoading
-                          ? 'bg-amber-500/20 text-amber-400'
-                          : 'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      <i className={
-                        playingAudioVideo.stream_uid ? 'ri-live-line'
-                          : streamPlaybackLoading ? 'ri-loader-4-line animate-spin'
-                          : 'ri-folder-open-line'
-                      } />
-                      {playingAudioVideo.stream_uid
-                        ? 'Reproduzindo via Cloudflare Stream'
-                        : streamPlaybackLoading
-                          ? 'Preparando transmissão...'
-                          : 'Reproduzindo via armazenamento'}
-                    </span>
-                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {((playingAudioVideo.formato === 'arquivo' && playingAudioVideo.arquivo_url) || (playingAudioVideo.formato === 'link' && playingAudioVideo.link_url)) && (
@@ -2764,25 +2684,20 @@ export default function ProjetoDetalhes() {
                     </button>
                   )}
                   {((playingAudioVideo.formato === 'arquivo' && playingAudioVideo.arquivo_url) || (playingAudioVideo.formato === 'link' && playingAudioVideo.link_url)) && !playingAudioVideo.stream_uid && (
-                    <a
-                      href={playingAudioVideo.formato === 'link' 
-                        ? (playingAudioVideo.link_url || '#') 
-                        : getUrlParaAbrir(playingAudioVideo.arquivo_url!, playingAudioVideo.arquivo_bucket, playingAudioVideo.arquivo_key)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-primary-teal"
+                    <button
+                      type="button"
+                      onClick={() => playingAudioVideo.formato === 'link'
+                        ? window.open(playingAudioVideo.link_url || '#', '_blank')
+                        : handleAbrirExterno(playingAudioVideo.arquivo_url!, playingAudioVideo.arquivo_bucket, playingAudioVideo.arquivo_key)}
+                      className="flex items-center gap-2 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-primary-teal cursor-pointer"
                       title="Abrir em nova aba"
                     >
                       <i className="ri-external-link-line"></i>
                       Abrir em nova aba
-                    </a>
+                    </button>
                   )}
                   <button
-                    onClick={() => {
-                      setPlayingAudioVideo(null);
-                      setStreamPlaybackError(null);
-                      setStreamPlaybackLoading(false);
-                    }}
+                    onClick={() => setPlayingAudioVideo(null)}
                     className="p-2 text-gray-400 hover:text-white transition-smooth cursor-pointer"
                   >
                     <i className="ri-close-line text-2xl"></i>
@@ -2793,7 +2708,7 @@ export default function ProjetoDetalhes() {
               <div className="space-y-4">
                 {/* Detectar se é YouTube */}
                 {(() => {
-                  // Cloudflare Stream (sempre preferencial para vídeo interno — melhor performance)
+                  // Cloudflare Stream (preferencial para vídeo interno)
                   if (playingAudioVideo.tipo === 'video' && playingAudioVideo.stream_uid) {
                     const iframeUrl = playingAudioVideo.stream_iframe_url || getStreamIframeUrl(playingAudioVideo.stream_uid);
                     return (
@@ -2802,48 +2717,6 @@ export default function ProjetoDetalhes() {
                         iframeUrl={iframeUrl}
                         title={playingAudioVideo.arquivo_nome || playingAudioVideo.descricao || 'Vídeo'}
                       />
-                    );
-                  }
-
-                  // Vídeo sem stream_uid: preparar transmissão via Stream (sob demanda)
-                  if (playingAudioVideo.tipo === 'video' && playingAudioVideo.formato === 'arquivo' && playingAudioVideo.arquivo_url) {
-                    if (streamPlaybackLoading) {
-                      return (
-                        <div className="bg-dark-bg border border-dark-border rounded-lg p-12 text-center">
-                          <i className="ri-loader-4-line text-4xl text-primary-teal animate-spin mb-4 block" />
-                          <p className="text-white font-medium">Preparando transmissão...</p>
-                          <p className="text-sm text-gray-400 mt-2">O vídeo será reproduzido via Cloudflare Stream para melhor performance.</p>
-                        </div>
-                      );
-                    }
-                    if (streamPlaybackError) {
-                      return (
-                        <div className="bg-dark-bg border border-dark-border rounded-lg overflow-hidden space-y-4">
-                          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-200 text-sm">
-                            Não foi possível usar transmissão otimizada: {streamPlaybackError}
-                            <br />
-                            <span className="text-gray-400">Reprodução direta abaixo (pode ser mais lenta em alguns dispositivos).</span>
-                          </div>
-                          <video controls className="w-full" style={{ maxHeight: '70vh' }}>
-                            <source src={getUrlParaAbrir(playingAudioVideo.arquivo_url, playingAudioVideo.arquivo_bucket, playingAudioVideo.arquivo_key) || ''} type="video/mp4" />
-                            <source src={getUrlParaAbrir(playingAudioVideo.arquivo_url, playingAudioVideo.arquivo_bucket, playingAudioVideo.arquivo_key) || ''} type="video/webm" />
-                            Seu navegador não suporta o elemento de vídeo.
-                          </video>
-                          {(playingAudioVideo.arquivo_nome || playingAudioVideo.descricao) && (
-                            <div className="p-4 border-t border-dark-border">
-                              {playingAudioVideo.arquivo_nome && <p className="text-sm text-gray-400 text-center">{playingAudioVideo.arquivo_nome}</p>}
-                              {playingAudioVideo.descricao && <p className="text-xs text-gray-500 mt-2 text-center">{playingAudioVideo.descricao}</p>}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    }
-                    // Ainda preparando (primeira render)
-                    return (
-                      <div className="bg-dark-bg border border-dark-border rounded-lg p-12 text-center">
-                        <i className="ri-loader-4-line text-4xl text-primary-teal animate-spin mb-4 block" />
-                        <p className="text-white font-medium">Preparando transmissão...</p>
-                      </div>
                     );
                   }
 
@@ -2860,7 +2733,7 @@ export default function ProjetoDetalhes() {
                     );
                   }
 
-                  // Player HTML5 para áudio (vídeo com arquivo já tratado acima)
+                  // Player HTML5 para áudio ou vídeo
                   if (playingAudioVideo.tipo === 'audio') {
                     return (
                       <div className="bg-dark-bg border border-dark-border rounded-lg p-6">
@@ -2887,24 +2760,37 @@ export default function ProjetoDetalhes() {
                         )}
                       </div>
                     );
+                  } else {
+                    return (
+                      <div className="bg-dark-bg border border-dark-border rounded-lg overflow-hidden">
+                        <video 
+                          controls 
+                          className="w-full"
+                          style={{ maxHeight: '70vh' }}
+                        >
+                          <source src={url || ''} type="video/mp4" />
+                          <source src={url || ''} type="video/webm" />
+                          <source src={url || ''} type="video/ogg" />
+                          <source src={url || ''} type="video/quicktime" />
+                          Seu navegador não suporta o elemento de vídeo.
+                        </video>
+                        {(playingAudioVideo.arquivo_nome || playingAudioVideo.descricao) && (
+                          <div className="p-4 border-t border-dark-border">
+                            {playingAudioVideo.arquivo_nome && (
+                              <p className="text-sm text-gray-400 text-center">
+                                {playingAudioVideo.arquivo_nome}
+                              </p>
+                            )}
+                            {playingAudioVideo.descricao && (
+                              <p className="text-xs text-gray-500 mt-2 text-center">
+                                {playingAudioVideo.descricao}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
                   }
-                  // Vídeo por link (não-YouTube): fallback com tag video
-                  return (
-                    <div className="bg-dark-bg border border-dark-border rounded-lg overflow-hidden">
-                      <video controls className="w-full" style={{ maxHeight: '70vh' }}>
-                        <source src={url || ''} type="video/mp4" />
-                        <source src={url || ''} type="video/webm" />
-                        <source src={url || ''} type="video/ogg" />
-                        Seu navegador não suporta o elemento de vídeo.
-                      </video>
-                      {(playingAudioVideo.arquivo_nome || playingAudioVideo.descricao) && (
-                        <div className="p-4 border-t border-dark-border">
-                          {playingAudioVideo.arquivo_nome && <p className="text-sm text-gray-400 text-center">{playingAudioVideo.arquivo_nome}</p>}
-                          {playingAudioVideo.descricao && <p className="text-xs text-gray-500 mt-2 text-center">{playingAudioVideo.descricao}</p>}
-                        </div>
-                      )}
-                    </div>
-                  );
                 })()}
 
                 {/* Informações adicionais */}
@@ -3360,10 +3246,7 @@ export default function ProjetoDetalhes() {
                         <button
                           type="button"
                           onClick={() => {
-                            if (!sharedLink) {
-                              alert('Por favor, clique em "Gerar Link Compartilhável" primeiro.');
-                              return;
-                            }
+                            if (!sharedLink) return;
                             const tipoTexto = audioVideoTipo === 'audio' ? 'Áudio' : audioVideoTipo === 'video' ? 'Vídeo' : 'Áudio/Vídeo';
                             const subject = encodeURIComponent(`Formulário de ${tipoTexto} - ${selectedFaixaForModal?.nome}`);
                             const body = encodeURIComponent(`Olá,\n\nPor favor, preencha o formulário de áudio/vídeo para a faixa "${selectedFaixaForModal?.nome}" através do link abaixo:\n\n${sharedLink}\n\nObrigado!`);
@@ -3382,10 +3265,7 @@ export default function ProjetoDetalhes() {
                         <button
                           type="button"
                           onClick={() => {
-                            if (!sharedLink) {
-                              alert('Por favor, clique em "Gerar Link Compartilhável" primeiro.');
-                              return;
-                            }
+                            if (!sharedLink) return;
                             const message = encodeURIComponent(`Olá! Por favor, preencha o formulário de áudio/vídeo para a faixa "${selectedFaixaForModal?.nome}" através do link:\n${sharedLink}`);
                             window.open(`https://wa.me/?text=${message}`, '_blank');
                           }}
@@ -3402,16 +3282,12 @@ export default function ProjetoDetalhes() {
                         <button
                           type="button"
                           onClick={async () => {
-                            if (!sharedLink) {
-                              alert('Por favor, clique em "Gerar Link Compartilhável" primeiro.');
-                              return;
-                            }
+                            if (!sharedLink) return;
                             try {
                               await navigator.clipboard.writeText(sharedLink);
                               setLinkCopied(true);
                               setTimeout(() => setLinkCopied(false), 2000);
                             } catch (err) {
-                              // Fallback para navegadores antigos
                               const textArea = document.createElement('textarea');
                               textArea.value = sharedLink;
                               textArea.style.position = 'fixed';
@@ -3473,6 +3349,7 @@ export default function ProjetoDetalhes() {
                         setAudioVideoFormato('link');
                         setSharedLink(null);
                         setLinkCopied(false);
+                        setShowSharedLinkModal(false);
                         setUploadedFileData(null);
                       }}
                       className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
@@ -3483,6 +3360,76 @@ export default function ProjetoDetalhes() {
                 )}
               </form>
 
+            </div>
+          </div>
+        )}
+
+        {/* Modal Link Compartilhável Gerado */}
+        {showSharedLinkModal && sharedLink && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-white">Link compartilhável gerado</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowSharedLinkModal(false)}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+              <p className="text-gray-400 text-sm mb-3">Compartilhe o link para outras pessoas preencherem o formulário de áudio/vídeo:</p>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  readOnly
+                  value={sharedLink}
+                  className="flex-1 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(sharedLink);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    } catch {
+                      const ta = document.createElement('textarea');
+                      ta.value = sharedLink;
+                      ta.style.position = 'fixed';
+                      ta.style.opacity = '0';
+                      document.body.appendChild(ta);
+                      ta.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(ta);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    }
+                  }}
+                  className={`px-4 py-3 rounded-lg transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                    linkCopied ? 'bg-green-500 text-white' : 'bg-purple-500 hover:bg-purple-600 text-white'
+                  }`}
+                >
+                  {linkCopied ? (
+                    <>
+                      <i className="ri-check-line text-lg"></i>
+                      Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-file-copy-line text-lg"></i>
+                      Copiar link
+                    </>
+                  )}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSharedLinkModal(false)}
+                className="w-full px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         )}

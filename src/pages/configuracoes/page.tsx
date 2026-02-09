@@ -21,6 +21,14 @@ export default function Configuracoes() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deleteUserLoading, setDeleteUserLoading] = useState(false);
+  const [deleteUserError, setDeleteUserError] = useState<string | null>(null);
+  const [showInviteLinkModal, setShowInviteLinkModal] = useState(false);
+  const [generatedInviteLink, setGeneratedInviteLink] = useState<string | null>(null);
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
+  const [copiedInviteToken, setCopiedInviteToken] = useState<string | null>(null);
   const [selectedUsuario, setSelectedUsuario] = useState<any>(null);
   const [selectedPendente, setSelectedPendente] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -189,11 +197,10 @@ export default function Configuracoes() {
       await loadConvites();
       setShowInviteModal(false);
       setInviteFormData({ expiresDays: 7, maxUses: 1 });
-      
-      // Mostrar link gerado
       const baseUrl = window.location.origin;
       const inviteLink = `${baseUrl}/registro/${token}`;
-      alert(`Link de convite gerado com sucesso!\n\n${inviteLink}\n\nCopie e compartilhe este link.`);
+      setGeneratedInviteLink(inviteLink);
+      setShowInviteLinkModal(true);
     } catch (error: any) {
       console.error('Erro ao criar convite:', error);
       alert(`Erro ao criar convite: ${error.message || 'Verifique o console para mais detalhes.'}`);
@@ -253,7 +260,28 @@ export default function Configuracoes() {
     const baseUrl = window.location.origin;
     const inviteLink = `${baseUrl}/registro/${token}`;
     navigator.clipboard.writeText(inviteLink);
-    alert('Link copiado para a área de transferência!');
+    setCopiedInviteToken(token);
+    setTimeout(() => setCopiedInviteToken(null), 2000);
+  };
+
+  const copyGeneratedInviteLink = async () => {
+    if (!generatedInviteLink) return;
+    try {
+      await navigator.clipboard.writeText(generatedInviteLink);
+      setInviteLinkCopied(true);
+      setTimeout(() => setInviteLinkCopied(false), 2000);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = generatedInviteLink;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setInviteLinkCopied(true);
+      setTimeout(() => setInviteLinkCopied(false), 2000);
+    }
   };
 
   const deleteInvite = async (inviteId: string) => {
@@ -367,28 +395,41 @@ export default function Configuracoes() {
     }
   };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este usuário?\n\n⚠️ ATENÇÃO: Esta ação removerá o perfil do usuário do sistema, mas a conta de autenticação precisará ser excluída manualmente no Supabase Dashboard se necessário.')) {
-      return;
-    }
+  const handleRequestDeleteUser = (usuario: { id: string; name: string }) => {
+    setUserToDelete(usuario);
+    setDeleteUserError(null);
+    setShowDeleteUserModal(true);
+  };
 
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    setDeleteUserLoading(true);
+    setDeleteUserError(null);
     try {
-      // Excluir da tabela users
-      // Nota: A exclusão da conta de autenticação no Supabase Auth requer Admin API
-      // que não está disponível no cliente. O perfil será removido, mas a conta Auth permanecerá.
-      // Para excluir completamente, use o Supabase Dashboard ou uma função serverless.
+      // Excluir do Supabase Auth via Edge Function (quando disponível)
+      const { error: fnError } = await supabase.functions.invoke('delete-user', {
+        body: { userId: userToDelete.id },
+      });
+      if (fnError) {
+        console.warn('delete-user function:', fnError);
+        // Continua: remove perfil mesmo se a função falhar (ex: função não deployada)
+      }
+
       const { error } = await supabase
         .from('users')
         .delete()
-        .eq('id', userId);
+        .eq('id', userToDelete.id);
 
       if (error) throw error;
 
+      setShowDeleteUserModal(false);
+      setUserToDelete(null);
       await loadUsuarios();
-      alert('Perfil do usuário excluído com sucesso!\n\nNota: A conta de autenticação ainda existe no Supabase. Para excluí-la completamente, use o Supabase Dashboard.');
     } catch (error: any) {
       console.error('Erro ao excluir usuário:', error);
-      alert(`Erro ao excluir usuário: ${error.message || 'Verifique o console para mais detalhes.'}`);
+      setDeleteUserError(error.message || 'Verifique o console para mais detalhes.');
+    } finally {
+      setDeleteUserLoading(false);
     }
   };
 
@@ -639,7 +680,7 @@ export default function Configuracoes() {
                                 </button>
                                 {usuario.id !== user?.id && (
                                   <button
-                                    onClick={() => handleDeleteUser(usuario.id)}
+                                    onClick={() => handleRequestDeleteUser({ id: usuario.id, name: usuario.name || 'Usuário' })}
                                     className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-smooth cursor-pointer"
                                     title="Excluir"
                                   >
@@ -828,13 +869,19 @@ export default function Configuracoes() {
                               <td className="px-6 py-4 whitespace-nowrap text-right">
                                 <div className="flex items-center justify-end gap-2">
                                   {isValid && (
-                                    <button
-                                      onClick={() => copyInviteLink(convite.token)}
-                                      className="p-2 hover:bg-primary-teal/20 text-primary-teal rounded-lg transition-smooth cursor-pointer"
-                                      title="Copiar link"
-                                    >
-                                      <i className="ri-file-copy-line text-lg"></i>
-                                    </button>
+                                    <span className="flex items-center gap-1">
+                                      {copiedInviteToken === convite.token ? (
+                                        <span className="text-xs text-green-400">Copiado!</span>
+                                      ) : (
+                                        <button
+                                          onClick={() => copyInviteLink(convite.token)}
+                                          className="p-2 hover:bg-primary-teal/20 text-primary-teal rounded-lg transition-smooth cursor-pointer"
+                                          title="Copiar link"
+                                        >
+                                          <i className="ri-file-copy-line text-lg"></i>
+                                        </button>
+                                      )}
+                                    </span>
                                   )}
                                   <button
                                     onClick={() => deleteInvite(convite.id)}
@@ -1280,6 +1327,128 @@ export default function Configuracoes() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Confirmar Exclusão de Usuário */}
+        {showDeleteUserModal && userToDelete && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-white">Excluir usuário</h2>
+                <button
+                  onClick={() => {
+                    if (!deleteUserLoading) {
+                      setShowDeleteUserModal(false);
+                      setUserToDelete(null);
+                      setDeleteUserError(null);
+                    }
+                  }}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+              <p className="text-gray-300 mb-4">
+                Tem certeza que deseja excluir o usuário <strong className="text-white">{userToDelete.name}</strong>? Esta ação não pode ser desfeita.
+              </p>
+              {deleteUserError && (
+                <p className="text-red-400 text-sm mb-4">{deleteUserError}</p>
+              )}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!deleteUserLoading) {
+                      setShowDeleteUserModal(false);
+                      setUserToDelete(null);
+                      setDeleteUserError(null);
+                    }
+                  }}
+                  className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer disabled:opacity-50"
+                  disabled={deleteUserLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteUser}
+                  disabled={deleteUserLoading}
+                  className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-smooth cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {deleteUserLoading ? (
+                    <>
+                      <i className="ri-loader-4-line animate-spin text-lg"></i>
+                      Excluindo...
+                    </>
+                  ) : (
+                    'Excluir'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Link Compartilhável Gerado */}
+        {showInviteLinkModal && generatedInviteLink && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-white">Link gerado</h2>
+                <button
+                  onClick={() => {
+                    setShowInviteLinkModal(false);
+                    setGeneratedInviteLink(null);
+                    setInviteLinkCopied(false);
+                  }}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+              <p className="text-gray-400 text-sm mb-3">Copie o link abaixo e compartilhe com quem deseja convidar:</p>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  readOnly
+                  value={generatedInviteLink}
+                  className="flex-1 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={copyGeneratedInviteLink}
+                  className={`px-4 py-3 rounded-lg transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                    inviteLinkCopied
+                      ? 'bg-green-500 text-white'
+                      : 'bg-gradient-primary text-white hover:opacity-90'
+                  }`}
+                >
+                  {inviteLinkCopied ? (
+                    <>
+                      <i className="ri-check-line text-lg"></i>
+                      Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-file-copy-line text-lg"></i>
+                      Copiar link
+                    </>
+                  )}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInviteLinkModal(false);
+                  setGeneratedInviteLink(null);
+                  setInviteLinkCopied(false);
+                }}
+                className="w-full px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         )}
