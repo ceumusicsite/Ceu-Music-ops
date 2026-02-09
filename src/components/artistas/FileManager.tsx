@@ -394,7 +394,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
       event.preventDefault();
       event.stopPropagation();
     }
-    // Download usa sempre o arquivo original (R2); vídeos em Stream também têm arquivo_url
+    // Download: sempre arquivo original (R2); vídeos em Stream também têm arquivo_url
     if (anexo.tipo !== 'arquivo' || !anexo.arquivo_url) return;
     try {
       const url = await getValidUrl(anexo);
