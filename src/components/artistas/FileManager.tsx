@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { storageService, R2_BUCKETS } from '../../services/storage';
-import { getSignedUrlR2 } from '../../lib/r2';
+import { getSignedUrlR2, uploadToR2 } from '../../lib/r2';
 import { useToast } from '../../contexts/ToastContext';
 import { getBrowserViewableUrl } from '../../utils/storageUrl';
 import StreamPreview from '../projetos/StreamPreview';
