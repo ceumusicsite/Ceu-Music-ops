@@ -428,20 +428,33 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
       event.stopPropagation();
     }
     // Download: sempre arquivo original (R2); vídeos em Stream também têm arquivo_url
-    if (anexo.tipo !== 'arquivo' || !anexo.arquivo_url) return;
+    if (anexo.tipo !== 'arquivo' || (!anexo.arquivo_key && !anexo.arquivo_url)) return;
     const fileName = anexo.nome || 'download';
     downloadBlobRef.current = null;
     downloadMimeRef.current = anexo.arquivo_tipo || '';
     try {
-      const url = await getValidUrl(anexo);
-      const urlToUse = url.includes('r2.cloudflarestorage.com')
-        ? getBrowserViewableUrl(url, R2_BUCKETS.ANEXOS, anexo.arquivo_key)
-        : url;
+      // Para iPhone, precisamos forçar "download de arquivo" (não abrir no player).
+      // Quando temos key, geramos signed URL com Content-Disposition: attachment.
+      let downloadUrl: string;
+      if (anexo.arquivo_key) {
+        const safeName = (fileName || 'download').replace(/[\\"]/g, '');
+        const disposition = `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`;
+        downloadUrl = await getSignedUrlR2(R2_BUCKETS.ANEXOS, anexo.arquivo_key, 86400, {
+          responseContentDisposition: disposition,
+          responseContentType: anexo.arquivo_tipo || undefined,
+        });
+      } else {
+        const url = await getValidUrl(anexo);
+        // Fallback: sem key não conseguimos setar attachment, então usamos a URL existente.
+        downloadUrl = url.includes('r2.cloudflarestorage.com')
+          ? getBrowserViewableUrl(url, R2_BUCKETS.ANEXOS, anexo.arquivo_key)
+          : url;
+      }
 
       // Web/desktop: iniciar rápido via link direto (sem "baixar invisível" e sem modal)
       if (!shouldUseMobileDownloadFlow) {
         const a = document.createElement('a');
-        a.href = urlToUse;
+        a.href = downloadUrl;
         a.download = fileName;
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
@@ -464,7 +477,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
           totalBytes: tamanho,
           fileName,
           status: 'done',
-          directUrl: urlToUse,
+          directUrl: downloadUrl,
         });
         return;
       }
@@ -481,7 +494,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
         directUrl: undefined,
       });
 
-      const res = await fetch(urlToUse, { mode: 'cors' });
+      const res = await fetch(downloadUrl, { mode: 'cors' });
       if (!res.ok) throw new Error(`Falha ao baixar: ${res.status}`);
       const contentLength = res.headers.get('Content-Length');
       const total = contentLength ? parseInt(contentLength, 10) : 0;

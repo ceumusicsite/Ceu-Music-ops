@@ -188,14 +188,30 @@ export async function uploadToR2(
 /**
  * Gera uma URL assinada para download de um arquivo
  */
+export interface SignedUrlR2Options {
+  responseContentDisposition?: string;
+  responseContentType?: string;
+  responseCacheControl?: string;
+  responseContentLanguage?: string;
+  responseExpires?: string;
+  responseContentEncoding?: string;
+}
+
 export async function getSignedUrlR2(
   bucket: string,
   key: string,
-  expiresIn: number = 3600
+  expiresIn: number = 3600,
+  options: SignedUrlR2Options = {}
 ): Promise<string> {
   const command = new GetObjectCommand({
     Bucket: bucket,
     Key: key,
+    ResponseContentDisposition: options.responseContentDisposition,
+    ResponseContentType: options.responseContentType,
+    ResponseCacheControl: options.responseCacheControl,
+    ResponseContentLanguage: options.responseContentLanguage,
+    ResponseExpires: options.responseExpires,
+    ResponseContentEncoding: options.responseContentEncoding,
   });
 
   try {
