@@ -56,6 +56,8 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const progressByFileRef = useRef<number[]>([]);
   const toast = useToast();
+  const downloadBlobRef = useRef<Blob | null>(null);
+  const downloadMimeRef = useRef<string>('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [tabelaNaoExiste, setTabelaNaoExiste] = useState(false);
@@ -85,10 +87,30 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
   const [downloadModal, setDownloadModal] = useState<{
     show: boolean;
     progress: number;
+    indeterminate: boolean;
+    receivedBytes: number;
+    totalBytes: number;
     fileName: string;
     status: 'loading' | 'done' | 'error';
     errorMessage?: string;
-  }>({ show: false, progress: 0, fileName: '', status: 'loading' });
+  }>({ show: false, progress: 0, indeterminate: false, receivedBytes: 0, totalBytes: 0, fileName: '', status: 'loading' });
+
+  const isMobileDevice =
+    typeof window !== 'undefined' &&
+    (('ontouchstart' in window) || (navigator?.maxTouchPoints ?? 0) > 0);
+
+  const isIOSDevice =
+    typeof navigator !== 'undefined' &&
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints ?? 0) > 1));
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes || bytes <= 0) return '—';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+    const value = bytes / Math.pow(1024, i);
+    return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+  };
 
   useEffect(() => {
     loadAnexos();
@@ -405,12 +427,39 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
     // Download: sempre arquivo original (R2); vídeos em Stream também têm arquivo_url
     if (anexo.tipo !== 'arquivo' || !anexo.arquivo_url) return;
     const fileName = anexo.nome || 'download';
-    setDownloadModal({ show: true, progress: 0, fileName, status: 'loading' });
+    downloadBlobRef.current = null;
+    downloadMimeRef.current = anexo.arquivo_tipo || '';
     try {
       const url = await getValidUrl(anexo);
       const urlToUse = url.includes('r2.cloudflarestorage.com')
         ? getBrowserViewableUrl(url, R2_BUCKETS.ANEXOS, anexo.arquivo_key)
         : url;
+
+      // Web/desktop: iniciar rápido via link direto (sem "baixar invisível" e sem modal)
+      if (!isMobileDevice) {
+        const a = document.createElement('a');
+        a.href = urlToUse;
+        a.download = fileName;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast.success('Download iniciado');
+        return;
+      }
+
+      // Mobile: comportamento estilo Drive (carrega internamente + modal de progresso, depois salvar)
+      setDownloadModal({
+        show: true,
+        progress: 0,
+        indeterminate: true,
+        receivedBytes: 0,
+        totalBytes: 0,
+        fileName,
+        status: 'loading',
+      });
+
       const res = await fetch(urlToUse, { mode: 'cors' });
       if (!res.ok) throw new Error(`Falha ao baixar: ${res.status}`);
       const contentLength = res.headers.get('Content-Length');
@@ -418,18 +467,25 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
       const reader = res.body?.getReader();
       if (!reader) {
         const blob = await res.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = objectUrl;
-        a.download = fileName;
-        a.click();
-        URL.revokeObjectURL(objectUrl);
-        setDownloadModal((m) => ({ ...m, progress: 100, status: 'done' }));
-        toast.success('Download concluído. No iPhone, o arquivo foi salvo ou aparecerá em Downloads.');
+        downloadBlobRef.current = blob;
+        downloadMimeRef.current = blob.type || downloadMimeRef.current;
+        setDownloadModal((m) => ({
+          ...m,
+          indeterminate: false,
+          totalBytes: total || blob.size || 0,
+          receivedBytes: blob.size || 0,
+          progress: 100,
+          status: 'done',
+        }));
         return;
       }
       const chunks: Uint8Array[] = [];
       let received = 0;
+      setDownloadModal((m) => ({
+        ...m,
+        indeterminate: !(total > 0),
+        totalBytes: total,
+      }));
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -438,21 +494,22 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
           received += value.length;
           setDownloadModal((m) => ({
             ...m,
-            progress: total > 0 ? Math.min(99, Math.round((received / total) * 100)) : 50,
+            receivedBytes: received,
+            progress: total > 0 ? Math.min(99, Math.round((received / total) * 100)) : m.progress,
           }));
         }
       }
       const blob = new Blob(chunks);
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(objectUrl);
-      setDownloadModal((m) => ({ ...m, progress: 100, status: 'done' }));
-      toast.success('Download concluído. No iPhone, o arquivo foi salvo ou aparecerá em Downloads.');
+      downloadBlobRef.current = blob;
+      downloadMimeRef.current = blob.type || downloadMimeRef.current;
+      setDownloadModal((m) => ({
+        ...m,
+        indeterminate: false,
+        receivedBytes: blob.size || received,
+        totalBytes: total || blob.size || 0,
+        progress: 100,
+        status: 'done',
+      }));
     } catch (error: any) {
       console.error('Erro ao baixar arquivo:', error);
       const msg = error.message || 'Não foi possível baixar o arquivo';
@@ -460,6 +517,44 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
       toast.error(msg);
     }
   };
+
+  const handleSaveDownloadedFile = useCallback(async () => {
+    const blob = downloadBlobRef.current;
+    if (!blob) return;
+    const fileName = downloadModal.fileName || 'download';
+    const mime = downloadMimeRef.current || blob.type || 'application/octet-stream';
+
+    // iPhone/iPad: preferir Share Sheet (parecido com Drive: "Salvar em Arquivos")
+    if (isIOSDevice) {
+      try {
+        const file = new File([blob], fileName, { type: mime });
+        // @ts-expect-error - Safari define canShare/share em navegadores compatíveis
+        if (navigator?.canShare?.({ files: [file] }) && navigator?.share) {
+          // @ts-expect-error - Web Share API
+          await navigator.share({ files: [file], title: fileName });
+          return;
+        }
+      } catch (e) {
+        // fallback abaixo
+      }
+      // Fallback: abrir para o usuário usar "Compartilhar" -> "Salvar em Arquivos"
+      const objectUrl = URL.createObjectURL(blob);
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      // revogar depois (tempo para abrir a aba)
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      return;
+    }
+
+    // Outros móveis: tentar download direto pelo blob
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+  }, [downloadModal.fileName, isIOSDevice]);
 
   const criarPasta = async () => {
     if (!newFolderName.trim()) {
@@ -2109,7 +2204,7 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
       )}
 
       {/* Modal "Fazendo download..." com progresso (estilo Google Drive; no iPhone mostra e depois salva) */}
-      {downloadModal.show && (
+      {downloadModal.show && isMobileDevice && (
         <div className="fixed inset-0 bg-black/80 z-[101] flex items-center justify-center p-4" onClick={() => downloadModal.status !== 'loading' && setDownloadModal((m) => ({ ...m, show: false }))}>
           <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
             {downloadModal.status === 'loading' && (
@@ -2121,13 +2216,27 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                     <p className="text-gray-400 text-sm truncate" title={downloadModal.fileName}>{downloadModal.fileName}</p>
                   </div>
                 </div>
-                <div className="h-2 bg-dark-bg rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary-teal transition-all duration-300"
-                    style={{ width: `${downloadModal.progress || 10}%` }}
-                  />
+                <div className="h-2 bg-dark-bg rounded-full overflow-hidden relative">
+                  {downloadModal.indeterminate ? (
+                    <div className="h-full w-2/3 bg-primary-teal/80 animate-pulse" />
+                  ) : (
+                    <div
+                      className="h-full bg-primary-teal transition-all duration-300"
+                      style={{ width: `${Math.max(2, Math.min(100, downloadModal.progress))}%` }}
+                    />
+                  )}
                 </div>
-                <p className="text-gray-500 text-xs mt-2 text-center">Aguarde o carregamento para salvar no dispositivo.</p>
+                <div className="flex items-center justify-between mt-2 text-xs">
+                  <span className="text-gray-500">
+                    {downloadModal.totalBytes > 0
+                      ? `${formatBytes(downloadModal.receivedBytes)} de ${formatBytes(downloadModal.totalBytes)}`
+                      : `${formatBytes(downloadModal.receivedBytes)} baixados`}
+                  </span>
+                  {!downloadModal.indeterminate && (
+                    <span className="text-gray-400 font-medium">{downloadModal.progress}%</span>
+                  )}
+                </div>
+                <p className="text-gray-500 text-xs mt-3 text-center">Aguarde terminar para aparecer a opção de salvar no iPhone.</p>
               </>
             )}
             {downloadModal.status === 'done' && (
@@ -2141,14 +2250,27 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
                     <p className="text-gray-400 text-sm truncate" title={downloadModal.fileName}>{downloadModal.fileName}</p>
                   </div>
                 </div>
-                <p className="text-gray-400 text-sm mb-4">No iPhone, o arquivo foi enviado para Downloads ou você pode encontrá-lo no gerenciador de arquivos.</p>
-                <button
-                  type="button"
-                  onClick={() => setDownloadModal((m) => ({ ...m, show: false }))}
-                  className="w-full py-3 bg-primary-teal hover:bg-primary-brown text-white rounded-lg transition-smooth cursor-pointer font-medium"
-                >
-                  Fechar
-                </button>
+                <p className="text-gray-400 text-sm mb-4">
+                  {isIOSDevice
+                    ? 'Toque em “Salvar no iPhone” e escolha “Salvar em Arquivos”.'
+                    : 'Toque em “Salvar” para finalizar o download.'}
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSaveDownloadedFile}
+                    className="flex-1 py-3 bg-primary-teal hover:bg-primary-brown text-white rounded-lg transition-smooth cursor-pointer font-medium"
+                  >
+                    {isIOSDevice ? 'Salvar no iPhone' : 'Salvar'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDownloadModal((m) => ({ ...m, show: false }))}
+                    className="px-5 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer font-medium"
+                  >
+                    Fechar
+                  </button>
+                </div>
               </>
             )}
             {downloadModal.status === 'error' && (
