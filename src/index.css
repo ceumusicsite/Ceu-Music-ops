@@ -86,9 +86,7 @@ body > div[draggable="true"]:not([class*="bg-dark-card"]) {
 }
 
 /* Remove elementos de drag ghost do HTML5 */
-[draggable="true"]:not(.bg-dark-card) {
-  -webkit-user-drag: none !important;
-}
+/* Removido para permitir drag and drop funcionar */
 
 /* Esconde qualquer elemento que apareça ao clicar em botões */
 div:active:not(.bg-dark-card):not([class*="modal"]):not([class*="dropdown"]) {

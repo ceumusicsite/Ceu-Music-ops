@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import MainLayout from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 
 type FilterTipo = 'todos' | 'contrato' | 'termo' | 'aditivo' | 'outro';
@@ -28,9 +29,12 @@ export default function Documentos() {
   const [projetos, setProjetos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedDocumento, setSelectedDocumento] = useState<any>(null);
   const [anexos, setAnexos] = useState<any[]>([]);
   const [uploadingAnexo, setUploadingAnexo] = useState(false);
+  const [uploadProgressAnexo, setUploadProgressAnexo] = useState(0);
+  const toast = useToast();
   
   const [formData, setFormData] = useState({
     titulo: '',
@@ -142,17 +146,22 @@ export default function Documentos() {
       }
 
       setUploading(true);
+      setUploadProgress(0);
 
-      // Upload do arquivo principal para Cloudflare R2
       let result: any = null;
+      const hasAnexos = formData.arquivos.length > 0;
+      const hasMainFile = !!formData.arquivo;
+      const mainFileWeight = (hasMainFile && hasAnexos) ? 0.5 : (hasMainFile ? 1 : 0);
       if (formData.arquivo) {
         const { storageService, R2_BUCKETS } = await import('../../services/storage');
         result = await storageService.upload(formData.arquivo, {
           bucket: R2_BUCKETS.DOCUMENTOS,
           folder: 'documentos',
-          makePublic: false, // Usar signed URLs (mais seguro)
+          makePublic: false,
+          onProgress: (p) => setUploadProgress(Math.round(p * mainFileWeight * 100)),
         });
       }
+      if (!hasAnexos) setUploadProgress(100);
 
       // Preparar dados do documento
       // Validar que o tipo está nos valores permitidos
@@ -239,14 +248,19 @@ export default function Documentos() {
       // Todos os anexos são salvos no bucket R2_BUCKETS.DOCUMENTOS na pasta 'documentos/anexos'
       if (formData.arquivos.length > 0 && data && data[0]) {
         const { storageService, R2_BUCKETS } = await import('../../services/storage');
-        for (let i = 0; i < formData.arquivos.length; i++) {
+        const totalAnexos = formData.arquivos.length;
+        for (let i = 0; i < totalAnexos; i++) {
           const file = formData.arquivos[i];
           try {
             const anexoResult = await storageService.upload(file, {
               bucket: R2_BUCKETS.DOCUMENTOS,
               folder: 'documentos/anexos',
-              makePublic: false, // Usar signed URLs (mais seguro)
-              provider: 'r2', // Garantir que usa R2 explicitamente
+              makePublic: false,
+              provider: 'r2',
+              onProgress: (p) => {
+                const anexoPart = 50 + (50 * (i + p / 100) / totalAnexos);
+                setUploadProgress(Math.round(anexoPart));
+              },
             });
 
             await supabase
@@ -270,12 +284,13 @@ export default function Documentos() {
       
       setShowModal(false);
       resetForm();
-      alert('Documento cadastrado com sucesso!');
+      toast.success('Documento cadastrado com sucesso!');
     } catch (error: any) {
       console.error('Erro ao criar documento:', error);
-      alert(`Erro ao criar documento: ${error.message || 'Verifique o console para mais detalhes.'}`);
+      toast.error(`Erro ao criar documento: ${error.message || 'Verifique o console para mais detalhes.'}`);
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -752,15 +767,15 @@ export default function Documentos() {
   const handleAddAnexo = async (documentoId: string, file: File) => {
     try {
       setUploadingAnexo(true);
+      setUploadProgressAnexo(0);
       
-      // Upload do arquivo para Cloudflare R2
-      // O storageService por padrão usa R2 (configurado em services/storage.ts)
       const { storageService, R2_BUCKETS } = await import('../../services/storage');
       const result = await storageService.upload(file, {
         bucket: R2_BUCKETS.DOCUMENTOS,
         folder: 'documentos/anexos',
-        makePublic: false, // Usar signed URLs (mais seguro)
-        provider: 'r2', // Garantir que usa R2 explicitamente
+        makePublic: false,
+        provider: 'r2',
+        onProgress: (percent) => setUploadProgressAnexo(percent),
       });
 
       // Obter número de anexos existentes para definir ordem
@@ -786,12 +801,13 @@ export default function Documentos() {
 
       await loadAnexos(documentoId);
       await loadDocumentos();
-      alert('Anexo adicionado com sucesso!');
+      toast.success('Anexo adicionado com sucesso!');
     } catch (error: any) {
       console.error('Erro ao adicionar anexo:', error);
-      alert(`Erro ao adicionar anexo: ${error.message}`);
+      toast.error(`Erro ao adicionar anexo: ${error.message}`);
     } finally {
       setUploadingAnexo(false);
+      setUploadProgressAnexo(0);
     }
   };
 
@@ -830,10 +846,10 @@ export default function Documentos() {
 
       await loadAnexos(documentoId);
       await loadDocumentos();
-      alert('Anexo e arquivo excluídos com sucesso!');
+      toast.success('Anexo e arquivo excluídos com sucesso!');
     } catch (error: any) {
       console.error('Erro ao excluir anexo:', error);
-      alert(`Erro ao excluir anexo: ${error.message}`);
+      toast.error(`Erro ao excluir anexo: ${error.message}`);
     }
   };
 
@@ -1478,6 +1494,20 @@ export default function Documentos() {
                   />
                 </div>
 
+                {uploading && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-gray-400">
+                      <span>Progresso</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-dark-bg rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary-teal transition-all duration-300 ease-out"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
                 <div className="flex gap-3 pt-4">
                   <button
                     type="button"
@@ -1497,10 +1527,10 @@ export default function Documentos() {
                     {uploading ? (
                       <span className="flex items-center justify-center gap-2">
                         <i className="ri-loader-4-line animate-spin"></i>
-                        Anexando...
+                        Enviando...
                       </span>
                     ) : (
-                      'Anexar Documento'
+                      'Cadastrar Documento'
                     )}
                   </button>
                 </div>
@@ -1959,9 +1989,17 @@ export default function Documentos() {
                 </div>
 
                 {uploadingAnexo && (
-                  <div className="text-center py-4">
-                    <i className="ri-loader-4-line text-2xl text-primary-teal animate-spin"></i>
-                    <p className="text-gray-400 text-sm mt-2">Enviando anexo...</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-gray-400">
+                      <span>Progresso</span>
+                      <span>{uploadProgressAnexo}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-dark-bg rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary-teal transition-all duration-300 ease-out"
+                        style={{ width: `${uploadProgressAnexo}%` }}
+                      />
+                    </div>
                   </div>
                 )}
 

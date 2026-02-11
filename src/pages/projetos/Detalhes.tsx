@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
+import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
 import YouTubePreview from '../../components/projetos/YouTubePreview';
 import ReferenciaForm from '../../components/projetos/ReferenciaForm';
 import FileUpload from '../../components/projetos/FileUpload';
 import StreamPreview from '../../components/projetos/StreamPreview';
 import { getSignedUrlR2 } from '../../lib/r2';
+import { getBrowserViewableUrl, getViewableUrlAsync } from '../../utils/storageUrl';
 import { createStreamVideoFromUrl, getStreamIframeUrl } from '../../services/stream';
 import { fornecedoresMock } from '../../data/fornecedores-mock';
 import { produtoresMock } from '../../data/produtores-mock';
@@ -132,6 +134,7 @@ interface Anexo {
 export default function ProjetoDetalhes() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
   const [projeto, setProjeto] = useState<Projeto | null>(null);
   const [faixas, setFaixas] = useState<Faixa[]>([]);
   const [orcamento, setOrcamento] = useState<Orcamento | null>(null);
@@ -168,9 +171,56 @@ export default function ProjetoDetalhes() {
   const [sharedLink, setSharedLink] = useState<string | null>(null);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [showSharedLinkModal, setShowSharedLinkModal] = useState(false);
   const [playingAudioVideo, setPlayingAudioVideo] = useState<FaixaAudioVideo | null>(null);
   const [uploadedFileData, setUploadedFileData] = useState<{ url: string; fileName: string; bucket: string; key: string } | null>(null);
   const [creatingStream, setCreatingStream] = useState(false);
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+
+  const copiarLinkExterno = async (url: string, id: string, bucket?: string, key?: string) => {
+    try {
+      const urlParaCopiar = await getViewableUrlAsync(url, bucket, key);
+      await navigator.clipboard.writeText(urlParaCopiar);
+      setCopiedLinkId(id);
+      setTimeout(() => setCopiedLinkId(null), 2000);
+    } catch (err) {
+      alert('Não foi possível copiar o link');
+    }
+  };
+
+  const handleAbrirExterno = async (url: string, bucket?: string, key?: string) => {
+    try {
+      const urlParaAbrir = await getViewableUrlAsync(url, bucket, key);
+      window.open(urlParaAbrir, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      alert('Não foi possível abrir o link. Tente copiar o link e abrir manualmente.');
+    }
+  };
+
+  const getUrlParaAbrir = (url: string, bucket?: string, key?: string) =>
+    getBrowserViewableUrl(url, bucket, key);
+
+  const handleDownloadVideo = async (audioVideo: FaixaAudioVideo) => {
+    try {
+      const url = audioVideo.formato === 'link' ? audioVideo.link_url : audioVideo.arquivo_url;
+      if (!url) return;
+      const downloadUrl = await getViewableUrlAsync(
+        url,
+        audioVideo.formato === 'arquivo' ? audioVideo.arquivo_bucket : undefined,
+        audioVideo.formato === 'arquivo' ? audioVideo.arquivo_key : undefined
+      );
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = audioVideo.arquivo_nome || `video_${audioVideo.id}`;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (error: any) {
+      console.error('Erro ao baixar vídeo:', error);
+      alert(`Erro ao baixar: ${error.message || 'Tente novamente.'}`);
+    }
+  };
 
   useEffect(() => {
     if (id) {
@@ -944,6 +994,7 @@ export default function ProjetoDetalhes() {
       const baseUrl = window.location.origin;
       const sharedUrl = `${baseUrl}/shared/audio-video/${token}`;
       setSharedLink(sharedUrl);
+      setShowSharedLinkModal(true);
 
     } catch (error: any) {
       console.error('Erro ao gerar link compartilhável:', error);
@@ -1601,27 +1652,43 @@ export default function ProjetoDetalhes() {
                                               </button>
                                             )}
                                             {av.formato === 'link' && av.link_url && (
-                                              <a 
-                                                href={av.link_url} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer" 
-                                                className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
-                                                title="Abrir link"
-                                              >
-                                                <i className="ri-external-link-line text-base"></i>
-                                              </a>
+                                              <>
+                                                <button
+                                                  onClick={() => copiarLinkExterno(av.link_url!, `av-${av.id}`)}
+                                                  className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
+                                                  title="Copiar link para compartilhar"
+                                                >
+                                                  <i className={`${copiedLinkId === `av-${av.id}` ? 'ri-check-line text-green-400' : 'ri-link'} text-base`}></i>
+                                                </button>
+                                                <a 
+                                                  href={av.link_url} 
+                                                  target="_blank" 
+                                                  rel="noopener noreferrer" 
+                                                  className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
+                                                  title="Abrir link"
+                                                >
+                                                  <i className="ri-external-link-line text-base"></i>
+                                                </a>
+                                              </>
                                             )}
                                             {av.formato === 'arquivo' && av.arquivo_url && (
-                                              <a 
-                                                href={av.arquivo_url} 
-                                                target="_blank" 
-                                                rel="noopener noreferrer" 
-                                                className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
-                                                title="Baixar arquivo"
-                                                download
-                                              >
-                                                <i className="ri-download-line text-base"></i>
-                                              </a>
+                                              <>
+                                                <button
+                                                  onClick={() => copiarLinkExterno(av.arquivo_url!, `av-${av.id}`, av.arquivo_bucket, av.arquivo_key)}
+                                                  className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth"
+                                                  title="Copiar link para compartilhar"
+                                                >
+                                                  <i className={`${copiedLinkId === `av-${av.id}` ? 'ri-check-line text-green-400' : 'ri-link'} text-base`}></i>
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleAbrirExterno(av.arquivo_url!, av.arquivo_bucket, av.arquivo_key)}
+                                                  className="p-2 text-primary-teal hover:bg-primary-teal/20 rounded-lg transition-smooth cursor-pointer"
+                                                  title="Abrir/Visualizar em nova aba"
+                                                >
+                                                  <i className="ri-external-link-line text-base"></i>
+                                                </button>
+                                              </>
                                             )}
                                             <button
                                               onClick={() => handleDeleteAudioVideo(av.id)}
@@ -2075,17 +2142,23 @@ export default function ProjetoDetalhes() {
                     <YouTubePreview url={referencia.url} title={referencia.titulo} />
                   )}
                   {referencia.tipo === 'arquivo' && referencia.arquivo_url && (
-                    <div className="mt-2">
-                      <a
-                        href={referencia.arquivo_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-3 py-2 bg-dark-card border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-white"
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => handleAbrirExterno(referencia.arquivo_url!)}
+                        className="flex items-center gap-2 px-3 py-2 bg-dark-card border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-white flex-1 min-w-0 cursor-pointer text-left"
                       >
                         <i className="ri-file-line text-primary-teal"></i>
-                        <span>{referencia.arquivo_nome || 'Ver arquivo'}</span>
-                        <i className="ri-external-link-line ml-auto"></i>
-                      </a>
+                        <span className="truncate">{referencia.arquivo_nome || 'Ver arquivo'}</span>
+                        <i className="ri-external-link-line ml-auto flex-shrink-0"></i>
+                      </button>
+                      <button
+                        onClick={() => copiarLinkExterno(referencia.arquivo_url!, `ref-${referencia.id}`)}
+                        className="p-2 bg-dark-card border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-primary-teal"
+                        title="Copiar link para compartilhar"
+                      >
+                        <i className={`${copiedLinkId === `ref-${referencia.id}` ? 'ri-check-line text-green-400' : 'ri-link'} text-lg`}></i>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -2144,14 +2217,21 @@ export default function ProjetoDetalhes() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <a
-                      href={anexo.arquivo_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => copiarLinkExterno(anexo.arquivo_url, `anexo-${anexo.id}`)}
                       className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
+                      title="Copiar link para compartilhar"
+                    >
+                      <i className={`${copiedLinkId === `anexo-${anexo.id}` ? 'ri-check-line text-green-400' : 'ri-link'} text-gray-400 hover:text-primary-teal`}></i>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAbrirExterno(anexo.arquivo_url)}
+                      className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
+                      title="Abrir/Visualizar em nova aba"
                     >
                       <i className="ri-external-link-line text-gray-400 hover:text-primary-teal"></i>
-                    </a>
+                    </button>
                     <button
                       onClick={() => handleDeleteAnexo(anexo.id)}
                       className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
@@ -2394,7 +2474,7 @@ export default function ProjetoDetalhes() {
                         descricaoInput?.value || undefined
                       );
                     }}
-                    onError={(error) => alert(`Erro: ${error}`)}
+                    onError={(error) => toast.error(`Erro: ${error}`)}
                     accept="*/*"
                     label="Selecionar arquivo"
                   />
@@ -2693,12 +2773,54 @@ export default function ProjetoDetalhes() {
                       playingAudioVideo.versao}`}
                   </p>
                 </div>
-                <button
-                  onClick={() => setPlayingAudioVideo(null)}
-                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
-                >
-                  <i className="ri-close-line text-2xl"></i>
-                </button>
+                <div className="flex items-center gap-2">
+                  {((playingAudioVideo.formato === 'arquivo' && playingAudioVideo.arquivo_url) || (playingAudioVideo.formato === 'link' && playingAudioVideo.link_url)) && (
+                    <button
+                      type="button"
+                      onClick={() => copiarLinkExterno(
+                        playingAudioVideo.formato === 'link' ? playingAudioVideo.link_url! : playingAudioVideo.arquivo_url!,
+                        'modal-player',
+                        playingAudioVideo.formato === 'arquivo' ? playingAudioVideo.arquivo_bucket : undefined,
+                        playingAudioVideo.formato === 'arquivo' ? playingAudioVideo.arquivo_key : undefined
+                      )}
+                      className="flex items-center gap-2 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-white cursor-pointer"
+                      title="Copiar link para compartilhar"
+                    >
+                      <i className={`${copiedLinkId === 'modal-player' ? 'ri-check-line text-green-400' : 'ri-link'} text-lg`}></i>
+                      <span>{copiedLinkId === 'modal-player' ? 'Copiado!' : 'Copiar link'}</span>
+                    </button>
+                  )}
+                  {((playingAudioVideo.formato === 'arquivo' && playingAudioVideo.arquivo_url) || (playingAudioVideo.formato === 'link' && playingAudioVideo.link_url)) && !playingAudioVideo.stream_uid && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadVideo(playingAudioVideo)}
+                        className="flex items-center gap-2 px-3 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth text-sm cursor-pointer"
+                        title="Baixar vídeo"
+                      >
+                        <i className="ri-download-line"></i>
+                        <span>Baixar</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => playingAudioVideo.formato === 'link'
+                          ? window.open(playingAudioVideo.link_url || '#', '_blank')
+                          : handleAbrirExterno(playingAudioVideo.arquivo_url!, playingAudioVideo.arquivo_bucket, playingAudioVideo.arquivo_key)}
+                        className="flex items-center gap-2 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg hover:bg-dark-hover transition-smooth text-sm text-primary-teal cursor-pointer"
+                        title="Abrir em nova aba"
+                      >
+                        <i className="ri-external-link-line"></i>
+                        <span>Abrir em nova aba</span>
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => setPlayingAudioVideo(null)}
+                    className="p-2 text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                  >
+                    <i className="ri-close-line text-2xl"></i>
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-4">
@@ -3242,10 +3364,7 @@ export default function ProjetoDetalhes() {
                         <button
                           type="button"
                           onClick={() => {
-                            if (!sharedLink) {
-                              alert('Por favor, clique em "Gerar Link Compartilhável" primeiro.');
-                              return;
-                            }
+                            if (!sharedLink) return;
                             const tipoTexto = audioVideoTipo === 'audio' ? 'Áudio' : audioVideoTipo === 'video' ? 'Vídeo' : 'Áudio/Vídeo';
                             const subject = encodeURIComponent(`Formulário de ${tipoTexto} - ${selectedFaixaForModal?.nome}`);
                             const body = encodeURIComponent(`Olá,\n\nPor favor, preencha o formulário de áudio/vídeo para a faixa "${selectedFaixaForModal?.nome}" através do link abaixo:\n\n${sharedLink}\n\nObrigado!`);
@@ -3264,10 +3383,7 @@ export default function ProjetoDetalhes() {
                         <button
                           type="button"
                           onClick={() => {
-                            if (!sharedLink) {
-                              alert('Por favor, clique em "Gerar Link Compartilhável" primeiro.');
-                              return;
-                            }
+                            if (!sharedLink) return;
                             const message = encodeURIComponent(`Olá! Por favor, preencha o formulário de áudio/vídeo para a faixa "${selectedFaixaForModal?.nome}" através do link:\n${sharedLink}`);
                             window.open(`https://wa.me/?text=${message}`, '_blank');
                           }}
@@ -3284,16 +3400,12 @@ export default function ProjetoDetalhes() {
                         <button
                           type="button"
                           onClick={async () => {
-                            if (!sharedLink) {
-                              alert('Por favor, clique em "Gerar Link Compartilhável" primeiro.');
-                              return;
-                            }
+                            if (!sharedLink) return;
                             try {
                               await navigator.clipboard.writeText(sharedLink);
                               setLinkCopied(true);
                               setTimeout(() => setLinkCopied(false), 2000);
                             } catch (err) {
-                              // Fallback para navegadores antigos
                               const textArea = document.createElement('textarea');
                               textArea.value = sharedLink;
                               textArea.style.position = 'fixed';
@@ -3355,6 +3467,7 @@ export default function ProjetoDetalhes() {
                         setAudioVideoFormato('link');
                         setSharedLink(null);
                         setLinkCopied(false);
+                        setShowSharedLinkModal(false);
                         setUploadedFileData(null);
                       }}
                       className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
@@ -3365,6 +3478,76 @@ export default function ProjetoDetalhes() {
                 )}
               </form>
 
+            </div>
+          </div>
+        )}
+
+        {/* Modal Link Compartilhável Gerado */}
+        {showSharedLinkModal && sharedLink && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-white">Link compartilhável gerado</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowSharedLinkModal(false)}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+              <p className="text-gray-400 text-sm mb-3">Compartilhe o link para outras pessoas preencherem o formulário de áudio/vídeo:</p>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  readOnly
+                  value={sharedLink}
+                  className="flex-1 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(sharedLink);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    } catch {
+                      const ta = document.createElement('textarea');
+                      ta.value = sharedLink;
+                      ta.style.position = 'fixed';
+                      ta.style.opacity = '0';
+                      document.body.appendChild(ta);
+                      ta.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(ta);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    }
+                  }}
+                  className={`px-4 py-3 rounded-lg transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+                    linkCopied ? 'bg-green-500 text-white' : 'bg-purple-500 hover:bg-purple-600 text-white'
+                  }`}
+                >
+                  {linkCopied ? (
+                    <>
+                      <i className="ri-check-line text-lg"></i>
+                      Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <i className="ri-file-copy-line text-lg"></i>
+                      Copiar link
+                    </>
+                  )}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSharedLinkModal(false)}
+                className="w-full px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         )}

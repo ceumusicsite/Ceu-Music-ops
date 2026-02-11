@@ -63,14 +63,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      // Se o perfil não existe, criar um novo
+      // Se o perfil não existe, criar como pendente (exige aprovação de um admin)
+      // Nunca auto-aprovar ou dar role admin — evita que convidados virem admin ao logar
       if (!data) {
         const newUser = {
           id: userId,
           name: email.split('@')[0],
           email: email,
-          role: 'admin' as UserRole,
-          status: 'approved' as const,
+          role: 'operador' as UserRole,
+          status: 'pending' as const,
           avatar: null,
         };
 
@@ -80,9 +81,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .select()
           .single();
 
-        if (createError) throw createError;
+        if (createError) {
+          console.error('Erro ao criar perfil pendente:', createError);
+          // Se não conseguir criar perfil (ex.: RLS), tratar como pendente e redirecionar
+          await supabase.auth.signOut();
+          setUser(null);
+          window.location.href = '/login?status=pending';
+          return;
+        }
 
-        // Verificar status antes de definir o usuário
+        // Perfil criado como pendente: não permitir acesso até aprovação
         if (createdUser.status === 'pending' || createdUser.status === 'rejected') {
           await supabase.auth.signOut();
           setUser(null);

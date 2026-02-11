@@ -47,9 +47,25 @@ export default {
     const accountId = Deno.env.get('CLOUDFLARE_ACCOUNT_ID') || '';
     const token = Deno.env.get('CLOUDFLARE_STREAM_API_TOKEN') || '';
 
+    console.log('[stream-copy] Secrets check:', {
+      hasAccountId: !!accountId,
+      hasToken: !!token,
+      accountIdLength: accountId.length,
+      tokenLength: token.length,
+      accountIdPrefix: accountId.substring(0, 8),
+    });
+
     if (!accountId || !token) {
       return json(
-        { error: 'Missing CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_STREAM_API_TOKEN' },
+        { 
+          error: 'Missing CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_STREAM_API_TOKEN',
+          debug: {
+            hasAccountId: !!accountId,
+            hasToken: !!token,
+            accountIdLength: accountId.length,
+            tokenLength: token.length,
+          }
+        },
         { status: 500 }
       );
     }
@@ -66,13 +82,27 @@ export default {
     }
 
     const cfUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/stream/copy`;
-    const payload = {
+    const payload: { url: string; meta?: { name?: string; [key: string]: unknown } } = {
       url: body.sourceUrl,
-      meta: {
-        name: body.name,
-        ...(body.meta || {}),
-      },
     };
+    
+    // Adicionar meta apenas se houver name ou meta customizado
+    if (body.name || body.meta) {
+      payload.meta = {};
+      if (body.name) {
+        payload.meta.name = body.name;
+      }
+      if (body.meta) {
+        Object.assign(payload.meta, body.meta);
+      }
+    }
+
+    console.log('[stream-copy] Calling Cloudflare API:', {
+      url: cfUrl,
+      sourceUrl: body.sourceUrl,
+      accountIdPrefix: accountId.substring(0, 8),
+      payload: JSON.stringify(payload),
+    });
 
     try {
       const res = await fetch(cfUrl, {
@@ -84,18 +114,37 @@ export default {
         body: JSON.stringify(payload),
       });
 
+      console.log('[stream-copy] Cloudflare response status:', res.status);
+
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
+        const errMsg = data?.errors?.[0]?.message || data?.error || `HTTP ${res.status}`;
+        const errorCodes = data?.errors?.map((e: any) => e.code) || [];
+        console.error('[stream-copy] Cloudflare API error:', {
+          status: res.status,
+          message: errMsg,
+          errorCodes,
+          errors: data?.errors,
+        });
         return json(
           {
             error: 'Cloudflare Stream API error',
             status: res.status,
-            details: data,
+            details: { 
+              cloudflareMessage: errMsg,
+              errorCodes,
+              raw: data,
+              // Debug info (sem expor secrets)
+              accountIdUsed: accountId.substring(0, 8) + '...',
+              tokenLength: token.length,
+            },
           },
           { status: 502 }
         );
       }
+
+      console.log('[stream-copy] Success! UID:', data?.result?.uid);
 
       const uid = data?.result?.uid;
       const readyToStream = data?.result?.readyToStream;
@@ -114,7 +163,8 @@ export default {
         }
       );
     } catch (e) {
-      return json({ error: 'Failed to call Cloudflare Stream API', details: String(e) }, { status: 502 });
+      const errMsg = e instanceof Error ? e.message : String(e);
+      return json({ error: 'Failed to call Cloudflare Stream API', details: errMsg }, { status: 502 });
     }
   },
 };

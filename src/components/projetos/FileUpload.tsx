@@ -29,6 +29,7 @@ export default function FileUpload({
   customFileName,
 }: FileUploadProps) {
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [preview, setPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +61,7 @@ export default function FileUpload({
   const handleUpload = async (file: File) => {
     try {
       setUploading(true);
+      setUploadProgress(0);
 
       // Mapear bucket para R2 bucket se necessário
       let r2Bucket = bucket;
@@ -81,6 +83,7 @@ export default function FileUpload({
         contentType: file.type,
         makePublic: makePublic,
         customFileName: customFileName,
+        onProgress: (percent) => setUploadProgress(percent),
       });
 
       // Usar nome customizado se fornecido, senão usar o nome original do arquivo
@@ -97,6 +100,7 @@ export default function FileUpload({
       onError?.(error.message || 'Erro ao fazer upload do arquivo');
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -139,24 +143,34 @@ export default function FileUpload({
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={handleClick}
-          disabled={uploading}
-          className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm hover:bg-dark-hover transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {uploading ? (
-            <>
-              <i className="ri-loader-4-line animate-spin"></i>
-              <span>Enviando...</span>
-            </>
-          ) : (
-            <>
-              <i className="ri-upload-cloud-line"></i>
-              <span>{label}</span>
-            </>
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={handleClick}
+            disabled={uploading}
+            className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm hover:bg-dark-hover transition-smooth cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {uploading ? (
+              <>
+                <i className="ri-loader-4-line animate-spin"></i>
+                <span>Enviando... {uploadProgress}%</span>
+              </>
+            ) : (
+              <>
+                <i className="ri-upload-cloud-line"></i>
+                <span>{label}</span>
+              </>
+            )}
+          </button>
+          {uploading && (
+            <div className="w-full h-1.5 bg-dark-bg rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary-teal transition-all duration-300 ease-out"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
           )}
-        </button>
+        </div>
       )}
     </div>
   );

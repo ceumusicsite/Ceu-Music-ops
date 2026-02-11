@@ -33,6 +33,8 @@ export interface UploadOptions {
   contentType?: string;
   makePublic?: boolean;
   customFileName?: string; // Nome customizado para o arquivo (sem extensão, será adicionada automaticamente)
+  /** Callback chamado com o progresso do upload (0-100) */
+  onProgress?: (percent: number) => void;
 }
 
 export interface UploadResult {
@@ -42,13 +44,14 @@ export interface UploadResult {
 }
 
 /**
- * Faz upload para o R2 usando presigned URL (recebe o buffer já lido)
+ * Faz upload para o R2 usando presigned URL com XMLHttpRequest (para suportar barra de progresso)
  */
 async function uploadViaPresignedUrl(
   arrayBuffer: ArrayBuffer,
   bucket: string,
   key: string,
-  contentType: string
+  contentType: string,
+  onProgress?: (percent: number) => void
 ): Promise<void> {
   const putCommand = new PutObjectCommand({
     Bucket: bucket,
@@ -57,14 +60,31 @@ async function uploadViaPresignedUrl(
   });
   const presignedUrl = await getSignedUrl(s3Client, putCommand, { expiresIn: 300 });
 
-  const response = await fetch(presignedUrl, {
-    method: 'PUT',
-    body: arrayBuffer,
-    headers: { 'Content-Type': contentType },
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const total = arrayBuffer.byteLength;
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && total > 0) {
+        const percent = Math.round((e.loaded / total) * 100);
+        onProgress?.(Math.min(percent, 99));
+      }
+    });
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100);
+        resolve();
+      } else {
+        reject(new Error(`Upload falhou: ${xhr.status} ${xhr.statusText}`));
+      }
+    });
+    xhr.addEventListener('error', () => reject(new Error('Upload falhou: erro de rede')));
+    xhr.addEventListener('abort', () => reject(new Error('Upload cancelado')));
+
+    xhr.open('PUT', presignedUrl);
+    xhr.setRequestHeader('Content-Type', contentType);
+    xhr.send(arrayBuffer);
   });
-  if (!response.ok) {
-    throw new Error(`Upload falhou: ${response.status} ${response.statusText}`);
-  }
 }
 
 /**
@@ -116,9 +136,10 @@ export async function uploadToR2(
 
   try {
     try {
-      await uploadViaPresignedUrl(arrayBuffer, bucket, key, contentType);
+      await uploadViaPresignedUrl(arrayBuffer, bucket, key, contentType, options.onProgress);
     } catch (presignedError: any) {
       console.warn('Upload via presigned URL falhou, tentando método direto:', presignedError);
+      options.onProgress?.(0);
       const command = new PutObjectCommand({
         Bucket: bucket,
         Key: key,
@@ -126,6 +147,7 @@ export async function uploadToR2(
         ContentType: contentType,
       });
       await s3Client.send(command);
+      options.onProgress?.(100);
     }
 
     // Gerar URL pública ou signed URL
@@ -165,15 +187,32 @@ export async function uploadToR2(
 
 /**
  * Gera uma URL assinada para download de um arquivo
+ * (SignedUrlR2Options permite ResponseContentDisposition para forçar download no iPhone)
  */
+export interface SignedUrlR2Options {
+  responseContentDisposition?: string;
+  responseContentType?: string;
+  responseCacheControl?: string;
+  responseContentLanguage?: string;
+  responseExpires?: string;
+  responseContentEncoding?: string;
+}
+
 export async function getSignedUrlR2(
   bucket: string,
   key: string,
-  expiresIn: number = 3600
+  expiresIn: number = 3600,
+  options: SignedUrlR2Options = {}
 ): Promise<string> {
   const command = new GetObjectCommand({
     Bucket: bucket,
     Key: key,
+    ResponseContentDisposition: options.responseContentDisposition,
+    ResponseContentType: options.responseContentType,
+    ResponseCacheControl: options.responseCacheControl,
+    ResponseContentLanguage: options.responseContentLanguage,
+    ResponseExpires: options.responseExpires,
+    ResponseContentEncoding: options.responseContentEncoding,
   });
 
   try {
