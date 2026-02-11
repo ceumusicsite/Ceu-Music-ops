@@ -193,18 +193,32 @@ export default function NovoProjeto() {
       // Criar projeto
       const dadosProjeto: any = {
         nome: formData.nome.trim(),
-        titulo: formData.nome.trim(),
         tipo: formData.tipo,
         artista_id: toUUID(formData.artista_id),
         fase: formData.fase,
         prioridade: formData.prioridade,
-        fornecedor_audio_id: toUUID(fornecedoresData.fornecedor_audio_id),
-        fornecedor_video_id: toUUID(fornecedoresData.fornecedor_video_id),
-        local_gravacao_id: toUUID(fornecedoresData.local_gravacao_id),
-        produtor_id: toUUID(fornecedoresData.produtor_id),
-        maquiador_id: toUUID(fornecedoresData.maquiador_id),
-        outros_profissionais: fornecedoresData.outros_profissionais.length > 0 ? fornecedoresData.outros_profissionais : null,
       };
+
+      // Adicionar campos opcionais apenas se tiverem valores
+      const fornecedorAudioId = toUUID(fornecedoresData.fornecedor_audio_id);
+      if (fornecedorAudioId) dadosProjeto.fornecedor_audio_id = fornecedorAudioId;
+
+      const fornecedorVideoId = toUUID(fornecedoresData.fornecedor_video_id);
+      if (fornecedorVideoId) dadosProjeto.fornecedor_video_id = fornecedorVideoId;
+
+      const localGravacaoId = toUUID(fornecedoresData.local_gravacao_id);
+      if (localGravacaoId) dadosProjeto.local_gravacao_id = localGravacaoId;
+
+      const produtorId = toUUID(fornecedoresData.produtor_id);
+      if (produtorId) dadosProjeto.produtor_id = produtorId;
+
+      const maquiadorId = toUUID(fornecedoresData.maquiador_id);
+      if (maquiadorId) dadosProjeto.maquiador_id = maquiadorId;
+
+      // Outros profissionais: enviar como array JSONB ou omitir se vazio
+      if (fornecedoresData.outros_profissionais.length > 0) {
+        dadosProjeto.outros_profissionais = fornecedoresData.outros_profissionais;
+      }
 
       if (formData.prazo) {
         dadosProjeto.previsao_lancamento = formData.prazo;
@@ -294,7 +308,8 @@ export default function NovoProjeto() {
       navigate(`/projetos/${projetoId}`);
     } catch (error: any) {
       console.error('Erro ao criar projeto:', error);
-      alert(`Erro ao criar projeto: ${error.message || 'Tente novamente.'}`);
+      const errorMessage = error.message || error.details || error.hint || 'Tente novamente.';
+      alert(`Erro ao criar projeto: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

@@ -138,6 +138,7 @@ export default function ProjetoDetalhes() {
   const [referencias, setReferencias] = useState<Referencia[]>([]);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingFaixa, setSavingFaixa] = useState(false);
   const [showFaixaModal, setShowFaixaModal] = useState(false);
   const [showFaseDropdown, setShowFaseDropdown] = useState(false);
   const [showReferenciaModal, setShowReferenciaModal] = useState(false);
@@ -526,36 +527,77 @@ export default function ProjetoDetalhes() {
 
   const handleSubmitFaixa = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!id) return;
+    e.stopPropagation();
+    if (!id) {
+      alert('ID do projeto não encontrado. Recarregue a página.');
+      return;
+    }
 
+    // Validação do nome
+    if (!faixaFormData.nome || !faixaFormData.nome.trim()) {
+      alert('Por favor, preencha o nome da faixa.');
+      return;
+    }
+
+    // Validação do status
+    const statusValidos = ['pendente', 'gravada', 'em_mixagem', 'masterizacao', 'finalizada', 'lancada'];
+    if (!statusValidos.includes(faixaFormData.status)) {
+      alert('Status inválido. Por favor, selecione um status válido.');
+      return;
+    }
+
+    // Prevenir múltiplos envios
+    if (savingFaixa) {
+      return;
+    }
+
+    setSavingFaixa(true);
     try {
-      const maxOrdem = faixas.length > 0 ? Math.max(...faixas.map(f => f.ordem)) : 0;
+      // Calcular ordem de forma segura
+      const ordens = faixas
+        .map(f => f.ordem)
+        .filter(ordem => typeof ordem === 'number' && !isNaN(ordem));
+      const maxOrdem = ordens.length > 0 ? Math.max(...ordens) : 0;
+      const novaOrdem = maxOrdem + 1;
 
       if (editingFaixa) {
         // Editar faixa existente
         const { error } = await supabase
           .from('faixas')
           .update({
-            nome: faixaFormData.nome,
+            nome: faixaFormData.nome.trim(),
             status: faixaFormData.status,
-            o_que_falta_gravar: faixaFormData.o_que_falta_gravar || null
+            o_que_falta_gravar: faixaFormData.o_que_falta_gravar?.trim() || null
           })
           .eq('id', editingFaixa.id);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Erro ao atualizar faixa:', error);
+          throw error;
+        }
       } else {
         // Criar nova faixa
         const { error } = await supabase
           .from('faixas')
           .insert([{
             projeto_id: id,
-            nome: faixaFormData.nome,
+            nome: faixaFormData.nome.trim(),
             status: faixaFormData.status,
-            o_que_falta_gravar: faixaFormData.o_que_falta_gravar || null,
-            ordem: maxOrdem + 1
+            o_que_falta_gravar: faixaFormData.o_que_falta_gravar?.trim() || null,
+            ordem: novaOrdem
           }]);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Erro ao criar faixa:', error);
+          console.error('Dados enviados:', {
+            projeto_id: id,
+            nome: faixaFormData.nome.trim(),
+            status: faixaFormData.status,
+            o_que_falta_gravar: faixaFormData.o_que_falta_gravar?.trim() || null,
+            ordem: novaOrdem
+          });
+          throw error;
+        }
       }
 
       setShowFaixaModal(false);
@@ -565,10 +607,13 @@ export default function ProjetoDetalhes() {
         status: 'pendente' as Faixa['status'],
         o_que_falta_gravar: ''
       });
-      loadProjetoData();
-    } catch (error) {
+      await loadProjetoData();
+    } catch (error: any) {
       console.error('Erro ao salvar faixa:', error);
-      alert('Erro ao salvar faixa. Tente novamente.');
+      const errorMessage = error?.message || error?.details || error?.hint || 'Erro desconhecido';
+      alert(`Erro ao salvar faixa: ${errorMessage}\n\nDetalhes técnicos: ${JSON.stringify(error)}`);
+    } finally {
+      setSavingFaixa(false);
     }
   };
 
@@ -1080,7 +1125,9 @@ export default function ProjetoDetalhes() {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-white">Controle de Gravação</h2>
             <button
-              onClick={() => {
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 setEditingFaixa(null);
                 setFaixaFormData({
                   nome: '',
@@ -1090,6 +1137,7 @@ export default function ProjetoDetalhes() {
                 setShowFaixaModal(true);
               }}
               className="px-4 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
+              style={{ touchAction: 'manipulation' }}
             >
               <i className="ri-add-line"></i>
               Nova Faixa
@@ -1101,7 +1149,9 @@ export default function ProjetoDetalhes() {
                   <i className="ri-music-2-line text-6xl text-gray-600 mb-4"></i>
                   <p className="text-gray-400 mb-4">Nenhuma faixa cadastrada</p>
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       setEditingFaixa(null);
                       setFaixaFormData({
                         nome: '',
@@ -1111,6 +1161,7 @@ export default function ProjetoDetalhes() {
                       setShowFaixaModal(true);
                     }}
                     className="px-4 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer"
+                    style={{ touchAction: 'manipulation' }}
                   >
                     Adicionar Primeira Faixa
                   </button>
@@ -2116,14 +2167,34 @@ export default function ProjetoDetalhes() {
 
         {/* Modal Nova/Editar Faixa */}
         {showFaixaModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md">
+          <div 
+            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+            onClick={(e) => {
+              // Fechar modal ao clicar no backdrop
+              if (e.target === e.currentTarget) {
+                setShowFaixaModal(false);
+                setEditingFaixa(null);
+                setFaixaFormData({
+                  nome: '',
+                  status: 'pendente' as Faixa['status'],
+                  o_que_falta_gravar: ''
+                });
+              }
+            }}
+            style={{ touchAction: 'manipulation' }}
+          >
+            <div 
+              className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-white">
                   {editingFaixa ? 'Editar Faixa' : 'Nova Faixa'}
                 </h2>
                 <button
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     setShowFaixaModal(false);
                     setEditingFaixa(null);
                     setFaixaFormData({
@@ -2133,6 +2204,7 @@ export default function ProjetoDetalhes() {
                     });
                   }}
                   className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                  style={{ touchAction: 'manipulation' }}
                 >
                   <i className="ri-close-line text-2xl"></i>
                 </button>
@@ -2183,7 +2255,9 @@ export default function ProjetoDetalhes() {
                 <div className="flex gap-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
                       setShowFaixaModal(false);
                       setEditingFaixa(null);
                       setFaixaFormData({
@@ -2193,14 +2267,24 @@ export default function ProjetoDetalhes() {
                       });
                     }}
                     className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
+                    style={{ touchAction: 'manipulation' }}
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
+                    disabled={savingFaixa}
+                    className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ touchAction: 'manipulation' }}
                   >
-                    {editingFaixa ? 'Salvar Alterações' : 'Adicionar Faixa'}
+                    {savingFaixa ? (
+                      <>
+                        <i className="ri-loader-4-line animate-spin mr-2"></i>
+                        Salvando...
+                      </>
+                    ) : (
+                      editingFaixa ? 'Salvar Alterações' : 'Adicionar Faixa'
+                    )}
                   </button>
                 </div>
               </form>
