@@ -644,9 +644,24 @@ export default function FileManager({ artistaId, artistaNome }: FileManagerProps
     }
   };
 
+  // Limite de upload no navegador: com multipart upload (S3/R2), suporta até 100 GB
+  const MAX_UPLOAD_BYTES = 100 * 1024 * 1024 * 1024; // 100 GB
+  const MAX_UPLOAD_GB = 100;
+
   const fazerUpload = async () => {
     if (selectedFiles.length === 0) {
       alert('Selecione pelo menos um arquivo');
+      return;
+    }
+
+    const arquivoGrande = selectedFiles.find((f) => f.size > MAX_UPLOAD_BYTES);
+    if (arquivoGrande) {
+      const tamanhoGB = (arquivoGrande.size / (1024 * 1024 * 1024)).toFixed(1);
+      alert(
+        `Arquivo muito grande para upload pelo navegador.\n\n` +
+          `"${arquivoGrande.name}" (${tamanhoGB} GB).\n\n` +
+          `O tamanho máximo é ${MAX_UPLOAD_GB} GB. Se precisar de mais, entre em contato.`
+      );
       return;
     }
 

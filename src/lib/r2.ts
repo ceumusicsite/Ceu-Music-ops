@@ -1,4 +1,15 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 // Configuração do R2
@@ -87,6 +98,86 @@ async function uploadViaPresignedUrl(
   });
 }
 
+/** Tamanho máximo para upload no navegador. Com multipart upload, R2 suporta até 5 TB (limite S3). */
+export const MAX_UPLOAD_FILE_BYTES = 100 * 1024 * 1024 * 1024; // 100 GB (bem acima dos 50GB solicitados)
+/** Acima deste tamanho, usa multipart upload (envia em partes, sem carregar tudo na memória) */
+const MULTIPART_THRESHOLD_BYTES = 50 * 1024 * 1024; // 50 MB
+/** Tamanho de cada parte no multipart upload. R2 suporta até 10.000 parts; mínimo 5MB exigido. */
+const MULTIPART_CHUNK_SIZE = 100 * 1024 * 1024; // 100 MB (mais eficiente para arquivos grandes)
+
+/**
+ * Faz upload multipart (arquivo grande em partes) para evitar carregar tudo na memória.
+ * Método oficial do S3/R2, usado por AWS CLI, Google Drive, etc. NÃO corrompe arquivos.
+ * R2 suporta até 5TB (limite S3), com até 10.000 parts.
+ */
+async function uploadMultipart(
+  file: File,
+  bucket: string,
+  key: string,
+  contentType: string,
+  onProgress?: (percent: number) => void
+): Promise<void> {
+  const createCommand = new CreateMultipartUploadCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType,
+  });
+  const { UploadId } = await s3Client.send(createCommand);
+  if (!UploadId) throw new Error('Falha ao iniciar multipart upload');
+
+  const parts: { PartNumber: number; ETag: string }[] = [];
+  const totalSize = file.size;
+  const totalParts = Math.ceil(totalSize / MULTIPART_CHUNK_SIZE);
+  let uploadedBytes = 0;
+
+  console.log(`[Multipart Upload] Iniciando: ${file.name} (${(totalSize / (1024 * 1024 * 1024)).toFixed(2)} GB) em ${totalParts} partes de ${(MULTIPART_CHUNK_SIZE / (1024 * 1024)).toFixed(0)} MB`);
+
+  try {
+    for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
+      const start = (partNumber - 1) * MULTIPART_CHUNK_SIZE;
+      const end = Math.min(start + MULTIPART_CHUNK_SIZE, totalSize);
+      const chunk = file.slice(start, end);
+      const chunkArrayBuffer = await chunk.arrayBuffer();
+
+      const uploadPartCommand = new UploadPartCommand({
+        Bucket: bucket,
+        Key: key,
+        UploadId,
+        PartNumber: partNumber,
+        Body: new Uint8Array(chunkArrayBuffer),
+      });
+
+      const { ETag } = await s3Client.send(uploadPartCommand);
+      if (!ETag) throw new Error(`Falha ao enviar parte ${partNumber}`);
+
+      parts.push({ PartNumber: partNumber, ETag });
+      uploadedBytes += chunkArrayBuffer.byteLength;
+      const progressPercent = Math.min(99, Math.round((uploadedBytes / totalSize) * 100));
+      onProgress?.(progressPercent);
+      
+      if (partNumber % 10 === 0 || partNumber === totalParts) {
+        console.log(`[Multipart Upload] Parte ${partNumber}/${totalParts} (${progressPercent}%)`);
+      }
+    }
+
+    console.log(`[Multipart Upload] Finalizando upload...`);
+    const completeCommand = new CompleteMultipartUploadCommand({
+      Bucket: bucket,
+      Key: key,
+      UploadId,
+      MultipartUpload: { Parts: parts },
+    });
+    await s3Client.send(completeCommand);
+    onProgress?.(100);
+    console.log(`[Multipart Upload] Concluído com sucesso!`);
+  } catch (error) {
+    console.error(`[Multipart Upload] Erro:`, error);
+    const abortCommand = new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId });
+    await s3Client.send(abortCommand).catch(() => {});
+    throw error;
+  }
+}
+
 /**
  * Faz upload de um arquivo para o Cloudflare R2
  */
@@ -96,6 +187,13 @@ export async function uploadToR2(
 ): Promise<UploadResult> {
   if (!accountId || !accessKeyId || !secretAccessKey) {
     throw new Error('Configuração do R2 não encontrada. Verifique as variáveis de ambiente.');
+  }
+
+  if (file.size > MAX_UPLOAD_FILE_BYTES) {
+    const gb = (file.size / (1024 * 1024 * 1024)).toFixed(1);
+    throw new Error(
+      `Arquivo muito grande (${gb} GB). O limite é 100 GB. Se precisar de mais, entre em contato.`
+    );
   }
 
   const bucket = options.bucket || R2_BUCKETS.ANEXOS;
@@ -121,6 +219,26 @@ export async function uploadToR2(
 
   const contentType = options.contentType || file.type || 'application/octet-stream';
 
+  // Arquivo grande (>100MB): usar multipart upload (envia em partes, sem carregar tudo na memória)
+  if (file.size > MULTIPART_THRESHOLD_BYTES) {
+    try {
+      await uploadMultipart(file, bucket, key, contentType, options.onProgress);
+    } catch (error: any) {
+      console.error('Erro no multipart upload:', error);
+      throw new Error(`Erro no upload multipart: ${error.message || 'Erro desconhecido'}`);
+    }
+    // Gerar URL pública ou signed URL
+    let publicUrlFinal: string;
+    if (options.makePublic && publicUrl) {
+      publicUrlFinal = `${publicUrl}/${bucket}/${key}`;
+    } else {
+      const getCommand = new GetObjectCommand({ Bucket: bucket, Key: key });
+      publicUrlFinal = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
+    }
+    return { url: publicUrlFinal, key: key, publicUrl: publicUrlFinal };
+  }
+
+  // Arquivo pequeno (<100MB): upload tradicional (lê o arquivo inteiro na memória)
   // Ler o arquivo UMA VEZ só. Segunda leitura do mesmo File pode falhar com
   // "permission problems" (ex.: Windows, OneDrive). Fallback: slice() às vezes evita o bloqueio.
   let arrayBuffer: ArrayBuffer;
@@ -130,7 +248,14 @@ export async function uploadToR2(
     try {
       arrayBuffer = await file.slice(0, file.size, file.type || undefined).arrayBuffer();
     } catch (e2: any) {
-      throw new Error(`Erro ao ler arquivo: ${(e2?.message || e1?.message) || 'Não foi possível ler o arquivo. Verifique se o arquivo não está sendo usado por outro programa.'}`);
+      const msg = (e2?.message || e1?.message) || '';
+      const dica =
+        file.size > 500 * 1024 * 1024
+          ? ' Arquivo muito grande (acima de 500 MB). O sistema suporta até 5 GB com upload multipart.'
+          : ' Se o arquivo está em pasta sincronizada (OneDrive, Google Drive), copie para uma pasta local e tente de novo.';
+      throw new Error(
+        `Erro ao ler arquivo: ${msg || 'Não foi possível ler o arquivo.'}${dica}`
+      );
     }
   }
 
