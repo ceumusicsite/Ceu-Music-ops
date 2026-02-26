@@ -14,8 +14,14 @@ import Orcamentos from "../pages/orcamentos/page";
 import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
 import Configuracoes from "../pages/configuracoes/page";
+import CoversPage from "../pages/covers/page";
+import EntregaPublicaPage from "../pages/public/entrega/[slug]/page";
 
 const routes: RouteObject[] = [
+  {
+    path: "/public/entrega/:slug",
+    element: <EntregaPublicaPage />,
+  },
   {
     path: "/",
     element: <Login />,
@@ -80,6 +86,11 @@ const routes: RouteObject[] = [
     path: "/configuracoes",
     element: <Configuracoes />,
   },
+  {
+    path: "/covers",
+    element: <CoversPage />,
+  },
+
   {
     path: "*",
     element: <NotFound />,

@@ -66,18 +66,22 @@ VITE_STORAGE_PROVIDER=r2
 - `<account_id>` pelo seu Account ID do Cloudflare
 - Os valores das credenciais pelos valores reais do token criado
 
-### 4. Configurar Buckets Públicos (Opcional)
+### 4. Habilitar Acesso Público (para links compartilháveis)
 
-Se você quiser URLs públicas diretas (sem signed URLs):
+Para que os links externos (copiar link / abrir em nova aba) funcionem e não retornem **Error 401**, é preciso habilitar a URL pública do bucket no R2:
 
-1. Vá no bucket desejado
-2. Clique em **Settings**
-3. Em **Public access**, ative **Allow Access**
-4. Configure CORS se necessário:
-   - Vá em **CORS Policy**
-   - Adicione seu domínio nas origens permitidas
+1. No dashboard da Cloudflare, vá em **R2** → **Object Storage**.
+2. Clique no bucket que você usa para anexos (ex.: **ceu-music-anexos**).
+3. Abra a aba **Settings** do bucket.
+4. Na seção **Public Development URL**, clique em **Enable**.
+5. No diálogo **Allow Public Access?**, digite **allow** para confirmar e clique em **Allow**.
+6. Confira se em **Public URL Access** aparece **Allowed**.
 
-**Nota**: Para produção, considere usar signed URLs ao invés de buckets públicos para maior segurança.
+Depois disso, URLs no formato `https://pub-<account_id>.r2.dev/ceu-music-anexos/...` passam a abrir no navegador.
+
+**Repita para cada bucket** que precisar de link público (ex.: ceu-music-anexos, ceu-music-audio se usar para áudio/vídeo).
+
+**Nota**: A URL r2.dev é rate limited e indicada para desenvolvimento. Para produção com mais controle, use [domínio customizado](https://developers.cloudflare.com/r2/buckets/public-buckets/#connect-a-bucket-to-a-custom-domain).
 
 ### 5. Verificar Instalação
 
@@ -114,6 +118,9 @@ npm run dev
 - Se usando buckets públicos, verifique se o Public Access está habilitado
 - Se usando signed URLs, verifique se o token não expirou
 - Confirme que o formato da URL pública está correto
+
+### Error 401 - "This bucket cannot be viewed"
+- O bucket não está com acesso público habilitado. Siga o **passo 4** acima (Habilitar Acesso Público): em R2 → bucket → **Settings** → **Public Development URL** → **Enable** → digite `allow` e confirme.
 
 ## Segurança
 

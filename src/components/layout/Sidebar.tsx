@@ -12,7 +12,9 @@ const menuItems = [
   { path: '/financeiro', icon: 'ri-money-dollar-circle-line', label: 'Financeiro', roles: ['admin', 'executivo', 'financeiro', 'operador'] },
   { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/documentos', icon: 'ri-file-text-line', label: 'Documentos', roles: ['admin', 'executivo', 'ar', 'financeiro', 'operador'] },
+  { path: '/covers', icon: 'ri-folder-music-line', label: 'Covers', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/configuracoes', icon: 'ri-settings-3-line', label: 'Configurações', roles: ['admin'] },
+
 ];
 
 interface SidebarProps {
@@ -24,7 +26,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  const visibleMenuItems = menuItems.filter(item => 
+  const visibleMenuItems = menuItems.filter(item =>
     user && item.roles.includes(user.role)
   );
 
@@ -39,20 +41,18 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   };
 
   return (
-    <aside className={`fixed left-0 top-0 h-screen w-64 bg-dark-card border-r border-dark-border flex flex-col z-[55] transform transition-transform duration-300 pointer-events-auto ${
-      isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-    }`}>
+    <aside className={`fixed left-0 top-0 h-screen w-64 bg-dark-card border-r border-dark-border flex flex-col z-[55] transform transition-transform duration-300 pointer-events-auto ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      }`}>
       {/* Logo */}
       <div className="p-6 border-b border-dark-border">
-        <Link to="/dashboard" onClick={handleLinkClick} className="flex items-center gap-3">
-          <img 
-            src="https://static.readdy.ai/image/016995f7e8292e3ea703f912413c6e1c/af9e13ed434ed318d1a9a4df0aa3c822.png" 
-            alt="CEU Music" 
-            className="w-12 h-12 object-contain"
+        <Link to="/dashboard" onClick={handleLinkClick} className="flex flex-col items-center gap-2">
+          <img
+            src="https://static.readdy.ai/image/016995f7e8292e3ea703f912413c6e1c/af9e13ed434ed318d1a9a4df0aa3c822.png"
+            alt="CEU Music"
+            className="w-20 h-20 object-contain mb-1"
           />
-          <div>
-            <h1 className="text-lg font-bold text-white">CEU Music</h1>
-            <p className="text-xs text-gray-400">Music Ops</p>
+          <div className="text-center">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-widest">Sistema interno</p>
           </div>
         </Link>
       </div>
@@ -66,11 +66,10 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               key={item.path}
               to={item.path}
               onClick={handleLinkClick}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-smooth cursor-pointer ${
-                isActive
-                  ? 'bg-gradient-primary text-white'
-                  : 'text-gray-400 hover:bg-dark-hover hover:text-white'
-              }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-smooth cursor-pointer ${isActive
+                ? 'bg-gradient-primary text-white'
+                : 'text-gray-400 hover:bg-dark-hover hover:text-white'
+                }`}
             >
               <i className={`${item.icon} text-xl w-6 h-6 flex items-center justify-center`}></i>
               <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>

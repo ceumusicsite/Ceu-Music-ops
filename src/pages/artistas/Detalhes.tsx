@@ -246,7 +246,7 @@ export default function ArtistaDetalhes() {
 
   return (
     <MainLayout>
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8 overflow-x-hidden min-w-0">
         {/* Header */}
         <div className="mb-8">
           <button
