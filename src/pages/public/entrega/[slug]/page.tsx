@@ -41,6 +41,8 @@ export default function EntregaPublicaPage() {
     const [previewArquivo, setPreviewArquivo] = useState<Anexo | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [previewLoading, setPreviewLoading] = useState(false);
+    const [iosDownloadHint, setIosDownloadHint] = useState(false);
+
 
     useEffect(() => {
         if (slug) {
@@ -161,6 +163,9 @@ export default function EntregaPublicaPage() {
         }
     };
 
+    const isMobile = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isIOS = () => /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
     const handlePreview = async (anexo: Anexo) => {
         if (anexo.tipo === 'pasta') {
             handleOpenFolder(anexo);
@@ -200,19 +205,33 @@ export default function EntregaPublicaPage() {
         try {
             const fileName = anexo.nome || 'download';
             const safeName = fileName.replace(/[\\"]/g, '');
-            const disposition = `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`;
 
-            const downloadUrl = await getSignedUrlR2(R2_BUCKETS.ANEXOS, anexo.arquivo_key, 86400, {
-                responseContentDisposition: disposition,
-            });
+            if (isMobile()) {
+                // No iOS/Android, o download programático é bloqueado silenciosamente.
+                // Abrimos a URL assinada em nova aba para que o browser nativo gerencie.
+                const openUrl = await getSignedUrlR2(R2_BUCKETS.ANEXOS, anexo.arquivo_key, 3600);
+                window.open(openUrl, '_blank');
 
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = fileName;
-            a.target = '_blank';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+                if (isIOS()) {
+                    setIosDownloadHint(true);
+                    // Ocultar dica após 8 segundos
+                    setTimeout(() => setIosDownloadHint(false), 8000);
+                }
+            } else {
+                // Desktop: download programático normal
+                const disposition = `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`;
+                const downloadUrl = await getSignedUrlR2(R2_BUCKETS.ANEXOS, anexo.arquivo_key, 86400, {
+                    responseContentDisposition: disposition,
+                });
+
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = fileName;
+                a.target = '_blank';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
         } catch (error) {
             console.error('Erro no download:', error);
             alert('Falha ao iniciar o download. Tente novamente mais tarde.');
@@ -456,6 +475,26 @@ export default function EntregaPublicaPage() {
                                 </div>
                             )}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Banner de instrução iOS */}
+            {iosDownloadHint && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] w-[calc(100%-2rem)] max-w-sm animate-in slide-in-from-bottom-4 duration-300">
+                    <div className="bg-dark-card border border-primary-teal/30 rounded-2xl p-4 shadow-[0_8px_32px_rgba(0,0,0,0.6)] flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-primary-teal/10 flex items-center justify-center shrink-0 mt-0.5">
+                            <i className="ri-share-box-line text-xl text-primary-teal"></i>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-bold mb-0.5">Salvando no seu iPhone</p>
+                            <p className="text-gray-400 text-xs leading-relaxed">
+                                O arquivo abriu em uma nova aba. Toque no ícone <strong className="text-gray-200">Compartilhar</strong> (<i className="ri-share-box-line"></i>) e selecione <strong className="text-gray-200">"Salvar no Dispositivo"</strong>.
+                            </p>
+                        </div>
+                        <button onClick={() => setIosDownloadHint(false)} className="text-gray-600 hover:text-gray-400 shrink-0 p-1">
+                            <i className="ri-close-line"></i>
+                        </button>
                     </div>
                 </div>
             )}
