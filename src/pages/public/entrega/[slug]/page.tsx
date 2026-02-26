@@ -207,14 +207,21 @@ export default function EntregaPublicaPage() {
             const safeName = fileName.replace(/[\\"]/g, '');
 
             if (isMobile()) {
-                // No iOS/Android, o download programático é bloqueado silenciosamente.
-                // Abrimos a URL assinada em nova aba para que o browser nativo gerencie.
+                // Safari bloqueia window.open() após await. Precisamos abrir a janela
+                // ANTES do await (sincronamente com o toque), e depois redirecionar.
+                const newTab = window.open('', '_blank');
+
                 const openUrl = await getSignedUrlR2(R2_BUCKETS.ANEXOS, anexo.arquivo_key, 3600);
-                window.open(openUrl, '_blank');
+
+                if (newTab) {
+                    newTab.location.href = openUrl;
+                } else {
+                    // Fallback caso popup seja bloqueado mesmo assim
+                    window.location.href = openUrl;
+                }
 
                 if (isIOS()) {
                     setIosDownloadHint(true);
-                    // Ocultar dica após 8 segundos
                     setTimeout(() => setIosDownloadHint(false), 8000);
                 }
             } else {
