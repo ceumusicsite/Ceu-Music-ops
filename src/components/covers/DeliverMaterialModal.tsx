@@ -12,6 +12,7 @@ interface DeliverMaterialModalProps {
 
 export default function DeliverMaterialModal({ isOpen, onClose, selectedItems, isSelectionManual, folderName }: DeliverMaterialModalProps) {
     const [clienteNome, setClienteNome] = useState('');
+    const [prazoExpira, setPrazoExpira] = useState('7');
     const [loading, setLoading] = useState(false);
     const [generatedLink, setGeneratedLink] = useState('');
     const toast = useToast();
@@ -20,6 +21,7 @@ export default function DeliverMaterialModal({ isOpen, onClose, selectedItems, i
     React.useEffect(() => {
         if (isOpen) {
             setClienteNome('');
+            setPrazoExpira('7');
             setGeneratedLink('');
             setLoading(false);
         }
@@ -40,6 +42,14 @@ export default function DeliverMaterialModal({ isOpen, onClose, selectedItems, i
         setLoading(true);
         try {
             const slug = generateSlug();
+
+            // Calcular data de expiração
+            let expiraEm = null;
+            if (prazoExpira !== 'never') {
+                const data = new Date();
+                data.setDate(data.getDate() + parseInt(prazoExpira));
+                expiraEm = data.toISOString();
+            }
 
             // 1. Iniciar com os itens selecionados manualmente
             let allItemsToSnapshot: any[] = [...selectedItems];
@@ -86,7 +96,10 @@ export default function DeliverMaterialModal({ isOpen, onClose, selectedItems, i
                 pasta_pai_id: item.pasta_pai_id,
                 arquivo_key: item.arquivo_key,
                 arquivo_tamanho: item.arquivo_tamanho,
-                arquivo_extensao: item.arquivo_extensao
+                arquivo_extensao: item.arquivo_extensao,
+                arquivo_tipo: item.arquivo_tipo,
+                stream_uid: item.stream_uid,
+                stream_iframe_url: item.stream_iframe_url
             }));
 
             const { error } = await supabase
@@ -94,7 +107,8 @@ export default function DeliverMaterialModal({ isOpen, onClose, selectedItems, i
                 .insert({
                     cliente_nome: clienteNome.trim(),
                     slug,
-                    items: itemsSnapshot
+                    items: itemsSnapshot,
+                    expira_em: expiraEm
                 });
 
             if (error) throw error;
@@ -145,6 +159,27 @@ export default function DeliverMaterialModal({ isOpen, onClose, selectedItems, i
                             />
                         </div>
 
+                        <div>
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1 mb-1.5 block">Prazo de Expiração</label>
+                            <div className="relative group">
+                                <select
+                                    value={prazoExpira}
+                                    onChange={e => setPrazoExpira(e.target.value)}
+                                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-xl text-white focus:outline-none focus:border-primary-teal/50 focus:ring-4 focus:ring-primary-teal/5 transition-all text-base appearance-none cursor-pointer group-hover:border-dark-hover"
+                                >
+                                    <option value="7">Expira em 7 dias</option>
+                                    <option value="15">Expira em 15 dias</option>
+                                    <option value="30">Expira em 30 dias</option>
+                                    <option value="90">Expira em 90 dias</option>
+                                    <option value="never">Nunca expira</option>
+                                </select>
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                    <i className="ri-arrow-down-s-line text-xl"></i>
+                                </div>
+                            </div>
+                        </div>
+
+
                         <div className="bg-primary-teal/10 border border-primary-teal/20 rounded-xl p-4 text-sm text-gray-300 mt-4">
                             <i className="ri-information-line text-primary-teal mr-2"></i>
                             Um link público será gerado com o material selecionado, e o cliente não precisará fazer login para acessar.
@@ -161,6 +196,7 @@ export default function DeliverMaterialModal({ isOpen, onClose, selectedItems, i
                             </button>
                         </div>
                     </div>
+
                 ) : (
                     <div className="space-y-4">
                         <div className="text-center py-4">

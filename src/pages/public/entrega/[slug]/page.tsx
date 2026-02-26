@@ -12,6 +12,9 @@ interface Anexo {
     arquivo_key?: string;
     arquivo_tamanho?: number;
     arquivo_extensao?: string;
+    arquivo_tipo?: string;
+    stream_uid?: string;
+    stream_iframe_url?: string;
 }
 
 interface Entrega {
@@ -20,6 +23,8 @@ interface Entrega {
     slug: string;
     items: any[];
     created_at: string;
+    expira_em?: string | null;
+    visualizacoes: number;
 }
 
 export default function EntregaPublicaPage() {
@@ -31,6 +36,11 @@ export default function EntregaPublicaPage() {
     const [downloadingItems, setDownloadingItems] = useState<Record<string, boolean>>({});
     const [currentPastaId, setCurrentPastaId] = useState<string | null>(null);
     const [breadcrumbs, setBreadcrumbs] = useState<Array<{ id: string | null; nome: string }>>([]);
+
+    // Estados para Preview
+    const [previewArquivo, setPreviewArquivo] = useState<Anexo | null>(null);
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
 
     useEffect(() => {
         if (slug) {
@@ -54,7 +64,25 @@ export default function EntregaPublicaPage() {
                 throw new Error('Entrega não encontrada ou expirada.');
             }
 
+            // Verificar expiração
+            if (entregaData.expira_em && new Date(entregaData.expira_em) < new Date()) {
+                throw new Error('Este link de entrega expirou.');
+            }
+
             setEntrega(entregaData);
+
+            // Incrementar visualizações (fire and forget)
+            supabase.rpc('increment_view_count_covers', { delivery_slug: slugId })
+                .then(({ error: rpcError }) => {
+                    if (rpcError) {
+                        // Se a função RPC não existir, tentar um update direto
+                        supabase
+                            .from('covers_entregas')
+                            .update({ visualizacoes: (entregaData.visualizacoes || 0) + 1 })
+                            .eq('slug', slugId)
+                            .then(() => { });
+                    }
+                });
 
             // Carregar os anexos originais diretamente do snapshot
             if (entregaData.items && Array.isArray(entregaData.items) && entregaData.items.length > 0) {
@@ -102,6 +130,10 @@ export default function EntregaPublicaPage() {
         return 'ri-file-3-fill text-gray-400';
     };
 
+    const isArquivoImagem = (arquivo: Anexo) => arquivo.arquivo_tipo?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(arquivo.arquivo_extensao || '');
+    const isArquivoVideo = (arquivo: Anexo) => arquivo.arquivo_tipo?.startsWith('video/') || ['mp4', 'mov', 'webm'].includes(arquivo.arquivo_extensao || '');
+    const isArquivoAudio = (arquivo: Anexo) => arquivo.arquivo_tipo?.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a'].includes(arquivo.arquivo_extensao || '');
+
     // Filtra os anexos mostrados com base na pasta atual
     const anexosExibidos = anexos.filter(a => {
         // Se estamos em uma pasta, mostramos apenas os filhos dela
@@ -129,7 +161,31 @@ export default function EntregaPublicaPage() {
         }
     };
 
-    const handleDownload = async (anexo: Anexo) => {
+    const handlePreview = async (anexo: Anexo) => {
+        if (anexo.tipo === 'pasta') {
+            handleOpenFolder(anexo);
+            return;
+        }
+
+        if (!anexo.arquivo_key) return;
+
+        setPreviewArquivo(anexo);
+        setPreviewLoading(true);
+        setPreviewUrl(null);
+
+        try {
+            const url = await getSignedUrlR2(R2_BUCKETS.ANEXOS, anexo.arquivo_key, 3600);
+            setPreviewUrl(url);
+        } catch (error) {
+            console.error('Erro ao gerar URL de preview:', error);
+        } finally {
+            setPreviewLoading(false);
+        }
+    };
+
+    const handleDownload = async (anexo: Anexo, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+
         if (anexo.tipo === 'pasta') {
             handleOpenFolder(anexo);
             return;
@@ -261,7 +317,8 @@ export default function EntregaPublicaPage() {
                         {anexosExibidos.map((anexo, idx) => (
                             <div
                                 key={anexo.id}
-                                className="group bg-white/[0.02] border border-white/5 hover:border-primary-teal/30 hover:bg-white/[0.04] rounded-2xl p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl flex flex-col"
+                                onClick={() => handlePreview(anexo)}
+                                className="group bg-white/[0.02] border border-white/5 hover:border-primary-teal/30 hover:bg-white/[0.04] rounded-2xl p-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl flex flex-col cursor-pointer"
                                 style={{ animationDelay: `${idx * 50}ms` }}
                             >
                                 <div className="flex items-start gap-4 mb-4">
@@ -283,31 +340,125 @@ export default function EntregaPublicaPage() {
                                         </p>
                                     </div>
                                 </div>
-                                <div className="mt-auto">
-                                    <button
-                                        onClick={() => handleDownload(anexo)}
-                                        disabled={downloadingItems[anexo.id]}
-                                        className={`w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${downloadingItems[anexo.id]
-                                            ? 'bg-dark-bg text-primary-teal cursor-wait'
-                                            : anexo.tipo === 'pasta'
-                                                ? 'bg-primary-teal hover:bg-primary-teal-dark text-dark-bg shadow-lg shadow-primary-teal/10'
-                                                : 'bg-primary-teal/10 text-primary-teal hover:bg-primary-teal hover:text-dark-bg hover:shadow-lg hover:shadow-primary-teal/20'
-                                            }`}
-                                    >
-                                        {downloadingItems[anexo.id] ? (
-                                            <><i className="ri-loader-4-line animate-spin text-lg"></i> Abrindo...</>
-                                        ) : anexo.tipo === 'pasta' ? (
-                                            <><i className="ri-folder-open-line text-lg"></i> Abrir Pasta</>
-                                        ) : (
-                                            <><i className="ri-download-line text-lg"></i> Download</>
-                                        )}
-                                    </button>
+                                <div className="mt-auto flex items-center gap-2">
+                                    {anexo.tipo === 'pasta' ? (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleOpenFolder(anexo); }}
+                                            className="w-full py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 bg-primary-teal hover:bg-primary-teal-dark text-dark-bg shadow-lg shadow-primary-teal/10"
+                                        >
+                                            <i className="ri-folder-open-line text-lg"></i> Abrir Pasta
+                                        </button>
+                                    ) : (
+                                        <>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handlePreview(anexo); }}
+                                                className="flex-1 py-2.5 bg-primary-teal/10 text-primary-teal hover:bg-primary-teal hover:text-dark-bg rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <i className={isArquivoVideo(anexo) ? "ri-play-circle-line text-lg" : isArquivoAudio(anexo) ? "ri-headphone-line text-lg" : "ri-eye-line text-lg"}></i>
+                                                {isArquivoVideo(anexo) ? 'Assistir' : isArquivoAudio(anexo) ? 'Ouvir' : 'Ver'}
+                                            </button>
+                                            <button
+                                                onClick={(e) => handleDownload(anexo, e)}
+                                                disabled={downloadingItems[anexo.id]}
+                                                className={`p-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 bg-dark-bg border border-white/5 text-gray-400 hover:text-white hover:border-white/10 ${downloadingItems[anexo.id] ? 'cursor-wait opacity-50' : ''}`}
+                                                title="Baixar arquivo"
+                                            >
+                                                {downloadingItems[anexo.id] ? (
+                                                    <i className="ri-loader-4-line animate-spin text-lg"></i>
+                                                ) : (
+                                                    <i className="ri-download-line text-lg"></i>
+                                                )}
+                                            </button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         ))}
                     </div>
                 )}
             </main>
+
+            {/* Modal de Preview */}
+            {previewArquivo && (
+                <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setPreviewArquivo(null)}>
+                    <div className="bg-dark-card border border-dark-border rounded-3xl max-w-5xl w-full max-h-[90vh] flex flex-col shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-hidden animate-in zoom-in duration-300" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-6 border-b border-dark-border bg-dark-card/80">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-lg bg-primary-teal/10 flex items-center justify-center">
+                                    <i className={`${getIconeArquivo(previewArquivo.arquivo_extensao)} text-xl text-primary-teal`}></i>
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="text-white font-bold truncate pr-4">{previewArquivo.nome}</h3>
+                                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">{previewArquivo.arquivo_tipo} • {formatBytes(previewArquivo.arquivo_tamanho || 0)}</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-3">
+                                <button onClick={() => handleDownload(previewArquivo)} className="px-5 py-2.5 bg-primary-teal hover:bg-primary-teal/90 text-white font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-primary-teal/20">
+                                    <i className="ri-download-cloud-2-line"></i>
+                                    <span className="hidden sm:inline">Baixar</span>
+                                </button>
+                                <button onClick={() => setPreviewArquivo(null)} className="p-2.5 text-gray-400 hover:text-white bg-dark-bg hover:bg-dark-hover rounded-xl transition-all border border-dark-border">
+                                    <i className="ri-close-line text-2xl"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-auto bg-black/40 flex items-center justify-center p-6 min-h-[300px]">
+                            {previewLoading ? (
+                                <div className="flex flex-col items-center gap-4">
+                                    <div className="w-12 h-12 border-4 border-primary-teal/20 border-t-primary-teal rounded-full animate-spin"></div>
+                                    <p className="text-gray-500 text-sm animate-pulse">Carregando visualização...</p>
+                                </div>
+                            ) : isArquivoImagem(previewArquivo) && previewUrl ? (
+                                <img src={previewUrl} alt={previewArquivo.nome} className="max-h-[60vh] md:max-h-[70vh] object-contain rounded-lg shadow-2xl" />
+                            ) : isArquivoVideo(previewArquivo) && (previewUrl || previewArquivo.stream_iframe_url) ? (
+                                <div className="w-full max-w-4xl aspect-video rounded-2xl overflow-hidden shadow-2xl border border-dark-border">
+                                    {previewArquivo.stream_iframe_url ? (
+                                        <iframe src={previewArquivo.stream_iframe_url} className="w-full h-full" allowFullScreen allow="autoplay; encrypted-media" />
+                                    ) : (
+                                        <video controls autoPlay src={previewUrl || undefined} className="w-full h-full" />
+                                    )}
+                                </div>
+                            ) : isArquivoAudio(previewArquivo) && previewUrl ? (
+                                <div className="bg-dark-card/50 backdrop-blur-md rounded-2xl p-12 border border-dark-border w-full max-w-md flex flex-col items-center gap-8 shadow-2xl">
+                                    <div className="relative">
+                                        <div className="w-32 h-32 rounded-full bg-primary-teal/10 flex items-center justify-center animate-pulse">
+                                            <i className="ri-music-2-fill text-6xl text-primary-teal"></i>
+                                        </div>
+                                        <div className="absolute inset-0 bg-primary-teal/20 blur-3xl -z-10 animate-pulse"></div>
+                                    </div>
+                                    <div className="text-center w-full">
+                                        <p className="text-white font-bold text-lg mb-4 line-clamp-2">{previewArquivo.nome}</p>
+                                        <audio
+                                            controls
+                                            autoPlay
+                                            className="w-full h-10 accent-primary-teal filter grayscale invert brightness-200"
+                                        >
+                                            <source src={previewUrl} type={previewArquivo.arquivo_tipo} />
+                                            Seu navegador não suporta áudio.
+                                        </audio>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center flex flex-col items-center gap-6 p-12 bg-dark-bg/40 rounded-3xl border border-dark-border border-dashed">
+                                    <div className="w-24 h-24 rounded-full bg-dark-bg border border-dark-border flex items-center justify-center shadow-inner">
+                                        <i className="ri-file-unknow-line text-5xl text-gray-600"></i>
+                                    </div>
+                                    <div className="max-w-xs">
+                                        <p className="text-gray-400 font-medium mb-4">Pré-visualização indisponível para este tipo de arquivo.</p>
+                                        <button
+                                            onClick={() => handleDownload(previewArquivo)}
+                                            className="w-full py-3 bg-dark-bg hover:bg-dark-hover border border-dark-border text-white font-bold rounded-xl transition-all"
+                                        >
+                                            Baixar para Visualizar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Rodapé */}
             <footer className="mt-16 text-center text-gray-500 text-sm flex flex-col items-center animate-in fade-in duration-1000 delay-500">

@@ -7,6 +7,7 @@ import { getBrowserViewableUrl } from '../../utils/storageUrl';
 import StreamPreview from '../projetos/StreamPreview';
 import { createStreamVideoFromUrl, getStreamIframeUrl } from '../../services/stream';
 import DeliverMaterialModal from './DeliverMaterialModal';
+import DeliveriesHistoryModal from './DeliveriesHistoryModal';
 
 interface Anexo {
     id: string;
@@ -64,6 +65,7 @@ export default function CoversFileManager() {
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
     const [showDeliverModal, setShowDeliverModal] = useState(false);
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
 
     const [clipboard, setClipboard] = useState<{ items: Anexo[]; action: 'copy' | 'cut' } | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: Anexo | null; targetFolderId: string | null } | null>(null);
@@ -670,6 +672,13 @@ export default function CoversFileManager() {
                                     <span className="hidden sm:inline">Entregar Material</span>
                                 </button>
                                 <button
+                                    onClick={() => setShowHistoryModal(true)}
+                                    className="px-4 py-2 bg-dark-bg hover:bg-dark-hover border border-dark-border text-gray-400 hover:text-white rounded-lg flex items-center justify-center gap-2 transition-smooth text-sm"
+                                    title="Histórico de Entregas"
+                                >
+                                    <i className="ri-history-line"></i>
+                                </button>
+                                <button
                                     onClick={() => setShowCreateFolderModal(true)}
                                     className="px-4 py-2 bg-dark-bg hover:bg-dark-hover border border-dark-border text-white rounded-lg flex items-center justify-center gap-2 transition-smooth group text-sm"
                                     title="Nova Pasta"
@@ -1036,6 +1045,10 @@ export default function CoversFileManager() {
                     </div>
                 </div>
             )}
+            <DeliveriesHistoryModal
+                isOpen={showHistoryModal}
+                onClose={() => setShowHistoryModal(false)}
+            />
         </div>
     );
 }
