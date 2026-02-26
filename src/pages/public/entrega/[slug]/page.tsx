@@ -211,7 +211,12 @@ export default function EntregaPublicaPage() {
                 // ANTES do await (sincronamente com o toque), e depois redirecionar.
                 const newTab = window.open('', '_blank');
 
-                const openUrl = await getSignedUrlR2(R2_BUCKETS.ANEXOS, anexo.arquivo_key, 3600);
+                // Forçar Content-Disposition: attachment para que o Safari
+                // trate como download ao invés de renderizar inline
+                const disposition = `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`;
+                const openUrl = await getSignedUrlR2(R2_BUCKETS.ANEXOS, anexo.arquivo_key, 3600, {
+                    responseContentDisposition: disposition,
+                });
 
                 if (newTab) {
                     newTab.location.href = openUrl;
@@ -494,9 +499,9 @@ export default function EntregaPublicaPage() {
                             <i className="ri-share-box-line text-xl text-primary-teal"></i>
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-white text-sm font-bold mb-0.5">Salvando no seu iPhone</p>
+                            <p className="text-white text-sm font-bold mb-0.5">Download iniciado!</p>
                             <p className="text-gray-400 text-xs leading-relaxed">
-                                O arquivo abriu em uma nova aba. Toque no ícone <strong className="text-gray-200">Compartilhar</strong> (<i className="ri-share-box-line"></i>) e selecione <strong className="text-gray-200">"Salvar no Dispositivo"</strong>.
+                                Verifique a barra de downloads do Safari (ícone <strong className="text-gray-200">Aa</strong> na barra de endereço) ou o app <strong className="text-gray-200">Arquivos</strong> do seu iPhone.
                             </p>
                         </div>
                         <button onClick={() => setIosDownloadHint(false)} className="text-gray-600 hover:text-gray-400 shrink-0 p-1">
