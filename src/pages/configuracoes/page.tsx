@@ -928,7 +928,7 @@ export default function Configuracoes() {
                     <label className="block text-sm font-medium text-gray-400 mb-2">Nome da Gravadora</label>
                     <input
                       type="text"
-                      defaultValue="CEU Music"
+                      defaultValue="Céu Music"
                       className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
                       readOnly
                     />

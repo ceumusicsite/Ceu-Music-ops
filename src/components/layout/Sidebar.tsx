@@ -13,6 +13,7 @@ const menuItems = [
   { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/documentos', icon: 'ri-file-text-line', label: 'Documentos', roles: ['admin', 'executivo', 'ar', 'financeiro', 'operador'] },
   { path: '/covers', icon: 'ri-folder-music-line', label: 'Covers', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
+  { path: '/emails', icon: 'ri-mail-send-line', label: 'E-mails em Massa', roles: ['admin', 'executivo'] },
   { path: '/configuracoes', icon: 'ri-settings-3-line', label: 'Configurações', roles: ['admin'] },
 
 ];
@@ -48,7 +49,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         <Link to="/dashboard" onClick={handleLinkClick} className="flex flex-col items-center gap-2">
           <img
             src="https://static.readdy.ai/image/016995f7e8292e3ea703f912413c6e1c/af9e13ed434ed318d1a9a4df0aa3c822.png"
-            alt="CEU Music"
+            alt="Céu Music"
             className="w-20 h-20 object-contain mb-1"
           />
           <div className="text-center">

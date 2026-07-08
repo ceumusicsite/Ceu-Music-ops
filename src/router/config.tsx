@@ -16,11 +16,16 @@ import Lancamentos from "../pages/lancamentos/page";
 import Configuracoes from "../pages/configuracoes/page";
 import CoversPage from "../pages/covers/page";
 import EntregaPublicaPage from "../pages/public/entrega/[slug]/page";
+import EmailsPage from "../pages/emails/page";
 
 const routes: RouteObject[] = [
   {
     path: "/public/entrega/:slug",
     element: <EntregaPublicaPage />,
+  },
+  {
+    path: "/emails",
+    element: <EmailsPage />,
   },
   {
     path: "/",

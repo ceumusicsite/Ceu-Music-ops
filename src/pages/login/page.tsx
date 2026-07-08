@@ -51,11 +51,11 @@ export default function Login() {
         <div className="text-center mb-8">
           <img 
             src="https://static.readdy.ai/image/016995f7e8292e3ea703f912413c6e1c/af9e13ed434ed318d1a9a4df0aa3c822.png" 
-            alt="CEU Music" 
+            alt="Céu Music" 
             className="w-24 h-24 mx-auto mb-4 object-contain"
           />
-          <h1 className="text-3xl font-bold text-white mb-2">CEU Music Ops</h1>
-          <p className="text-gray-400">Gestão completa de produção musical</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Céu Music</h1>
+          <p className="text-gray-400">Sistema interno de gestão</p>
         </div>
 
         {/* Login Form */}
@@ -131,7 +131,7 @@ export default function Login() {
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-6">
-          © 2024 CEU Music. Todos os direitos reservados.
+          © 2026 Céu Music. Todos os direitos reservados.
         </p>
       </div>
     </div>
