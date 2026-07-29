@@ -76,8 +76,8 @@ Deno.serve(async (req: Request) => {
     .eq('id', caller.id)
     .single();
 
-  if (profileError || !profile || !['admin', 'executivo'].includes(profile.role)) {
-    return json({ error: 'Forbidden: admin or executivo role required' }, { status: 403 });
+  if (profileError || !profile || !['admin', 'executivo', 'operador'].includes(profile.role)) {
+    return json({ error: 'Forbidden: admin, executivo or operador role required' }, { status: 403 });
   }
 
   // Se a chave não estiver no ambiente Deno, buscar no Vault via RPC

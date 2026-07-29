@@ -25,7 +25,7 @@ CREATE POLICY "Permitir leitura de listas para admin e executivo"
     EXISTS (
       SELECT 1 FROM users
       WHERE users.id = auth.uid()
-        AND users.role IN ('admin', 'executivo')
+        AND users.role IN ('admin', 'executivo', 'operador')
     )
   );
 
@@ -37,13 +37,13 @@ CREATE POLICY "Permitir modificação de listas para admin e executivo"
     EXISTS (
       SELECT 1 FROM users
       WHERE users.id = auth.uid()
-        AND users.role IN ('admin', 'executivo')
+        AND users.role IN ('admin', 'executivo', 'operador')
     )
   )
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM users
       WHERE users.id = auth.uid()
-        AND users.role IN ('admin', 'executivo')
+        AND users.role IN ('admin', 'executivo', 'operador')
     )
   );

@@ -31,7 +31,7 @@ CREATE POLICY "Permitir leitura de campanhas para admin e executivo"
     EXISTS (
       SELECT 1 FROM users
       WHERE users.id = auth.uid()
-        AND users.role IN ('admin', 'executivo')
+        AND users.role IN ('admin', 'executivo', 'operador')
     )
   );
 
@@ -43,6 +43,6 @@ CREATE POLICY "Permitir inserção de campanhas para admin e executivo"
     EXISTS (
       SELECT 1 FROM users
       WHERE users.id = auth.uid()
-        AND users.role IN ('admin', 'executivo')
+        AND users.role IN ('admin', 'executivo', 'operador')
     )
   );

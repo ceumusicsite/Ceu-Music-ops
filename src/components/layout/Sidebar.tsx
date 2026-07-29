@@ -13,7 +13,7 @@ const menuItems = [
   { path: '/lancamentos', icon: 'ri-rocket-line', label: 'Lançamentos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/documentos', icon: 'ri-file-text-line', label: 'Documentos', roles: ['admin', 'executivo', 'ar', 'financeiro', 'operador'] },
   { path: '/covers', icon: 'ri-folder-music-line', label: 'Covers', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
-  { path: '/emails', icon: 'ri-mail-send-line', label: 'E-mails em Massa', roles: ['admin', 'executivo'] },
+  { path: '/emails', icon: 'ri-mail-send-line', label: 'E-mails em Massa', roles: ['admin', 'executivo', 'operador'] },
   { path: '/configuracoes', icon: 'ri-settings-3-line', label: 'Configurações', roles: ['admin'] },
 
 ];

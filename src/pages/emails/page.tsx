@@ -52,7 +52,7 @@ type TabType = 'enviar' | 'listas';
 export default function EmailsPage() {
   const { user } = useAuth();
   const toast = useToast();
-  const isAuthorized = user?.role === 'admin' || user?.role === 'executivo';
+  const isAuthorized = user?.role === 'admin' || user?.role === 'executivo' || user?.role === 'operador';
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -394,7 +394,7 @@ export default function EmailsPage() {
           <div className="text-center py-12">
             <i className="ri-shield-cross-line text-6xl text-red-400 mb-4"></i>
             <h1 className="text-2xl font-bold text-white mb-2">Acesso Negado</h1>
-            <p className="text-gray-400">Apenas administradores e executivos podem acessar esta página.</p>
+            <p className="text-gray-400">Apenas administradores, executivos e operadores podem acessar esta página.</p>
           </div>
         </div>
       </MainLayout>
