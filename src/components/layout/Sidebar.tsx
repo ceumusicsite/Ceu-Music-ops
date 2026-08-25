@@ -1,11 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
-const menuItems = [
+interface SubMenuItem {
+  path: string;
+  label: string;
+  icon: string;
+  roles: string[];
+}
+
+interface MenuItem {
+  path?: string;
+  icon: string;
+  label: string;
+  roles: string[];
+  subItems?: SubMenuItem[];
+}
+
+const menuItems: MenuItem[] = [
   { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro', 'operador'] },
-  { path: '/agenda/institucional', icon: 'ri-calendar-event-line', label: 'Agenda Céu', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
-  { path: '/agenda/artistas', icon: 'ri-calendar-check-line', label: 'Agenda Artistas', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
+  {
+    icon: 'ri-calendar-line',
+    label: 'Agendas',
+    roles: ['admin', 'executivo', 'ar', 'producao', 'operador'],
+    subItems: [
+      { path: '/agenda/institucional', icon: 'ri-calendar-event-line', label: 'Agenda Céu', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
+      { path: '/agenda/artistas', icon: 'ri-calendar-check-line', label: 'Agenda Artistas', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
+    ],
+  },
   { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/estudio', icon: 'ri-mic-line', label: 'Estúdio', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
@@ -29,14 +51,34 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
 
-  const visibleMenuItems = menuItems.filter(item =>
+  // Controla quais menus com subitens estão expandidos
+  const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>(() => {
+    return {
+      Agendas: location.pathname.startsWith('/agenda'),
+    };
+  });
+
+  // Abre automaticamente o submenu se a rota atual for de um dos seus subitens
+  useEffect(() => {
+    if (location.pathname.startsWith('/agenda')) {
+      setExpandedMenus((prev) => ({ ...prev, Agendas: true }));
+    }
+  }, [location.pathname]);
+
+  const toggleSubmenu = (menuLabel: string) => {
+    setExpandedMenus((prev) => ({
+      ...prev,
+      [menuLabel]: !prev[menuLabel],
+    }));
+  };
+
+  const visibleMenuItems = menuItems.filter((item) =>
     user && item.roles.includes(user.role)
   );
 
   const handleLinkClick = (e: React.MouseEvent) => {
     // Fechar sidebar em mobile quando um link for clicado
     if (window.innerWidth < 1024 && onClose) {
-      // Pequeno delay para garantir que a navegação aconteça antes de fechar
       setTimeout(() => {
         onClose();
       }, 100);
@@ -44,8 +86,11 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   };
 
   return (
-    <aside className={`fixed left-0 top-0 h-screen w-64 bg-dark-card border-r border-dark-border flex flex-col z-[55] transform transition-transform duration-300 pointer-events-auto ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      }`}>
+    <aside
+      className={`fixed left-0 top-0 h-screen w-64 bg-dark-card border-r border-dark-border flex flex-col z-[55] transform transition-transform duration-300 pointer-events-auto ${
+        isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      }`}
+    >
       {/* Logo */}
       <div className="p-6 border-b border-dark-border">
         <Link to="/dashboard" onClick={handleLinkClick} className="flex flex-col items-center gap-2">
@@ -61,18 +106,81 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3">
+      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
         {visibleMenuItems.map((item) => {
+          // Se for item com submenus
+          if (item.subItems && item.subItems.length > 0) {
+            const visibleSubItems = item.subItems.filter(
+              (sub) => user && sub.roles.includes(user.role)
+            );
+            if (visibleSubItems.length === 0) return null;
+
+            const isSubItemActive = visibleSubItems.some(
+              (sub) => location.pathname === sub.path
+            );
+            const isExpanded = !!expandedMenus[item.label];
+
+            return (
+              <div key={item.label} className="mb-1">
+                <button
+                  type="button"
+                  onClick={() => toggleSubmenu(item.label)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-smooth cursor-pointer ${
+                    isSubItemActive
+                      ? 'text-primary-teal bg-primary-teal/10 font-semibold'
+                      : 'text-gray-400 hover:bg-dark-hover hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <i className={`${item.icon} text-xl w-6 h-6 flex items-center justify-center`}></i>
+                    <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
+                  </div>
+                  <i
+                    className={`ri-arrow-down-s-line text-lg transition-transform duration-200 ${
+                      isExpanded ? 'rotate-180 text-primary-teal' : 'text-gray-500'
+                    }`}
+                  ></i>
+                </button>
+
+                {/* Subitens da Agenda */}
+                {isExpanded && (
+                  <div className="mt-1 ml-4 pl-3 border-l border-dark-border/80 space-y-1">
+                    {visibleSubItems.map((sub) => {
+                      const isSubActive = location.pathname === sub.path;
+                      return (
+                        <Link
+                          key={sub.path}
+                          to={sub.path}
+                          onClick={handleLinkClick}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-smooth cursor-pointer ${
+                            isSubActive
+                              ? 'bg-gradient-primary text-white shadow-sm'
+                              : 'text-gray-400 hover:bg-dark-hover hover:text-white'
+                          }`}
+                        >
+                          <i className={`${sub.icon} text-base w-4 h-4 flex items-center justify-center`}></i>
+                          <span className="truncate">{sub.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // Item de menu normal
           const isActive = location.pathname === item.path;
           return (
             <Link
               key={item.path}
-              to={item.path}
+              to={item.path!}
               onClick={handleLinkClick}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-smooth cursor-pointer ${isActive
-                ? 'bg-gradient-primary text-white'
-                : 'text-gray-400 hover:bg-dark-hover hover:text-white'
-                }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-smooth cursor-pointer ${
+                isActive
+                  ? 'bg-gradient-primary text-white'
+                  : 'text-gray-400 hover:bg-dark-hover hover:text-white'
+              }`}
             >
               <i className={`${item.icon} text-xl w-6 h-6 flex items-center justify-center`}></i>
               <span className="text-sm font-medium whitespace-nowrap">{item.label}</span>
