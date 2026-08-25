@@ -10,15 +10,28 @@ import ArtistaDetalhes from "../pages/artistas/Detalhes";
 import Projetos from "../pages/projetos/page";
 import ProjetoDetalhes from "../pages/projetos/Detalhes";
 import NovoProjeto from "../pages/projetos/Novo";
+import EstudioPage from "../pages/estudio/page";
+import Produtores from "../pages/produtores/page";
+import Fornecedores from "../pages/fornecedores/page";
+import Documentos from "../pages/documentos/page";
 import Orcamentos from "../pages/orcamentos/page";
 import Financeiro from "../pages/financeiro/page";
 import Lancamentos from "../pages/lancamentos/page";
 import Configuracoes from "../pages/configuracoes/page";
 import CoversPage from "../pages/covers/page";
 import EntregaPublicaPage from "../pages/public/entrega/[slug]/page";
+import TermoPublicoPage from "../pages/public/termo/[token]/page";
 import EmailsPage from "../pages/emails/page";
 
 const routes: RouteObject[] = [
+  {
+    path: "/public/termo/:token",
+    element: <TermoPublicoPage />,
+  },
+  {
+    path: "/termo/:token",
+    element: <TermoPublicoPage />,
+  },
   {
     path: "/public/entrega/:slug",
     element: <EntregaPublicaPage />,
@@ -74,6 +87,22 @@ const routes: RouteObject[] = [
   {
     path: "/projetos/:id",
     element: <ProjetoDetalhes />,
+  },
+  {
+    path: "/estudio",
+    element: <EstudioPage />,
+  },
+  {
+    path: "/produtores",
+    element: <Produtores />,
+  },
+  {
+    path: "/fornecedores",
+    element: <Fornecedores />,
+  },
+  {
+    path: "/documentos",
+    element: <Documentos />,
   },
   {
     path: "/orcamentos",

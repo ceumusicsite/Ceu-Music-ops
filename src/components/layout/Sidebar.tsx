@@ -6,6 +6,7 @@ const menuItems = [
   { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro', 'operador'] },
   { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
+  { path: '/estudio', icon: 'ri-mic-line', label: 'Estúdio', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/produtores', icon: 'ri-headphone-line', label: 'Produtores', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/fornecedores', icon: 'ri-store-line', label: 'Fornecedores', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro', 'operador'] },
   { path: '/orcamentos', icon: 'ri-file-list-3-line', label: 'Orçamentos', roles: ['admin', 'executivo', 'ar', 'financeiro', 'operador'] },
@@ -15,7 +16,6 @@ const menuItems = [
   { path: '/covers', icon: 'ri-folder-music-line', label: 'Covers', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/emails', icon: 'ri-mail-send-line', label: 'E-mails em Massa', roles: ['admin', 'executivo', 'operador'] },
   { path: '/configuracoes', icon: 'ri-settings-3-line', label: 'Configurações', roles: ['admin'] },
-
 ];
 
 interface SidebarProps {

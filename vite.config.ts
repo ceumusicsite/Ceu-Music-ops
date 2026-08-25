@@ -108,7 +108,7 @@ export default defineConfig({
     open: true,
     strictPort: false, // Permite usar outra porta se 3000 estiver ocupada
   },
-  logLevel: 'warn', // Reduzir verbosidade dos logs
+  logLevel: 'info',
   optimizeDeps: {
     // Ignorar avisos sobre dependências otimizadas
     exclude: [],
