@@ -4,6 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const menuItems = [
   { path: '/dashboard', icon: 'ri-dashboard-line', label: 'Dashboard', roles: ['admin', 'executivo', 'ar', 'producao', 'financeiro', 'operador'] },
+  { path: '/agenda/institucional', icon: 'ri-calendar-event-line', label: 'Agenda Céu', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
+  { path: '/agenda/artistas', icon: 'ri-calendar-check-line', label: 'Agenda Artistas', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/estudio', icon: 'ri-mic-line', label: 'Estúdio', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },

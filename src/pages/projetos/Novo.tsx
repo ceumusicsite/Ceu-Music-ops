@@ -3,25 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import { useToast } from '../../contexts/ToastContext';
 import { supabase } from '../../lib/supabase';
-import { fornecedoresMock } from '../../data/fornecedores-mock';
-import { produtoresMock } from '../../data/produtores-mock';
 import FileUpload from '../../components/projetos/FileUpload';
-
-interface FaixaForm {
-  nome: string;
-  status: 'pendente' | 'gravada' | 'em_mixagem' | 'masterizacao' | 'finalizada' | 'lancada';
-  o_que_falta_gravar: string;
-  referencias: Array<{ tipo: 'youtube_url' | 'arquivo'; url?: string; arquivo_url?: string; arquivo_nome?: string; titulo: string; descricao?: string }>;
-  anexos: Array<{ tipo: 'pre' | 'outro'; arquivo_url: string; arquivo_nome: string; descricao?: string }>;
-}
+import FaixaFormModal, { FaixaFormData, getInitialFaixaFormData } from '../../components/projetos/FaixaFormModal';
+import NovoProdutorModal from '../../components/produtores/NovoProdutorModal';
 
 export default function NovoProjeto() {
   const navigate = useNavigate();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [artistas, setArtistas] = useState<any[]>([]);
-  const [fornecedores, setFornecedores] = useState(fornecedoresMock);
-  const [produtores, setProdutores] = useState(produtoresMock);
+  const [fornecedores, setFornecedores] = useState<any[]>([]);
+  const [produtores, setProdutores] = useState<any[]>([]);
   
   // Seção 1: Informações Básicas
   const [formData, setFormData] = useState({
@@ -30,7 +22,8 @@ export default function NovoProjeto() {
     artista_id: '',
     fase: 'planejamento',
     prioridade: 'media',
-    prazo: ''
+    prazo: '',
+    data_gravacao: '',
   });
 
   // Seção 2: Fornecedores e Profissionais
@@ -43,17 +36,23 @@ export default function NovoProjeto() {
     outros_profissionais: [] as string[]
   });
 
+  // Dados Técnicos Gerais do Projeto
+  const [dadosTecnicos, setDadosTecnicos] = useState({
+    responsavel_mixagem: '',
+    responsavel_master: '',
+    engenheiro_audio: '',
+    diretor_video: '',
+    produtor_musical_geral: '',
+  });
+
   // Seção 3: Faixas
-  const [faixas, setFaixas] = useState<FaixaForm[]>([]);
+  const [faixas, setFaixas] = useState<FaixaFormData[]>([]);
   const [showFaixaModal, setShowFaixaModal] = useState(false);
   const [editingFaixaIndex, setEditingFaixaIndex] = useState<number | null>(null);
-  const [faixaFormData, setFaixaFormData] = useState<FaixaForm>({
-    nome: '',
-    status: 'pendente' as FaixaForm['status'],
-    o_que_falta_gravar: '',
-    referencias: [],
-    anexos: []
-  });
+  const [isDuplicatingFaixa, setIsDuplicatingFaixa] = useState(false);
+  const [faixaInitialData, setFaixaInitialData] = useState<Partial<FaixaFormData> | null>(null);
+
+  const [showNovoProdutorModal, setShowNovoProdutorModal] = useState(false);
 
   // Seção 4: Referências do Projeto
   const [referenciasProjeto, setReferenciasProjeto] = useState<Array<{ tipo: 'youtube_url' | 'arquivo'; url?: string; arquivo_url?: string; arquivo_nome?: string; titulo: string; descricao?: string }>>([]);
@@ -65,8 +64,33 @@ export default function NovoProjeto() {
   const [anexoTipo, setAnexoTipo] = useState<'pre' | 'outro'>('pre');
   const [anexoDescricao, setAnexoDescricao] = useState('');
 
+  // Seção 6: Participantes e Músicos
+  const [participantesProjeto, setParticipantesProjeto] = useState<Array<{
+    tipo_participacao: string;
+    funcao_instrumento: string;
+    autorizante_nome: string;
+    autorizante_nome_artistico?: string;
+    autorizante_cpf?: string;
+    autorizante_telefone?: string;
+    autorizante_email?: string;
+    autorizante_pix?: string;
+  }>>([]);
+  const [showParticipanteModal, setShowParticipanteModal] = useState(false);
+  const [participanteFormData, setParticipanteFormData] = useState({
+    tipo_participacao: 'musico',
+    funcao_instrumento: '',
+    autorizante_nome: '',
+    autorizante_nome_artistico: '',
+    autorizante_cpf: '',
+    autorizante_telefone: '',
+    autorizante_email: '',
+    autorizante_pix: '',
+  });
+
   useEffect(() => {
     loadArtistas();
+    loadFornecedores();
+    loadProdutores();
   }, []);
 
   const loadArtistas = async () => {
@@ -84,47 +108,93 @@ export default function NovoProjeto() {
     }
   };
 
+  const loadFornecedores = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('fornecedores')
+        .select('id, nome, categoria, tipo_servico, status')
+        .order('nome', { ascending: true });
+
+      if (error) {
+        console.warn('Erro ao carregar fornecedores:', error);
+        setFornecedores([]);
+      } else {
+        setFornecedores(data || []);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar fornecedores:', error);
+      setFornecedores([]);
+    }
+  };
+
+  const loadProdutores = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('produtores')
+        .select('id, nome, especialidade, status')
+        .order('nome', { ascending: true });
+
+      if (error) {
+        console.warn('Erro ao carregar produtores:', error);
+        setProdutores([]);
+      } else {
+        setProdutores(data || []);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar produtores:', error);
+      setProdutores([]);
+    }
+  };
+
   const handleAddFaixa = () => {
-    setFaixaFormData({
+    setEditingFaixaIndex(null);
+    setIsDuplicatingFaixa(false);
+    setFaixaInitialData(null);
+    setShowFaixaModal(true);
+  };
+
+  const handleEditFaixa = (index: number) => {
+    setEditingFaixaIndex(index);
+    setIsDuplicatingFaixa(false);
+    setFaixaInitialData(faixas[index]);
+    setShowFaixaModal(true);
+  };
+
+  const handleDuplicateFaixa = (index: number) => {
+    const base = faixas[index];
+    setEditingFaixaIndex(null);
+    setIsDuplicatingFaixa(true);
+    setFaixaInitialData({
+      ...base,
       nome: '',
+      titulo_oficial: '',
+      titulo_provisorio: '',
+      duracao: '',
+      isrc: '',
       status: 'pendente',
       o_que_falta_gravar: '',
       referencias: [],
       anexos: []
     });
-    setEditingFaixaIndex(null);
     setShowFaixaModal(true);
   };
 
-  const handleEditFaixa = (index: number) => {
-    setFaixaFormData(faixas[index]);
-    setEditingFaixaIndex(index);
-    setShowFaixaModal(true);
-  };
-
-  const handleSaveFaixa = () => {
-    if (!faixaFormData.nome.trim()) {
-      alert('Por favor, preencha o nome da faixa.');
-      return;
-    }
-
+  const handleSaveFaixa = (faixaData: FaixaFormData) => {
     if (editingFaixaIndex !== null) {
       const newFaixas = [...faixas];
-      newFaixas[editingFaixaIndex] = { ...faixaFormData };
+      newFaixas[editingFaixaIndex] = {
+        ...newFaixas[editingFaixaIndex],
+        ...faixaData,
+      };
       setFaixas(newFaixas);
     } else {
-      setFaixas([...faixas, { ...faixaFormData }]);
+      setFaixas([...faixas, faixaData]);
     }
 
     setShowFaixaModal(false);
     setEditingFaixaIndex(null);
-    setFaixaFormData({
-      nome: '',
-      status: 'pendente' as FaixaForm['status'],
-      o_que_falta_gravar: '',
-      referencias: [],
-      anexos: []
-    });
+    setIsDuplicatingFaixa(false);
+    setFaixaInitialData(null);
   };
 
   const handleRemoveFaixa = (index: number) => {
@@ -195,6 +265,7 @@ export default function NovoProjeto() {
       // Criar projeto
       const dadosProjeto: any = {
         nome: formData.nome.trim(),
+        titulo: formData.nome.trim(),
         tipo: formData.tipo,
         artista_id: toUUID(formData.artista_id),
         fase: formData.fase,
@@ -226,6 +297,32 @@ export default function NovoProjeto() {
         dadosProjeto.previsao_lancamento = formData.prazo;
       }
 
+      if (formData.data_gravacao) {
+        dadosProjeto.data_gravacao = formData.data_gravacao;
+      }
+
+      if (dadosTecnicos.responsavel_mixagem.trim()) {
+        dadosProjeto.responsavel_mixagem = dadosTecnicos.responsavel_mixagem.trim();
+      }
+      if (dadosTecnicos.responsavel_master.trim()) {
+        dadosProjeto.responsavel_master = dadosTecnicos.responsavel_master.trim();
+      }
+      if (dadosTecnicos.engenheiro_audio.trim()) {
+        dadosProjeto.engenheiro_audio = dadosTecnicos.engenheiro_audio.trim();
+      }
+      if (dadosTecnicos.diretor_video.trim()) {
+        dadosProjeto.diretor_video = dadosTecnicos.diretor_video.trim();
+      }
+      if (dadosTecnicos.produtor_musical_geral.trim()) {
+        dadosProjeto.produtor_musical_geral = dadosTecnicos.produtor_musical_geral.trim();
+      }
+
+      // Gerar token de auto-cadastro para o projeto
+      const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(12)))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+      dadosProjeto.token_cadastro_participantes = `ceu_proj_${randomHex}`;
+
       const { data: projetoData, error: projetoError } = await supabase
         .from('projetos')
         .insert([dadosProjeto])
@@ -236,48 +333,116 @@ export default function NovoProjeto() {
 
       const projetoId = projetoData.id;
 
+      // Criar participantes iniciais do projeto
+      for (const part of participantesProjeto) {
+        const partRandomHex = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join('');
+        await supabase.from('projeto_participantes').insert([{
+          projeto_id: projetoId,
+          tipo_participacao: part.tipo_participacao,
+          funcao_instrumento: part.funcao_instrumento,
+          autorizante_nome: part.autorizante_nome,
+          autorizante_nome_artistico: part.autorizante_nome_artistico || null,
+          autorizante_cpf: part.autorizante_cpf || null,
+          autorizante_telefone: part.autorizante_telefone || null,
+          autorizante_email: part.autorizante_email || null,
+          autorizante_pix: part.autorizante_pix || null,
+          status: 'pendente',
+          token: `ceu_part_${partRandomHex}`,
+          declaracao_concordancia: false,
+          termo_versao: '1.0'
+        }]);
+      }
+
       // Criar faixas
       for (let i = 0; i < faixas.length; i++) {
         const faixa = faixas[i];
+        const dadosFaixa: any = {
+          projeto_id: projetoId,
+          nome: faixa.nome,
+          titulo_oficial: faixa.titulo_oficial || faixa.nome,
+          titulo_provisorio: faixa.titulo_provisorio || null,
+          versao_faixa: faixa.versao_faixa || 'Original',
+          versao_faixa_outra: faixa.versao_faixa_outra || null,
+          duracao: faixa.duracao?.trim() || null,
+          status: faixa.status,
+          o_que_falta_gravar: faixa.o_que_falta_gravar?.trim() || null,
+          ordem: i + 1,
+          isrc: faixa.isrc?.trim() || null,
+          upc_ean: faixa.upc_ean?.trim() || null,
+          data_prevista_lancamento: faixa.data_prevista_lancamento?.trim() || null,
+          data_efetiva_lancamento: faixa.data_efetiva_lancamento?.trim() || null,
+          distribuidora_digital: faixa.distribuidora_digital?.trim() || null,
+          titular_fonograma: faixa.titular_fonograma?.trim() || 'Céu Music',
+          produtor_fonografico: faixa.produtor_fonografico?.trim() || 'Céu Music',
+          modelo_exploracao: faixa.modelo_exploracao || null,
+          modelo_exploracao_outro: faixa.modelo_exploracao_outro?.trim() || null,
+          documentacao_obrigatoria: faixa.documentacao_obrigatoria || [],
+          credito_artista: faixa.credito_artista?.trim() || null,
+          credito_producao_musical: faixa.credito_producao_musical?.trim() || null,
+          credito_compositores: faixa.credito_compositores?.trim() || null,
+          credito_musicos: faixa.credito_musicos?.trim() || null,
+          credito_mixagem: faixa.credito_mixagem?.trim() || null,
+          credito_masterizacao: faixa.credito_masterizacao?.trim() || null,
+          credito_demais_obrigatorios: faixa.credito_demais_obrigatorios?.trim() || null,
+        };
+
+        let faixaId: string;
         const { data: faixaData, error: faixaError } = await supabase
           .from('faixas')
-          .insert([{
-            projeto_id: projetoId,
-            nome: faixa.nome,
-            status: faixa.status,
-            o_que_falta_gravar: faixa.o_que_falta_gravar || null,
-            ordem: i + 1
-          }])
+          .insert([dadosFaixa])
           .select()
           .single();
 
-        if (faixaError) throw faixaError;
-        const faixaId = faixaData.id;
+        if (faixaError) {
+          console.warn('Erro ao inserir faixa completa, tentando inserção simplificada:', faixaError);
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('faixas')
+            .insert([{
+              projeto_id: projetoId,
+              nome: faixa.nome,
+              status: faixa.status,
+              o_que_falta_gravar: faixa.o_que_falta_gravar || null,
+              ordem: i + 1,
+            }])
+            .select()
+            .single();
 
-        // Criar referências da faixa
-        for (const ref of faixa.referencias) {
-          await supabase.from('projeto_referencias').insert([{
-            projeto_id: projetoId,
-            faixa_id: faixaId,
-            tipo: ref.tipo,
-            url: ref.url || null,
-            arquivo_url: ref.arquivo_url || null,
-            arquivo_nome: ref.arquivo_nome || null,
-            titulo: ref.titulo,
-            descricao: ref.descricao || null,
-          }]);
+          if (fallbackError) throw fallbackError;
+          faixaId = fallbackData.id;
+        } else {
+          faixaId = faixaData.id;
         }
 
-        // Criar anexos da faixa
-        for (const anexo of faixa.anexos) {
-          await supabase.from('projeto_anexos').insert([{
-            projeto_id: projetoId,
-            faixa_id: faixaId,
-            tipo: anexo.tipo,
-            arquivo_url: anexo.arquivo_url,
-            arquivo_nome: anexo.arquivo_nome,
-            descricao: anexo.descricao || null,
-          }]);
+        // Criar referências da faixa se houver
+        if (faixa.referencias && Array.isArray(faixa.referencias)) {
+          for (const ref of faixa.referencias) {
+            await supabase.from('projeto_referencias').insert([{
+              projeto_id: projetoId,
+              faixa_id: faixaId,
+              tipo: ref.tipo,
+              url: ref.url || null,
+              arquivo_url: ref.arquivo_url || null,
+              arquivo_nome: ref.arquivo_nome || null,
+              titulo: ref.titulo,
+              descricao: ref.descricao || null,
+            }]);
+          }
+        }
+
+        // Criar anexos da faixa se houver
+        if (faixa.anexos && Array.isArray(faixa.anexos)) {
+          for (const anexo of faixa.anexos) {
+            await supabase.from('projeto_anexos').insert([{
+              projeto_id: projetoId,
+              faixa_id: faixaId,
+              tipo: anexo.tipo,
+              arquivo_url: anexo.arquivo_url,
+              arquivo_nome: anexo.arquivo_nome,
+              descricao: anexo.descricao || null,
+            }]);
+          }
         }
       }
 
@@ -317,9 +482,57 @@ export default function NovoProjeto() {
     }
   };
 
-  const fornecedoresAudio = fornecedores.filter(f => f.categoria === 'estudio' || f.tipo_servico.toLowerCase().includes('áudio') || f.tipo_servico.toLowerCase().includes('audio'));
-  const fornecedoresVideo = fornecedores.filter(f => f.tipo_servico.toLowerCase().includes('vídeo') || f.tipo_servico.toLowerCase().includes('video') || f.tipo_servico.toLowerCase().includes('videoclipe'));
-  const locaisGravacao = fornecedores.filter(f => f.categoria === 'estudio');
+  const fornecedoresAudio = fornecedores.filter(f => 
+    f.categoria === 'estudio' || 
+    f.categoria === 'equipamento' ||
+    (f.tipo_servico && (
+      f.tipo_servico.toLowerCase().includes('áudio') || 
+      f.tipo_servico.toLowerCase().includes('audio') ||
+      f.tipo_servico.toLowerCase().includes('gravação') ||
+      f.tipo_servico.toLowerCase().includes('gravacao') ||
+      f.tipo_servico.toLowerCase().includes('mixagem') ||
+      f.tipo_servico.toLowerCase().includes('master') ||
+      f.tipo_servico.toLowerCase().includes('som')
+    ))
+  );
+
+  const fornecedoresVideo = fornecedores.filter(f => 
+    (f.tipo_servico && (
+      f.tipo_servico.toLowerCase().includes('vídeo') || 
+      f.tipo_servico.toLowerCase().includes('video') || 
+      f.tipo_servico.toLowerCase().includes('videoclipe') ||
+      f.tipo_servico.toLowerCase().includes('audiovisual') ||
+      f.tipo_servico.toLowerCase().includes('foto') ||
+      f.tipo_servico.toLowerCase().includes('filme')
+    ))
+  );
+
+  const locaisGravacao = fornecedores.filter(f => 
+    f.categoria === 'estudio' || 
+    (f.tipo_servico && (
+      f.tipo_servico.toLowerCase().includes('estúdio') || 
+      f.tipo_servico.toLowerCase().includes('estudio') ||
+      f.tipo_servico.toLowerCase().includes('locação') ||
+      f.tipo_servico.toLowerCase().includes('locacao') ||
+      f.tipo_servico.toLowerCase().includes('espaço') ||
+      f.tipo_servico.toLowerCase().includes('espaco')
+    ))
+  );
+
+  const maquiadores = fornecedores.filter(f => 
+    f.tipo_servico && (
+      f.tipo_servico.toLowerCase().includes('maquiag') || 
+      f.tipo_servico.toLowerCase().includes('makeup') ||
+      f.tipo_servico.toLowerCase().includes('make') ||
+      f.tipo_servico.toLowerCase().includes('estética') ||
+      f.tipo_servico.toLowerCase().includes('estetica')
+    )
+  );
+
+  const listaAudio = fornecedoresAudio.length > 0 ? fornecedoresAudio : fornecedores;
+  const listaVideo = fornecedoresVideo.length > 0 ? fornecedoresVideo : fornecedores;
+  const listaLocais = locaisGravacao.length > 0 ? locaisGravacao : fornecedores;
+  const listaMaquiadores = maquiadores.length > 0 ? maquiadores : fornecedores;
 
   return (
     <MainLayout>
@@ -365,6 +578,7 @@ export default function NovoProjeto() {
                   <option value="single">Single</option>
                   <option value="ep">EP</option>
                   <option value="album">Álbum</option>
+                  <option value="audiovisual">Projeto Audiovisual</option>
                 </select>
               </div>
 
@@ -415,6 +629,16 @@ export default function NovoProjeto() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Data de Gravação</label>
+                <input
+                  type="date"
+                  value={formData.data_gravacao}
+                  onChange={(e) => setFormData({ ...formData, data_gravacao: e.target.value })}
+                  className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                />
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-400 mb-2">Prazo / Previsão de Lançamento</label>
                 <input
                   type="date"
@@ -437,9 +661,11 @@ export default function NovoProjeto() {
                   onChange={(e) => setFornecedoresData({ ...fornecedoresData, fornecedor_audio_id: e.target.value })}
                   className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
                 >
-                  <option value="">Selecione um fornecedor</option>
-                  {fornecedoresAudio.map((fornecedor) => (
-                    <option key={fornecedor.id} value={fornecedor.id}>{fornecedor.nome}</option>
+                  <option value="">Indefinido</option>
+                  {listaAudio.map((fornecedor) => (
+                    <option key={fornecedor.id} value={fornecedor.id}>
+                      {fornecedor.nome}{fornecedor.tipo_servico ? ` - ${fornecedor.tipo_servico}` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -451,9 +677,11 @@ export default function NovoProjeto() {
                   onChange={(e) => setFornecedoresData({ ...fornecedoresData, fornecedor_video_id: e.target.value })}
                   className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
                 >
-                  <option value="">Selecione um fornecedor</option>
-                  {fornecedoresVideo.map((fornecedor) => (
-                    <option key={fornecedor.id} value={fornecedor.id}>{fornecedor.nome}</option>
+                  <option value="">Indefinido</option>
+                  {listaVideo.map((fornecedor) => (
+                    <option key={fornecedor.id} value={fornecedor.id}>
+                      {fornecedor.nome}{fornecedor.tipo_servico ? ` - ${fornecedor.tipo_servico}` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -465,25 +693,48 @@ export default function NovoProjeto() {
                   onChange={(e) => setFornecedoresData({ ...fornecedoresData, local_gravacao_id: e.target.value })}
                   className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
                 >
-                  <option value="">Selecione um local</option>
-                  {locaisGravacao.map((local) => (
-                    <option key={local.id} value={local.id}>{local.nome}</option>
+                  <option value="">Indefinido</option>
+                  {listaLocais.map((local) => (
+                    <option key={local.id} value={local.id}>
+                      {local.nome}{local.tipo_servico ? ` - ${local.tipo_servico}` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">Produtor</label>
-                <select
-                  value={fornecedoresData.produtor_id}
-                  onChange={(e) => setFornecedoresData({ ...fornecedoresData, produtor_id: e.target.value })}
-                  className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                >
-                  <option value="">Selecione um produtor</option>
-                  {produtores.map((produtor) => (
-                    <option key={produtor.id} value={produtor.id}>{produtor.nome}</option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-400">Produtor</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowNovoProdutorModal(true)}
+                    className="text-xs text-primary-teal hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <i className="ri-user-add-line"></i> Cadastrar Produtor
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <select
+                    value={fornecedoresData.produtor_id}
+                    onChange={(e) => setFornecedoresData({ ...fornecedoresData, produtor_id: e.target.value })}
+                    className="flex-1 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  >
+                    <option value="">Indefinido</option>
+                    {produtores.map((produtor) => (
+                      <option key={produtor.id} value={produtor.id}>
+                        {produtor.nome}{produtor.especialidade ? ` - ${produtor.especialidade}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowNovoProdutorModal(true)}
+                    className="px-3 py-2 bg-dark-bg hover:bg-dark-hover border border-dark-border rounded-lg text-gray-300 hover:text-white transition-smooth flex items-center gap-1 cursor-pointer"
+                    title="Cadastrar novo produtor"
+                  >
+                    <i className="ri-add-line text-primary-teal text-lg"></i>
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -493,9 +744,11 @@ export default function NovoProjeto() {
                   onChange={(e) => setFornecedoresData({ ...fornecedoresData, maquiador_id: e.target.value })}
                   className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
                 >
-                  <option value="">Selecione um maquiador</option>
-                  {fornecedores.filter(f => f.tipo_servico.toLowerCase().includes('maquiagem') || f.tipo_servico.toLowerCase().includes('makeup')).map((fornecedor) => (
-                    <option key={fornecedor.id} value={fornecedor.id}>{fornecedor.nome}</option>
+                  <option value="">Indefinido</option>
+                  {listaMaquiadores.map((fornecedor) => (
+                    <option key={fornecedor.id} value={fornecedor.id}>
+                      {fornecedor.nome}{fornecedor.tipo_servico ? ` - ${fornecedor.tipo_servico}` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -516,6 +769,71 @@ export default function NovoProjeto() {
                   ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">Mantenha Ctrl (Cmd no Mac) pressionado para selecionar múltiplos</p>
+              </div>
+            </div>
+
+            {/* Equipe Técnica do Projeto (Mix, Master, Gravação, Vídeo) */}
+            <div className="pt-6 mt-6 border-t border-dark-border/60">
+              <h3 className="text-sm font-semibold text-primary-teal uppercase tracking-wider mb-4 flex items-center gap-2">
+                <i className="ri-equalizer-line"></i>
+                Equipe Técnica e Créditos do Projeto
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5">🎧 Mixagem</label>
+                  <input
+                    type="text"
+                    value={dadosTecnicos.responsavel_mixagem}
+                    onChange={(e) => setDadosTecnicos({ ...dadosTecnicos, responsavel_mixagem: e.target.value })}
+                    placeholder="Nome do profissional / estúdio"
+                    className="w-full px-3.5 py-2.5 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5">🎚️ Masterização</label>
+                  <input
+                    type="text"
+                    value={dadosTecnicos.responsavel_master}
+                    onChange={(e) => setDadosTecnicos({ ...dadosTecnicos, responsavel_master: e.target.value })}
+                    placeholder="Nome do profissional / estúdio"
+                    className="w-full px-3.5 py-2.5 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5">🎙️ Engenheiro(a) de Gravação</label>
+                  <input
+                    type="text"
+                    value={dadosTecnicos.engenheiro_audio}
+                    onChange={(e) => setDadosTecnicos({ ...dadosTecnicos, engenheiro_audio: e.target.value })}
+                    placeholder="Nome do engenheiro de gravação"
+                    className="w-full px-3.5 py-2.5 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5">🎬 Direção de Vídeo / Clipe</label>
+                  <input
+                    type="text"
+                    value={dadosTecnicos.diretor_video}
+                    onChange={(e) => setDadosTecnicos({ ...dadosTecnicos, diretor_video: e.target.value })}
+                    placeholder="Nome do diretor / produtora"
+                    className="w-full px-3.5 py-2.5 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1.5">🎹 Produção Musical Geral</label>
+                  <input
+                    type="text"
+                    value={dadosTecnicos.produtor_musical_geral}
+                    onChange={(e) => setDadosTecnicos({ ...dadosTecnicos, produtor_musical_geral: e.target.value })}
+                    placeholder="Nome do produtor musical"
+                    className="w-full px-3.5 py-2.5 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -545,9 +863,19 @@ export default function NovoProjeto() {
                   <div key={index} className="bg-dark-bg border border-dark-border rounded-lg p-4">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
-                        <h3 className="text-sm font-medium text-white">{index + 1}. {faixa.nome}</h3>
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className={`px-2 py-1 rounded text-xs ${
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold text-white">
+                            {index + 1}. {faixa.titulo_oficial || faixa.nome}
+                          </h3>
+                          {faixa.titulo_provisorio && (
+                            <span className="text-xs text-gray-400 italic">
+                              (Prov: {faixa.titulo_provisorio})
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                             faixa.status === 'pendente' ? 'bg-yellow-500/20 text-yellow-400' :
                             faixa.status === 'gravada' ? 'bg-blue-500/20 text-blue-400' :
                             faixa.status === 'em_mixagem' ? 'bg-purple-500/20 text-purple-400' :
@@ -562,13 +890,35 @@ export default function NovoProjeto() {
                              faixa.status === 'finalizada' ? 'Finalizada' :
                              'Lançada'}
                           </span>
-                          {faixa.referencias.length > 0 && (
-                            <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded">
-                              {faixa.referencias.length} referência(s)
+
+                          {faixa.versao_faixa && (
+                            <span className="px-2 py-0.5 bg-dark-card border border-dark-border text-gray-300 text-xs rounded">
+                              {faixa.versao_faixa === 'Outra' && faixa.versao_faixa_outra
+                                ? faixa.versao_faixa_outra
+                                : faixa.versao_faixa}
                             </span>
                           )}
-                          {faixa.anexos.length > 0 && (
-                            <span className="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded">
+
+                          {faixa.duracao && (
+                            <span className="px-2 py-0.5 bg-dark-card border border-dark-border text-gray-300 text-xs rounded flex items-center gap-1">
+                              <i className="ri-time-line text-primary-teal"></i>
+                              {faixa.duracao}
+                            </span>
+                          )}
+
+                          {faixa.isrc && (
+                            <span className="px-2 py-0.5 bg-primary-teal/10 text-primary-teal text-xs rounded">
+                              ISRC: {faixa.isrc}
+                            </span>
+                          )}
+
+                          {faixa.referencias && faixa.referencias.length > 0 && (
+                            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded">
+                              {faixa.referencias.length} ref(s)
+                            </span>
+                          )}
+                          {faixa.anexos && faixa.anexos.length > 0 && (
+                            <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded">
                               {faixa.anexos.length} anexo(s)
                             </span>
                           )}
@@ -577,8 +927,17 @@ export default function NovoProjeto() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
+                          onClick={() => handleDuplicateFaixa(index)}
+                          className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
+                          title="Duplicar dados para nova faixa"
+                        >
+                          <i className="ri-file-copy-line text-gray-400 hover:text-primary-teal"></i>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleEditFaixa(index)}
                           className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
+                          title="Editar ficha da faixa"
                         >
                           <i className="ri-edit-line text-gray-400 hover:text-primary-teal"></i>
                         </button>
@@ -586,6 +945,7 @@ export default function NovoProjeto() {
                           type="button"
                           onClick={() => handleRemoveFaixa(index)}
                           className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
+                          title="Remover faixa"
                         >
                           <i className="ri-delete-bin-line text-gray-400 hover:text-red-400"></i>
                         </button>
@@ -684,6 +1044,76 @@ export default function NovoProjeto() {
             )}
           </div>
 
+          {/* Seção 6: Participantes e Músicos do Projeto */}
+          <div className="bg-dark-card border border-dark-border rounded-xl p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                  <i className="ri-team-line text-primary-teal"></i>
+                  Participantes e Músicos (Opcional)
+                </h2>
+                <p className="text-xs text-gray-400 mt-1">
+                  Você pode pré-cadastrar os músicos conhecidos agora ou gerar o link compartilhável após criar o projeto.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setParticipanteFormData({
+                    tipo_participacao: 'musico',
+                    funcao_instrumento: '',
+                    autorizante_nome: '',
+                    autorizante_nome_artistico: '',
+                    autorizante_cpf: '',
+                    autorizante_telefone: '',
+                    autorizante_email: '',
+                    autorizante_pix: '',
+                  });
+                  setShowParticipanteModal(true);
+                }}
+                className="px-4 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap text-sm font-semibold"
+              >
+                <i className="ri-user-add-line"></i>
+                Adicionar Participante
+              </button>
+            </div>
+
+            {participantesProjeto.length === 0 ? (
+              <div className="text-center py-8 bg-dark-bg/40 rounded-xl border border-dashed border-dark-border">
+                <i className="ri-user-star-line text-4xl text-gray-600 mb-2 block"></i>
+                <p className="text-gray-400 text-xs">Nenhum participante adicionado ainda</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Ao criar o projeto, você também terá um link compartilhável para os músicos se auto-cadastrarem.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {participantesProjeto.map((p, index) => (
+                  <div key={index} className="bg-dark-bg border border-dark-border rounded-xl p-3.5 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-white">
+                        {p.autorizante_nome_artistico || p.autorizante_nome}
+                      </p>
+                      <p className="text-xs text-primary-teal font-medium">
+                        {p.funcao_instrumento} • {p.tipo_participacao}
+                      </p>
+                      {p.autorizante_cpf && (
+                        <p className="text-[11px] text-gray-400 font-mono">CPF: {p.autorizante_cpf}</p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setParticipantesProjeto(participantesProjeto.filter((_, i) => i !== index))}
+                      className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer text-gray-400 hover:text-red-400"
+                    >
+                      <i className="ri-delete-bin-line"></i>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Botões de Ação */}
           <div className="flex gap-4 justify-end">
             <button
@@ -714,89 +1144,34 @@ export default function NovoProjeto() {
         </form>
 
         {/* Modal Faixa */}
-        {showFaixaModal && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-white">
-                  {editingFaixaIndex !== null ? 'Editar Faixa' : 'Nova Faixa'}
-                </h2>
-                <button
-                  onClick={() => {
-                    setShowFaixaModal(false);
-                    setEditingFaixaIndex(null);
-                  }}
-                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
-                >
-                  <i className="ri-close-line text-2xl"></i>
-                </button>
-              </div>
+        <FaixaFormModal
+          isOpen={showFaixaModal}
+          onClose={() => {
+            setShowFaixaModal(false);
+            setEditingFaixaIndex(null);
+            setIsDuplicatingFaixa(false);
+            setFaixaInitialData(null);
+          }}
+          onSave={handleSaveFaixa}
+          initialData={editingFaixaIndex !== null ? faixas[editingFaixaIndex] : faixaInitialData}
+          isEditing={editingFaixaIndex !== null}
+          isDuplicating={isDuplicatingFaixa}
+          duplicateSourceFaixas={faixas.map((f, idx) => ({
+            id: String(idx),
+            nome: f.titulo_oficial || f.nome,
+            data: f
+          }))}
+        />
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Nome da Faixa *</label>
-                  <input
-                    type="text"
-                    required
-                    value={faixaFormData.nome}
-                    onChange={(e) => setFaixaFormData({ ...faixaFormData, nome: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                    placeholder="Ex: Música 01"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Status</label>
-                  <select
-                    value={faixaFormData.status}
-                    onChange={(e) => setFaixaFormData({ ...faixaFormData, status: e.target.value as FaixaForm['status'] })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                  >
-                    <option value="pendente">Pendente</option>
-                    <option value="gravada">Gravada</option>
-                    <option value="em_mixagem">Em Mixagem</option>
-                    <option value="masterizacao">Masterização</option>
-                    <option value="finalizada">Finalizada</option>
-                    <option value="lancada">Lançada</option>
-                  </select>
-                </div>
-
-                {faixaFormData.status === 'pendente' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">O que falta gravar</label>
-                    <input
-                      type="text"
-                      value={faixaFormData.o_que_falta_gravar}
-                      onChange={(e) => setFaixaFormData({ ...faixaFormData, o_que_falta_gravar: e.target.value })}
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                      placeholder="Ex: Vocais, instrumentais, backing vocals..."
-                    />
-                  </div>
-                )}
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowFaixaModal(false);
-                      setEditingFaixaIndex(null);
-                    }}
-                    className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveFaixa}
-                    className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap"
-                  >
-                    {editingFaixaIndex !== null ? 'Salvar Alterações' : 'Adicionar Faixa'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Modal Cadastrar Produtor */}
+        <NovoProdutorModal
+          isOpen={showNovoProdutorModal}
+          onClose={() => setShowNovoProdutorModal(false)}
+          onSuccess={(newProdutor) => {
+            setProdutores(prev => [...prev, newProdutor]);
+            setFornecedoresData(prev => ({ ...prev, produtor_id: newProdutor.id }));
+          }}
+        />
 
         {/* Modal Referência do Projeto */}
         {showReferenciaModal && (
@@ -987,6 +1362,169 @@ export default function NovoProjeto() {
                     placeholder="Descrição do anexo..."
                     rows={3}
                   />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Participante do Projeto */}
+        {showParticipanteModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-white">Adicionar Participante / Músico</h2>
+                <button
+                  onClick={() => setShowParticipanteModal(false)}
+                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl"></i>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Tipo de Participação <span className="text-red-400">*</span>
+                  </label>
+                  <select
+                    value={participanteFormData.tipo_participacao}
+                    onChange={(e) =>
+                      setParticipanteFormData({
+                        ...participanteFormData,
+                        tipo_participacao: e.target.value,
+                      })
+                    }
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                  >
+                    <option value="musico">Músico(a) / Instrumentista</option>
+                    <option value="produtor_musical">Produtor(a) Musical</option>
+                    <option value="arranjador">Arranjador(a)</option>
+                    <option value="compositor">Compositor(a)</option>
+                    <option value="letrista">Letrista</option>
+                    <option value="engenheiro_audio">Engenheiro(a) de Áudio</option>
+                    <option value="cantor_convidado">Cantor(a) Convidado(a)</option>
+                    <option value="backing_vocal">Backing Vocal</option>
+                    <option value="coral">Coral</option>
+                    <option value="outro">Outro</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Instrumento / Função <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={participanteFormData.funcao_instrumento}
+                    onChange={(e) =>
+                      setParticipanteFormData({
+                        ...participanteFormData,
+                        funcao_instrumento: e.target.value,
+                      })
+                    }
+                    placeholder="Ex: Bateria, Violão de Aço, Teclados..."
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Nome Completo <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={participanteFormData.autorizante_nome}
+                    onChange={(e) =>
+                      setParticipanteFormData({
+                        ...participanteFormData,
+                        autorizante_nome: e.target.value,
+                      })
+                    }
+                    placeholder="Nome completo do participante"
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Nome Artístico (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={participanteFormData.autorizante_nome_artistico}
+                    onChange={(e) =>
+                      setParticipanteFormData({
+                        ...participanteFormData,
+                        autorizante_nome_artistico: e.target.value,
+                      })
+                    }
+                    placeholder="Como deseja ser creditado"
+                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">CPF</label>
+                    <input
+                      type="text"
+                      value={participanteFormData.autorizante_cpf}
+                      onChange={(e) =>
+                        setParticipanteFormData({
+                          ...participanteFormData,
+                          autorizante_cpf: e.target.value,
+                        })
+                      }
+                      placeholder="000.000.000-00"
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">WhatsApp</label>
+                    <input
+                      type="tel"
+                      value={participanteFormData.autorizante_telefone}
+                      onChange={(e) =>
+                        setParticipanteFormData({
+                          ...participanteFormData,
+                          autorizante_telefone: e.target.value,
+                        })
+                      }
+                      placeholder="(21) 99999-9999"
+                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowParticipanteModal(false)}
+                    className="px-4 py-2 bg-transparent text-gray-400 hover:text-white rounded-lg text-sm transition-smooth"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!participanteFormData.autorizante_nome.trim()) {
+                        alert('Informe o nome do participante.');
+                        return;
+                      }
+                      if (!participanteFormData.funcao_instrumento.trim()) {
+                        alert('Informe o instrumento ou função.');
+                        return;
+                      }
+                      setParticipantesProjeto([...participantesProjeto, participanteFormData]);
+                      setShowParticipanteModal(false);
+                    }}
+                    className="px-5 py-2 bg-gradient-primary text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-smooth"
+                  >
+                    Adicionar à Lista
+                  </button>
                 </div>
               </div>
             </div>

@@ -196,9 +196,8 @@ export default function ProdutoresPage() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        // Se a tabela não existir, usar dados mock
-        console.warn('Tabela produtores não encontrada, usando dados mock:', error);
-        setProdutores(produtoresMock);
+        console.warn('Erro ao carregar produtores:', error);
+        setProdutores([]);
       } else {
         // Converter dados do banco para o formato Produtor
         const produtoresFormatados: Produtor[] = (data || []).map((p: any) => ({
@@ -220,8 +219,7 @@ export default function ProdutoresPage() {
       }
     } catch (error) {
       console.error('Erro ao carregar produtores:', error);
-      // Em caso de erro, usar dados mock
-      setProdutores(produtoresMock);
+      setProdutores([]);
     } finally {
       setLoading(false);
     }

@@ -57,9 +57,8 @@ export default function FornecedoresPage() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        // Se a tabela não existir, usar dados mock
-        console.warn('Tabela fornecedores não encontrada, usando dados mock:', error);
-        setFornecedores(fornecedoresMock);
+        console.warn('Erro ao carregar fornecedores:', error);
+        setFornecedores([]);
       } else {
         // Converter dados do banco para o formato Fornecedor
         const fornecedoresFormatados: Fornecedor[] = (data || []).map((f: any) => ({
@@ -86,8 +85,7 @@ export default function FornecedoresPage() {
       }
     } catch (error) {
       console.error('Erro ao carregar fornecedores:', error);
-      // Em caso de erro, usar dados mock
-      setFornecedores(fornecedoresMock);
+      setFornecedores([]);
     } finally {
       setLoading(false);
     }

@@ -21,9 +21,29 @@ import Configuracoes from "../pages/configuracoes/page";
 import CoversPage from "../pages/covers/page";
 import EntregaPublicaPage from "../pages/public/entrega/[slug]/page";
 import TermoPublicoPage from "../pages/public/termo/[token]/page";
+import ProjetoParticiparPublicoPage from "../pages/public/projeto-participar/[token]/page";
+import ParticipanteTermoIndividualPublicoPage from "../pages/public/participante-termo/[token]/page";
 import EmailsPage from "../pages/emails/page";
+import AgendaInstitucional from "../pages/agenda/Institucional";
+import AgendaArtistas from "../pages/agenda/Artistas";
 
 const routes: RouteObject[] = [
+  {
+    path: "/public/projeto/:token/participar",
+    element: <ProjetoParticiparPublicoPage />,
+  },
+  {
+    path: "/participar/:token",
+    element: <ProjetoParticiparPublicoPage />,
+  },
+  {
+    path: "/public/participante/:token",
+    element: <ParticipanteTermoIndividualPublicoPage />,
+  },
+  {
+    path: "/participante/:token",
+    element: <ParticipanteTermoIndividualPublicoPage />,
+  },
   {
     path: "/public/termo/:token",
     element: <TermoPublicoPage />,
@@ -87,6 +107,18 @@ const routes: RouteObject[] = [
   {
     path: "/projetos/:id",
     element: <ProjetoDetalhes />,
+  },
+  {
+    path: "/agenda",
+    element: <AgendaInstitucional />,
+  },
+  {
+    path: "/agenda/institucional",
+    element: <AgendaInstitucional />,
+  },
+  {
+    path: "/agenda/artistas",
+    element: <AgendaArtistas />,
   },
   {
     path: "/estudio",

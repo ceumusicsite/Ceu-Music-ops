@@ -7,11 +7,14 @@ import YouTubePreview from '../../components/projetos/YouTubePreview';
 import ReferenciaForm from '../../components/projetos/ReferenciaForm';
 import FileUpload from '../../components/projetos/FileUpload';
 import StreamPreview from '../../components/projetos/StreamPreview';
+import ParticipantesManager from '../../components/projetos/ParticipantesManager';
+import FichaTecnicaYouTubeManager from '../../components/projetos/FichaTecnicaYouTubeManager';
+import EquipeFornecedoresManager from '../../components/projetos/EquipeFornecedoresManager';
 import { getSignedUrlR2 } from '../../lib/r2';
 import { getBrowserViewableUrl, getViewableUrlAsync } from '../../utils/storageUrl';
 import { createStreamVideoFromUrl, getStreamIframeUrl } from '../../services/stream';
-import { fornecedoresMock } from '../../data/fornecedores-mock';
-import { produtoresMock } from '../../data/produtores-mock';
+import FaixaFormModal, { FaixaFormData } from '../../components/projetos/FaixaFormModal';
+import NovoProdutorModal from '../../components/produtores/NovoProdutorModal';
 
 // Função helper para detectar URLs do YouTube
 function isYouTubeUrl(url: string | undefined): boolean {
@@ -30,12 +33,19 @@ interface Projeto {
   fase: string;
   progresso: number;
   data_inicio?: string;
+  data_gravacao?: string;
   previsao_lancamento?: string;
   data_lancamento?: string;
   tipo_data_lancamento?: 'real' | 'prevista';
   tem_pre_producao?: boolean;
   artista_id: string;
-  artista?: { nome: string };
+  artista?: {
+    id?: string;
+    nome: string;
+    instagram?: string;
+    tiktok?: string;
+    facebook?: string;
+  };
   estudio?: string;
   produtor?: string;
   observacoes_tecnicas?: string;
@@ -44,17 +54,65 @@ interface Projeto {
   local_gravacao_id?: string;
   produtor_id?: string;
   maquiador_id?: string;
+  maquiador_nome?: string;
+  fonoaudiologo_nome?: string;
   outros_profissionais?: string[];
+  outros_profissionais_custom?: any[];
+  token_cadastro_participantes?: string;
+  responsavel_mixagem?: string;
+  responsavel_master?: string;
+  engenheiro_audio?: string;
+  direcao_tecnica_audio?: string;
+  diretor_video?: string;
+  captacao_video?: string;
+  fotografo?: string;
+  storymaker_filmmaker?: string;
+  producao_tecnica?: string;
+  producao_geral?: string;
+  direcao_executiva?: string;
+  produtor_musical_geral?: string;
+  link_plataformas?: string;
+  descricao_youtube_custom?: string;
+  artista_instagram?: string;
+  artista_tiktok?: string;
+  artista_facebook?: string;
+  letra?: string;
 }
 
 interface Faixa {
   id: string;
   projeto_id: string;
   nome: string;
+  titulo_oficial?: string;
+  titulo_provisorio?: string;
+  versao_faixa?: string;
+  versao_faixa_outra?: string;
+  duracao?: string;
   status: 'pendente' | 'gravada' | 'em_mixagem' | 'masterizacao' | 'finalizada' | 'lancada';
   o_que_falta_gravar?: string;
   ordem: number;
-  // Lançamento
+  // Identificação fonográfica e distribuição (Seção 5)
+  isrc?: string;
+  upc_ean?: string;
+  data_prevista_lancamento?: string;
+  data_efetiva_lancamento?: string;
+  distribuidora_digital?: string;
+  // Titularidade e direitos sobre o master (Seção 6)
+  titular_fonograma?: string;
+  produtor_fonografico?: string;
+  modelo_exploracao?: string;
+  modelo_exploracao_outro?: string;
+  // Seção 7: Documentação Obrigatória
+  documentacao_obrigatoria?: any[];
+  // Seção 8: Créditos Oficiais
+  credito_artista?: string;
+  credito_producao_musical?: string;
+  credito_compositores?: string;
+  credito_musicos?: string;
+  credito_mixagem?: string;
+  credito_masterizacao?: string;
+  credito_demais_obrigatorios?: string;
+  // Lançamento legado
   data_lancamento?: string;
   plataformas_lancamento?: string[];
   link_spotify?: string;
@@ -62,7 +120,7 @@ interface Faixa {
   link_apple_music?: string;
   link_deezer?: string;
   link_outros?: string[];
-  // Ficha técnica
+  // Ficha técnica legada
   compositores?: string[];
   letristas?: string[];
   arranjadores?: string[];
@@ -73,7 +131,6 @@ interface Faixa {
   gravacao_local?: string;
   gravacao_data?: string;
   genero?: string;
-  duracao?: string;
   bpm?: number;
   tonalidade?: string;
   observacoes_ficha_tecnica?: string;
@@ -140,6 +197,8 @@ export default function ProjetoDetalhes() {
   const [orcamento, setOrcamento] = useState<Orcamento | null>(null);
   const [referencias, setReferencias] = useState<Referencia[]>([]);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
+  const [fornecedores, setFornecedores] = useState<any[]>([]);
+  const [produtores, setProdutores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingFaixa, setSavingFaixa] = useState(false);
   const [showFaixaModal, setShowFaixaModal] = useState(false);
@@ -147,6 +206,9 @@ export default function ProjetoDetalhes() {
   const [showReferenciaModal, setShowReferenciaModal] = useState(false);
   const [showAnexoModal, setShowAnexoModal] = useState(false);
   const [editingFaixa, setEditingFaixa] = useState<Faixa | null>(null);
+  const [isDuplicatingFaixa, setIsDuplicatingFaixa] = useState(false);
+  const [faixaInitialData, setFaixaInitialData] = useState<Partial<FaixaFormData> | null>(null);
+  const [showNovoProdutorModal, setShowNovoProdutorModal] = useState(false);
   const [selectedFaixaForReferencia, setSelectedFaixaForReferencia] = useState<string | null>(null);
   const [selectedFaixaForAnexo, setSelectedFaixaForAnexo] = useState<string | null>(null);
   const [editandoEstudio, setEditandoEstudio] = useState(false);
@@ -155,12 +217,9 @@ export default function ProjetoDetalhes() {
   const [observacoesTemp, setObservacoesTemp] = useState('');
   const [tipoDataLancamento, setTipoDataLancamento] = useState<'real' | 'prevista'>('prevista');
   const [dataLancamentoTemp, setDataLancamentoTemp] = useState('');
+  const [editandoDataGravacao, setEditandoDataGravacao] = useState(false);
+  const [dataGravacaoTemp, setDataGravacaoTemp] = useState('');
   const [temPreProducao, setTemPreProducao] = useState<boolean | null>(null);
-  const [faixaFormData, setFaixaFormData] = useState({
-    nome: '',
-    status: 'pendente' as Faixa['status'],
-    o_que_falta_gravar: ''
-  });
   const [expandedFaixas, setExpandedFaixas] = useState<Set<string>>(new Set());
   const [showLancamentoModal, setShowLancamentoModal] = useState(false);
   const [showFichaTecnicaModal, setShowFichaTecnicaModal] = useState(false);
@@ -277,6 +336,7 @@ export default function ProjetoDetalhes() {
         setTipoDataLancamento(projetoData.tipo_data_lancamento || 'prevista');
         setDataLancamentoTemp(projetoData.data_lancamento || projetoData.previsao_lancamento || '');
         setTemPreProducao(projetoData.tem_pre_producao ?? null);
+        setDataGravacaoTemp(projetoData.data_gravacao || '');
       }
 
       // Carregar faixas do projeto
@@ -312,7 +372,7 @@ export default function ProjetoDetalhes() {
       // Carregar orçamento do projeto
       const { data: orcamentoData } = await supabase
         .from('orcamentos')
-        .select('id, projeto_id, valor_total, status')
+        .select('id, projeto_id, valor, status')
         .eq('projeto_id', id)
         .eq('status', 'aprovado')
         .order('created_at', { ascending: false })
@@ -327,11 +387,14 @@ export default function ProjetoDetalhes() {
           .eq('orcamento_id', orcamentoData.id)
           .eq('status', 'pago');
 
-        const valorRealizado = pagamentosData?.reduce((sum, p) => sum + (p.valor || 0), 0) || 0;
+        const valorRealizado = pagamentosData?.reduce((sum, p) => sum + (Number(p.valor) || 0), 0) || 0;
         
         setOrcamento({
-          ...orcamentoData,
-          valor_realizado: valorRealizado
+          id: orcamentoData.id,
+          projeto_id: orcamentoData.projeto_id,
+          status: orcamentoData.status,
+          valor_total: Number(orcamentoData.valor) || 0,
+          valor_realizado: valorRealizado,
         });
       }
 
@@ -352,6 +415,14 @@ export default function ProjetoDetalhes() {
         .order('created_at', { ascending: false });
 
       if (anexosData) setAnexos(anexosData);
+
+      // Carregar fornecedores e produtores
+      const [{ data: fornData }, { data: prodData }] = await Promise.all([
+        supabase.from('fornecedores').select('id, nome, categoria, tipo_servico').order('nome'),
+        supabase.from('produtores').select('id, nome, especialidade').order('nome')
+      ]);
+      if (fornData) setFornecedores(fornData);
+      if (prodData) setProdutores(prodData);
     } catch (error) {
       console.error('Erro ao carregar dados do projeto:', error);
     } finally {
@@ -477,6 +548,30 @@ export default function ProjetoDetalhes() {
     }
   };
 
+  const handleUpdateDataGravacao = async (novaData?: string) => {
+    if (!id) return;
+    const dataToSave = novaData !== undefined ? novaData : dataGravacaoTemp;
+
+    try {
+      const { error } = await supabase
+        .from('projetos')
+        .update({
+          data_gravacao: dataToSave ? dataToSave : null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setEditandoDataGravacao(false);
+      await loadProjetoData();
+      toast.success('Data de gravação atualizada com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao atualizar data de gravação:', error);
+      alert(`Erro ao atualizar data de gravação: ${error?.message || 'Erro desconhecido'}`);
+    }
+  };
+
   // Definir fases antes de usar na função
   const fases = [
     { value: 'planejamento', label: 'Planejamento' },
@@ -575,50 +670,55 @@ export default function ProjetoDetalhes() {
     }
   };
 
-  const handleSubmitFaixa = async (e: React.FormEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleSaveFaixaModal = async (faixaData: FaixaFormData) => {
     if (!id) {
       alert('ID do projeto não encontrado. Recarregue a página.');
       return;
     }
 
-    // Validação do nome
-    if (!faixaFormData.nome || !faixaFormData.nome.trim()) {
-      alert('Por favor, preencha o nome da faixa.');
-      return;
-    }
-
-    // Validação do status
-    const statusValidos = ['pendente', 'gravada', 'em_mixagem', 'masterizacao', 'finalizada', 'lancada'];
-    if (!statusValidos.includes(faixaFormData.status)) {
-      alert('Status inválido. Por favor, selecione um status válido.');
-      return;
-    }
-
-    // Prevenir múltiplos envios
-    if (savingFaixa) {
-      return;
-    }
+    if (savingFaixa) return;
 
     setSavingFaixa(true);
     try {
-      // Calcular ordem de forma segura
       const ordens = faixas
         .map(f => f.ordem)
         .filter(ordem => typeof ordem === 'number' && !isNaN(ordem));
       const maxOrdem = ordens.length > 0 ? Math.max(...ordens) : 0;
       const novaOrdem = maxOrdem + 1;
 
+      const payload: any = {
+        nome: faixaData.nome.trim(),
+        titulo_oficial: faixaData.titulo_oficial?.trim() || faixaData.nome.trim(),
+        titulo_provisorio: faixaData.titulo_provisorio?.trim() || null,
+        versao_faixa: faixaData.versao_faixa || 'Original',
+        versao_faixa_outra: faixaData.versao_faixa_outra?.trim() || null,
+        duracao: faixaData.duracao?.trim() || null,
+        status: faixaData.status,
+        o_que_falta_gravar: faixaData.o_que_falta_gravar?.trim() || null,
+        isrc: faixaData.isrc?.trim() || null,
+        upc_ean: faixaData.upc_ean?.trim() || null,
+        data_prevista_lancamento: faixaData.data_prevista_lancamento?.trim() || null,
+        data_efetiva_lancamento: faixaData.data_efetiva_lancamento?.trim() || null,
+        distribuidora_digital: faixaData.distribuidora_digital?.trim() || null,
+        titular_fonograma: faixaData.titular_fonograma?.trim() || 'Céu Music',
+        produtor_fonografico: faixaData.produtor_fonografico?.trim() || 'Céu Music',
+        modelo_exploracao: faixaData.modelo_exploracao || null,
+        modelo_exploracao_outro: faixaData.modelo_exploracao_outro?.trim() || null,
+        documentacao_obrigatoria: faixaData.documentacao_obrigatoria || [],
+        credito_artista: faixaData.credito_artista?.trim() || null,
+        credito_producao_musical: faixaData.credito_producao_musical?.trim() || null,
+        credito_compositores: faixaData.credito_compositores?.trim() || null,
+        credito_musicos: faixaData.credito_musicos?.trim() || null,
+        credito_mixagem: faixaData.credito_mixagem?.trim() || null,
+        credito_masterizacao: faixaData.credito_masterizacao?.trim() || null,
+        credito_demais_obrigatorios: faixaData.credito_demais_obrigatorios?.trim() || null,
+      };
+
       if (editingFaixa) {
-        // Editar faixa existente
+        // Atualizar
         const { error } = await supabase
           .from('faixas')
-          .update({
-            nome: faixaFormData.nome.trim(),
-            status: faixaFormData.status,
-            o_que_falta_gravar: faixaFormData.o_que_falta_gravar?.trim() || null
-          })
+          .update(payload)
           .eq('id', editingFaixa.id);
 
         if (error) {
@@ -626,42 +726,31 @@ export default function ProjetoDetalhes() {
           throw error;
         }
       } else {
-        // Criar nova faixa
+        // Criar
         const { error } = await supabase
           .from('faixas')
           .insert([{
             projeto_id: id,
-            nome: faixaFormData.nome.trim(),
-            status: faixaFormData.status,
-            o_que_falta_gravar: faixaFormData.o_que_falta_gravar?.trim() || null,
-            ordem: novaOrdem
+            ...payload,
+            ordem: novaOrdem,
           }]);
 
         if (error) {
           console.error('Erro ao criar faixa:', error);
-          console.error('Dados enviados:', {
-            projeto_id: id,
-            nome: faixaFormData.nome.trim(),
-            status: faixaFormData.status,
-            o_que_falta_gravar: faixaFormData.o_que_falta_gravar?.trim() || null,
-            ordem: novaOrdem
-          });
           throw error;
         }
       }
 
       setShowFaixaModal(false);
       setEditingFaixa(null);
-      setFaixaFormData({
-        nome: '',
-        status: 'pendente' as Faixa['status'],
-        o_que_falta_gravar: ''
-      });
+      setIsDuplicatingFaixa(false);
+      setFaixaInitialData(null);
       await loadProjetoData();
+      toast.success(editingFaixa ? 'Faixa atualizada com sucesso!' : 'Faixa adicionada com sucesso!');
     } catch (error: any) {
       console.error('Erro ao salvar faixa:', error);
       const errorMessage = error?.message || error?.details || error?.hint || 'Erro desconhecido';
-      alert(`Erro ao salvar faixa: ${errorMessage}\n\nDetalhes técnicos: ${JSON.stringify(error)}`);
+      alert(`Erro ao salvar faixa: ${errorMessage}`);
     } finally {
       setSavingFaixa(false);
     }
@@ -669,10 +758,23 @@ export default function ProjetoDetalhes() {
 
   const handleEditFaixa = (faixa: Faixa) => {
     setEditingFaixa(faixa);
-    setFaixaFormData({
-      nome: faixa.nome,
-      status: faixa.status,
-      o_que_falta_gravar: faixa.o_que_falta_gravar || ''
+    setIsDuplicatingFaixa(false);
+    setFaixaInitialData(faixa);
+    setShowFaixaModal(true);
+  };
+
+  const handleDuplicateFaixa = (faixa: Faixa) => {
+    setEditingFaixa(null);
+    setIsDuplicatingFaixa(true);
+    setFaixaInitialData({
+      ...faixa,
+      nome: '',
+      titulo_oficial: '',
+      titulo_provisorio: '',
+      duracao: '',
+      isrc: '',
+      status: 'pendente',
+      o_que_falta_gravar: '',
     });
     setShowFaixaModal(true);
   };
@@ -700,7 +802,10 @@ export default function ProjetoDetalhes() {
     const labels: Record<string, string> = {
       'single': 'Single',
       'ep': 'EP',
-      'album': 'Álbum'
+      'album': 'Álbum',
+      'audiovisual': 'Projeto Audiovisual',
+      'feat': 'Feat',
+      'outro': 'Outro'
     };
     return labels[tipo] || tipo;
   };
@@ -1073,7 +1178,7 @@ export default function ProjetoDetalhes() {
 
           <div className="flex items-start justify-between">
             <div>
-              <div className="flex items-center gap-4 mb-2">
+              <div className="flex flex-wrap items-center gap-3 mb-2">
                 <h1 className="text-3xl font-bold text-white">{projeto.nome}</h1>
                 <span className="px-3 py-1 bg-primary-teal/20 text-primary-teal text-sm font-medium rounded">
                   {getTipoLabel(projeto.tipo)}
@@ -1104,6 +1209,65 @@ export default function ProjetoDetalhes() {
                     </div>
                   )}
                 </div>
+
+                {/* Data de Gravação */}
+                {editandoDataGravacao ? (
+                  <div className="flex items-center gap-1.5 bg-dark-card border border-primary-teal/50 rounded-lg px-2.5 py-1 animate-in fade-in duration-150">
+                    <span className="text-xs text-primary-teal font-medium flex items-center gap-1">
+                      <i className="ri-calendar-event-line"></i> Gravação:
+                    </span>
+                    <input
+                      type="date"
+                      value={dataGravacaoTemp}
+                      onChange={(e) => setDataGravacaoTemp(e.target.value)}
+                      className="px-2 py-0.5 bg-dark-bg border border-dark-border rounded text-white text-xs focus:outline-none focus:border-primary-teal"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateDataGravacao()}
+                      className="p-1 text-green-400 hover:text-green-300 hover:bg-dark-hover rounded transition-smooth cursor-pointer"
+                      title="Salvar data de gravação"
+                    >
+                      <i className="ri-check-line text-sm"></i>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditandoDataGravacao(false);
+                        setDataGravacaoTemp(projeto.data_gravacao || '');
+                      }}
+                      className="p-1 text-gray-400 hover:text-white hover:bg-dark-hover rounded transition-smooth cursor-pointer"
+                      title="Cancelar"
+                    >
+                      <i className="ri-close-line text-sm"></i>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setDataGravacaoTemp(projeto.data_gravacao || '');
+                      setEditandoDataGravacao(true);
+                    }}
+                    className={`px-3 py-1 text-sm font-medium rounded transition-smooth cursor-pointer flex items-center gap-1.5 group ${
+                      projeto.data_gravacao
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:border-purple-400'
+                        : 'bg-dark-card border border-dashed border-dark-border text-gray-400 hover:text-primary-teal hover:border-primary-teal'
+                    }`}
+                    title="Clique para editar a data de gravação"
+                  >
+                    <i className="ri-calendar-event-line text-xs"></i>
+                    <span>
+                      {projeto.data_gravacao
+                        ? `Gravação: ${(() => {
+                            const [year, month, day] = projeto.data_gravacao.split('-');
+                            return `${day}/${month}/${year}`;
+                          })()}`
+                        : '+ Data de Gravação'}
+                    </span>
+                    <i className="ri-edit-line text-xs opacity-60 group-hover:opacity-100"></i>
+                  </button>
+                )}
               </div>
               <p className="text-gray-400">{projeto.artista?.nome || 'Sem artista'}</p>
             </div>
@@ -1180,11 +1344,6 @@ export default function ProjetoDetalhes() {
                 e.preventDefault();
                 e.stopPropagation();
                 setEditingFaixa(null);
-                setFaixaFormData({
-                  nome: '',
-                  status: 'pendente' as Faixa['status'],
-                  o_que_falta_gravar: ''
-                });
                 setShowFaixaModal(true);
               }}
               className="px-4 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer flex items-center gap-2 whitespace-nowrap"
@@ -1204,11 +1363,6 @@ export default function ProjetoDetalhes() {
                       e.preventDefault();
                       e.stopPropagation();
                       setEditingFaixa(null);
-                      setFaixaFormData({
-                        nome: '',
-                        status: 'pendente',
-                        o_que_falta_gravar: ''
-                      });
                       setShowFaixaModal(true);
                     }}
                     className="px-4 py-2 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer"
@@ -1234,7 +1388,34 @@ export default function ProjetoDetalhes() {
                                 {index + 1}
                               </div>
                               <div className="flex-1">
-                                <h3 className="text-sm font-medium text-white mb-2">{faixa.nome}</h3>
+                                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                  <h3 className="text-sm font-semibold text-white">
+                                    {faixa.titulo_oficial || faixa.nome}
+                                  </h3>
+                                  {faixa.titulo_provisorio && (
+                                    <span className="text-xs text-gray-400 italic">
+                                      (Prov: {faixa.titulo_provisorio})
+                                    </span>
+                                  )}
+                                  {faixa.versao_faixa && (
+                                    <span className="px-2 py-0.5 bg-dark-card border border-dark-border text-gray-300 text-xs rounded">
+                                      {faixa.versao_faixa === 'Outra' && faixa.versao_faixa_outra
+                                        ? faixa.versao_faixa_outra
+                                        : faixa.versao_faixa}
+                                    </span>
+                                  )}
+                                  {faixa.duracao && (
+                                    <span className="px-2 py-0.5 bg-dark-card border border-dark-border text-gray-300 text-xs rounded flex items-center gap-1">
+                                      <i className="ri-time-line text-primary-teal"></i>
+                                      {faixa.duracao}
+                                    </span>
+                                  )}
+                                  {faixa.isrc && (
+                                    <span className="px-2 py-0.5 bg-primary-teal/10 text-primary-teal text-xs rounded">
+                                      ISRC: {faixa.isrc}
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <div className="relative">
                                     <select
@@ -1326,14 +1507,23 @@ export default function ProjetoDetalhes() {
                                 <i className={`ri-${isExpanded ? 'arrow-up' : 'arrow-down'}-s-line text-gray-400 hover:text-primary-teal`}></i>
                               </button>
                               <button
+                                onClick={() => handleDuplicateFaixa(faixa)}
+                                className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
+                                title="Duplicar dados para nova faixa"
+                              >
+                                <i className="ri-file-copy-line text-gray-400 hover:text-primary-teal"></i>
+                              </button>
+                              <button
                                 onClick={() => handleEditFaixa(faixa)}
                                 className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
+                                title="Editar ficha da faixa"
                               >
                                 <i className="ri-edit-line text-gray-400 hover:text-primary-teal"></i>
                               </button>
                               <button
                                 onClick={() => handleDeleteFaixa(faixa.id)}
                                 className="p-2 hover:bg-dark-hover rounded-lg transition-smooth cursor-pointer"
+                                title="Excluir faixa"
                               >
                                 <i className="ri-delete-bin-line text-gray-400 hover:text-red-400"></i>
                               </button>
@@ -1738,6 +1928,50 @@ export default function ProjetoDetalhes() {
               )}
         </div>
 
+        {/* Participantes, Músicos, Ficha Técnica e Jurídico */}
+        <div className="bg-dark-card border border-dark-border rounded-xl p-6 mb-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                <i className="ri-team-line text-primary-teal"></i>
+                Participantes, Músicos & Jurídico
+              </h2>
+              <p className="text-xs text-gray-400 mt-1">
+                Gerencie os músicos, produtores e arranjadores, gere links de auto-cadastro e acompanhe termos jurídicos e fichas técnicas assinadas.
+              </p>
+            </div>
+          </div>
+
+          <ParticipantesManager
+            projetoId={projeto.id}
+            projetoNome={projeto.nome}
+            artistaNome={projeto.artista?.nome || 'Céu Music'}
+            tokenCadastroProjeto={projeto.token_cadastro_participantes}
+            faixas={faixas}
+            onTokenUpdated={(newToken) => {
+              setProjeto((prev) => (prev ? { ...prev, token_cadastro_participantes: newToken } : prev));
+            }}
+          />
+        </div>
+
+        {/* Fornecedores & Equipe Técnica do Projeto */}
+        <div className="mb-6">
+          <EquipeFornecedoresManager
+            projeto={projeto}
+            fornecedores={fornecedores}
+            produtores={produtores}
+            onUpdate={loadProjetoData}
+          />
+        </div>
+
+        {/* Central de Ficha Técnica & Gerador Oficial para YouTube */}
+        <div className="mb-6">
+          <FichaTecnicaYouTubeManager
+            projeto={projeto}
+            onUpdate={loadProjetoData}
+          />
+        </div>
+
         {/* Informações de Gravação */}
         <div className="space-y-6 mb-6">
             <div className="bg-dark-card border border-dark-border rounded-xl p-6">
@@ -1790,25 +2024,44 @@ export default function ProjetoDetalhes() {
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Produtor Responsável</label>
-                  <select
-                    value={projeto.produtor_id || ''}
-                    onChange={(e) => handleUpdateProdutor(e.target.value || null)}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                  >
-                    <option value="">Selecione um produtor</option>
-                    {produtoresMock.map((produtor) => (
-                      <option key={produtor.id} value={produtor.id}>
-                        {produtor.nome}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-400">Produtor Responsável</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowNovoProdutorModal(true)}
+                      className="text-xs text-primary-teal hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <i className="ri-user-add-line"></i> Cadastrar Produtor
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={projeto.produtor_id || ''}
+                      onChange={(e) => handleUpdateProdutor(e.target.value || null)}
+                      className="flex-1 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
+                    >
+                      <option value="">Indefinido</option>
+                      {produtores.map((produtor) => (
+                        <option key={produtor.id} value={produtor.id}>
+                          {produtor.nome}{produtor.especialidade ? ` - ${produtor.especialidade}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowNovoProdutorModal(true)}
+                      className="px-3 py-2 bg-dark-bg hover:bg-dark-hover border border-dark-border rounded-lg text-gray-300 hover:text-white transition-smooth flex items-center gap-1 cursor-pointer"
+                      title="Cadastrar novo produtor"
+                    >
+                      <i className="ri-add-line text-primary-teal text-lg"></i>
+                    </button>
+                  </div>
                   {projeto.produtor_id && (
                     <div className="mt-2 px-4 py-2 bg-dark-bg border border-dark-border rounded-lg">
                       <div className="flex items-center gap-2 text-sm">
                         <i className="ri-user-line text-primary-teal"></i>
                         <span className="text-white">
-                          {produtoresMock.find(p => p.id === projeto.produtor_id)?.nome}
+                          {produtores.find(p => p.id === projeto.produtor_id)?.nome || 'Não encontrado'}
                         </span>
                       </div>
                     </div>
@@ -1941,77 +2194,6 @@ export default function ProjetoDetalhes() {
                   )}
                 </div>
               )}
-            </div>
-
-            {/* Fornecedores e Profissionais */}
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6">
-              <h2 className="text-xl font-semibold text-white mb-6">Fornecedores e Profissionais</h2>
-              <div className="space-y-4">
-                {projeto.fornecedor_audio_id && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Fornecedor de Áudio</label>
-                    <div className="flex items-center gap-3 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg">
-                      <i className="ri-mic-line text-primary-teal"></i>
-                      <span className="text-white">
-                        {fornecedoresMock.find(f => f.id === projeto.fornecedor_audio_id)?.nome || 'Não encontrado'}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                {projeto.fornecedor_video_id && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Fornecedor de Vídeo</label>
-                    <div className="flex items-center gap-3 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg">
-                      <i className="ri-video-line text-primary-teal"></i>
-                      <span className="text-white">
-                        {fornecedoresMock.find(f => f.id === projeto.fornecedor_video_id)?.nome || 'Não encontrado'}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                {projeto.local_gravacao_id && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Local de Gravação</label>
-                    <div className="flex items-center gap-3 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg">
-                      <i className="ri-building-line text-primary-teal"></i>
-                      <span className="text-white">
-                        {fornecedoresMock.find(f => f.id === projeto.local_gravacao_id)?.nome || 'Não encontrado'}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                {projeto.maquiador_id && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Maquiador</label>
-                    <div className="flex items-center gap-3 px-4 py-3 bg-dark-bg border border-dark-border rounded-lg">
-                      <i className="ri-palette-line text-primary-teal"></i>
-                      <span className="text-white">
-                        {fornecedoresMock.find(f => f.id === projeto.maquiador_id)?.nome || 'Não encontrado'}
-                      </span>
-                    </div>
-                  </div>
-                )}
-                {projeto.outros_profissionais && projeto.outros_profissionais.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">Outros Profissionais</label>
-                    <div className="space-y-2">
-                      {projeto.outros_profissionais.map((profId) => {
-                        const fornecedor = fornecedoresMock.find(f => f.id === profId);
-                        if (!fornecedor) return null;
-                        return (
-                          <div key={profId} className="flex items-center gap-3 px-4 py-2 bg-dark-bg border border-dark-border rounded-lg">
-                            <i className="ri-user-star-line text-primary-teal"></i>
-                            <span className="text-white text-sm">{fornecedor.nome}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                {!projeto.fornecedor_audio_id && !projeto.fornecedor_video_id && !projeto.local_gravacao_id && !projeto.produtor_id && !projeto.maquiador_id && (!projeto.outros_profissionais || projeto.outros_profissionais.length === 0) && (
-                  <p className="text-sm text-gray-500 italic text-center py-4">Nenhum fornecedor ou profissional associado</p>
-                )}
-              </div>
             </div>
 
             {/* Orçamento e Financeiro */}
@@ -2246,131 +2428,42 @@ export default function ProjetoDetalhes() {
         </div>
 
         {/* Modal Nova/Editar Faixa */}
-        {showFaixaModal && (
-          <div 
-            className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-            onClick={(e) => {
-              // Fechar modal ao clicar no backdrop
-              if (e.target === e.currentTarget) {
-                setShowFaixaModal(false);
-                setEditingFaixa(null);
-                setFaixaFormData({
-                  nome: '',
-                  status: 'pendente' as Faixa['status'],
-                  o_que_falta_gravar: ''
-                });
-              }
-            }}
-            style={{ touchAction: 'manipulation' }}
-          >
-            <div 
-              className="bg-dark-card border border-dark-border rounded-xl p-6 w-full max-w-md"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-white">
-                  {editingFaixa ? 'Editar Faixa' : 'Nova Faixa'}
-                </h2>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setShowFaixaModal(false);
-                    setEditingFaixa(null);
-                    setFaixaFormData({
-                      nome: '',
-                      status: 'pendente' as Faixa['status'],
-                      o_que_falta_gravar: ''
-                    });
-                  }}
-                  className="text-gray-400 hover:text-white transition-smooth cursor-pointer"
-                  style={{ touchAction: 'manipulation' }}
-                >
-                  <i className="ri-close-line text-2xl"></i>
-                </button>
-              </div>
+        <FaixaFormModal
+          isOpen={showFaixaModal}
+          onClose={() => {
+            setShowFaixaModal(false);
+            setEditingFaixa(null);
+            setIsDuplicatingFaixa(false);
+            setFaixaInitialData(null);
+          }}
+          onSave={handleSaveFaixaModal}
+          initialData={editingFaixa ? {
+            ...editingFaixa,
+            titulo_oficial: editingFaixa.titulo_oficial || editingFaixa.nome,
+          } : faixaInitialData}
+          isEditing={!!editingFaixa}
+          isDuplicating={isDuplicatingFaixa}
+          duplicateSourceFaixas={faixas.map(f => ({
+            id: f.id,
+            nome: f.titulo_oficial || f.nome,
+            data: f
+          }))}
+          existingAudioUrls={
+            editingFaixa?.audio_video
+              ?.filter(av => av.tipo === 'audio' && av.arquivo_url)
+              .map(av => av.arquivo_url!) || []
+          }
+        />
 
-              <form onSubmit={handleSubmitFaixa} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Nome da Faixa</label>
-                  <input
-                    type="text"
-                    required
-                    value={faixaFormData.nome}
-                    onChange={(e) => setFaixaFormData({ ...faixaFormData, nome: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                    placeholder="Ex: Música 01"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Status</label>
-                  <select
-                    value={faixaFormData.status}
-                    onChange={(e) => setFaixaFormData({ ...faixaFormData, status: e.target.value as Faixa['status'] })}
-                    className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth cursor-pointer"
-                  >
-                    <option value="pendente">Pendente</option>
-                    <option value="gravada">Gravada</option>
-                    <option value="em_mixagem">Em Mixagem</option>
-                    <option value="masterizacao">Masterização</option>
-                    <option value="finalizada">Finalizada</option>
-                    <option value="lancada">Lançada</option>
-                  </select>
-                </div>
-
-                {faixaFormData.status === 'pendente' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-2">O que falta gravar</label>
-                    <input
-                      type="text"
-                      value={faixaFormData.o_que_falta_gravar}
-                      onChange={(e) => setFaixaFormData({ ...faixaFormData, o_que_falta_gravar: e.target.value })}
-                      className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-primary-teal transition-smooth"
-                      placeholder="Ex: Vocais, instrumentais, backing vocals..."
-                    />
-                  </div>
-                )}
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setShowFaixaModal(false);
-                      setEditingFaixa(null);
-                      setFaixaFormData({
-                        nome: '',
-                        status: 'pendente' as Faixa['status'],
-                        o_que_falta_gravar: ''
-                      });
-                    }}
-                    className="flex-1 px-4 py-3 bg-dark-bg hover:bg-dark-hover text-white rounded-lg transition-smooth cursor-pointer whitespace-nowrap"
-                    style={{ touchAction: 'manipulation' }}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={savingFaixa}
-                    className="flex-1 px-4 py-3 bg-gradient-primary text-white rounded-lg hover:opacity-90 transition-smooth cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ touchAction: 'manipulation' }}
-                  >
-                    {savingFaixa ? (
-                      <>
-                        <i className="ri-loader-4-line animate-spin mr-2"></i>
-                        Salvando...
-                      </>
-                    ) : (
-                      editingFaixa ? 'Salvar Alterações' : 'Adicionar Faixa'
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+        {/* Modal Cadastrar Produtor */}
+        <NovoProdutorModal
+          isOpen={showNovoProdutorModal}
+          onClose={() => setShowNovoProdutorModal(false)}
+          onSuccess={async (newProdutor) => {
+            setProdutores(prev => [...prev, newProdutor]);
+            await handleUpdateProdutor(newProdutor.id);
+          }}
+        />
 
         {/* Modal Adicionar Referência */}
         {showReferenciaModal && id && (

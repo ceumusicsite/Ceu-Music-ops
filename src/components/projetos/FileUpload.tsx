@@ -5,6 +5,7 @@ interface FileUploadProps {
   bucket: string;
   folder?: string;
   onUploadComplete: (url: string, fileName: string) => void;
+  onUploadCompleteData?: (data: { url: string; fileName: string; bucket: string; key: string }) => void;
   onError?: (error: string) => void;
   accept?: string;
   maxSizeMB?: number;
@@ -19,6 +20,7 @@ export default function FileUpload({
   bucket,
   folder = '',
   onUploadComplete,
+  onUploadCompleteData,
   onError,
   accept = '*/*',
   maxSizeMB = 50,
@@ -89,6 +91,12 @@ export default function FileUpload({
       // Usar nome customizado se fornecido, senão usar o nome original do arquivo
       const finalFileName = customFileName ? `${customFileName}.${file.name.split('.').pop()}` : file.name;
       onUploadComplete(result.url, finalFileName);
+      onUploadCompleteData?.({
+        url: result.url,
+        fileName: finalFileName,
+        bucket: result.bucket || r2Bucket,
+        key: result.key || '',
+      });
       
       // Limpar preview e input
       setPreview(null);
