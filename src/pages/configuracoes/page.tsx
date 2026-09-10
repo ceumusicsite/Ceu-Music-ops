@@ -3,8 +3,17 @@ import MainLayout from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import type { UserRole } from '../../contexts/AuthContext';
+import {
+  listarSolicitacoesSenha,
+  listarLogsSistema,
+  type SolicitacaoSenha,
+  type LogSistema,
+} from '../../services/passwordReset';
+import SolicitacoesSenhaTab from '../../components/configuracoes/SolicitacoesSenhaTab';
+import LogsSistemaTab from '../../components/configuracoes/LogsSistemaTab';
+import AlterarSenhaModal from '../../components/configuracoes/AlterarSenhaModal';
 
-type TabType = 'usuarios' | 'pendentes' | 'convites' | 'configuracoes';
+type TabType = 'usuarios' | 'pendentes' | 'solicitacoes' | 'logs' | 'convites' | 'configuracoes';
 
 export default function Configuracoes() {
   const { user } = useAuth();
@@ -14,14 +23,20 @@ export default function Configuracoes() {
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [usuariosPendentes, setUsuariosPendentes] = useState<any[]>([]);
   const [convites, setConvites] = useState<any[]>([]);
+  const [solicitacoes, setSolicitacoes] = useState<SolicitacaoSenha[]>([]);
+  const [logs, setLogs] = useState<LogSistema[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingPendentes, setLoadingPendentes] = useState(false);
   const [loadingConvites, setLoadingConvites] = useState(false);
+  const [loadingSolicitacoes, setLoadingSolicitacoes] = useState(false);
+  const [loadingLogs, setLoadingLogs] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [userToChangePassword, setUserToChangePassword] = useState<{ id: string; name: string; email: string } | null>(null);
   const [userToDelete, setUserToDelete] = useState<{ id: string; name: string } | null>(null);
   const [deleteUserLoading, setDeleteUserLoading] = useState(false);
   const [deleteUserError, setDeleteUserError] = useState<string | null>(null);
@@ -59,14 +74,47 @@ export default function Configuracoes() {
   useEffect(() => {
     if (isAdmin) {
       loadUsuarios();
+      loadSolicitacoes();
       if (activeTab === 'pendentes') {
         loadUsuariosPendentes();
+      }
+      if (activeTab === 'solicitacoes') {
+        loadSolicitacoes();
+      }
+      if (activeTab === 'logs') {
+        loadLogs();
       }
       if (activeTab === 'convites') {
         loadConvites();
       }
     }
   }, [isAdmin, activeTab]);
+
+  const loadSolicitacoes = async () => {
+    try {
+      setLoadingSolicitacoes(true);
+      const data = await listarSolicitacoesSenha();
+      setSolicitacoes(data);
+    } catch (error) {
+      console.error('Erro ao carregar solicitações de senha:', error);
+      setSolicitacoes([]);
+    } finally {
+      setLoadingSolicitacoes(false);
+    }
+  };
+
+  const loadLogs = async () => {
+    try {
+      setLoadingLogs(true);
+      const data = await listarLogsSistema(200);
+      setLogs(data);
+    } catch (error) {
+      console.error('Erro ao carregar logs do sistema:', error);
+      setLogs([]);
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
 
   const loadUsuarios = async () => {
     try {
@@ -395,7 +443,11 @@ export default function Configuracoes() {
     }
   };
 
-  const handleRequestDeleteUser = (usuario: { id: string; name: string }) => {
+  const handleRequestDeleteUser = (usuario: { id: string; name: string; email?: string }) => {
+    if (usuario.email === 'gabrieldesouza100@gmail.com') {
+      alert('O usuário Master (gabrieldesouza100@gmail.com) é o proprietário do sistema e não pode ser excluído.');
+      return;
+    }
     setUserToDelete(usuario);
     setDeleteUserError(null);
     setShowDeleteUserModal(true);
@@ -547,6 +599,33 @@ export default function Configuracoes() {
               )}
             </button>
             <button
+              onClick={() => setActiveTab('solicitacoes')}
+              className={`px-4 py-2 rounded-lg transition-smooth cursor-pointer flex items-center gap-2 relative ${
+                activeTab === 'solicitacoes'
+                  ? 'bg-gradient-primary text-white'
+                  : 'bg-dark-bg text-gray-400 hover:bg-dark-hover hover:text-white'
+              }`}
+            >
+              <i className="ri-key-2-line"></i>
+              <span>Solicitações de Senha</span>
+              {solicitacoes.filter((s) => s.status === 'pendente').length > 0 && (
+                <span className="ml-2 px-2 py-0.5 bg-amber-500 text-black font-bold text-xs rounded-full">
+                  {solicitacoes.filter((s) => s.status === 'pendente').length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('logs')}
+              className={`px-4 py-2 rounded-lg transition-smooth cursor-pointer flex items-center gap-2 ${
+                activeTab === 'logs'
+                  ? 'bg-gradient-primary text-white'
+                  : 'bg-dark-bg text-gray-400 hover:bg-dark-hover hover:text-white'
+              }`}
+            >
+              <i className="ri-shield-check-line"></i>
+              <span>Auditoria e Logs</span>
+            </button>
+            <button
               onClick={() => setActiveTab('convites')}
               className={`px-4 py-2 rounded-lg transition-smooth cursor-pointer flex items-center gap-2 ${
                 activeTab === 'convites'
@@ -649,7 +728,14 @@ export default function Configuracoes() {
                                   </span>
                                 </div>
                                 <div>
-                                  <div className="text-sm font-medium text-white">{usuario.name}</div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-medium text-white">{usuario.name}</span>
+                                    {usuario.email === 'gabrieldesouza100@gmail.com' && (
+                                      <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] rounded font-semibold flex items-center gap-0.5" title="Usuário Master / Proprietário">
+                                        👑 Master
+                                      </span>
+                                    )}
+                                  </div>
                                   {usuario.id === user?.id && (
                                     <div className="text-xs text-primary-teal">Você</div>
                                   )}
@@ -672,15 +758,30 @@ export default function Configuracoes() {
                             <td className="px-6 py-4 whitespace-nowrap text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <button
+                                  type="button"
+                                  onClick={() => {
+                                    setUserToChangePassword({
+                                      id: usuario.id,
+                                      name: usuario.name,
+                                      email: usuario.email,
+                                    });
+                                    setShowChangePasswordModal(true);
+                                  }}
+                                  className="p-2 hover:bg-amber-500/20 text-amber-400 rounded-lg transition-smooth cursor-pointer"
+                                  title="Redefinir Senha Diretamente"
+                                >
+                                  <i className="ri-key-2-line text-lg"></i>
+                                </button>
+                                <button
                                   onClick={() => handleEditUser(usuario)}
                                   className="p-2 hover:bg-primary-teal/20 text-primary-teal rounded-lg transition-smooth cursor-pointer"
                                   title="Editar"
                                 >
                                   <i className="ri-edit-line text-lg"></i>
                                 </button>
-                                {usuario.id !== user?.id && (
+                                {usuario.id !== user?.id && usuario.email !== 'gabrieldesouza100@gmail.com' && (
                                   <button
-                                    onClick={() => handleRequestDeleteUser({ id: usuario.id, name: usuario.name || 'Usuário' })}
+                                    onClick={() => handleRequestDeleteUser({ id: usuario.id, name: usuario.name || 'Usuário', email: usuario.email })}
                                     className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-smooth cursor-pointer"
                                     title="Excluir"
                                   >
@@ -791,6 +892,25 @@ export default function Configuracoes() {
               </>
             )}
           </>
+        )}
+
+        {/* Tab: Solicitações de Senha */}
+        {activeTab === 'solicitacoes' && (
+          <SolicitacoesSenhaTab
+            solicitacoes={solicitacoes}
+            loading={loadingSolicitacoes}
+            adminId={user?.id || ''}
+            onRefresh={loadSolicitacoes}
+          />
+        )}
+
+        {/* Tab: Logs do Sistema / Auditoria */}
+        {activeTab === 'logs' && (
+          <LogsSistemaTab
+            logs={logs}
+            loading={loadingLogs}
+            onRefresh={loadLogs}
+          />
         )}
 
         {/* Tab: Links Compartilháveis */}
@@ -1452,6 +1572,21 @@ export default function Configuracoes() {
             </div>
           </div>
         )}
+
+        {/* Modal Alterar Senha Diretamente por Admin */}
+        <AlterarSenhaModal
+          isOpen={showChangePasswordModal}
+          usuario={userToChangePassword}
+          adminId={user?.id || ''}
+          onClose={() => {
+            setShowChangePasswordModal(false);
+            setUserToChangePassword(null);
+          }}
+          onSuccess={() => {
+            loadUsuarios();
+            loadLogs();
+          }}
+        />
       </div>
     </MainLayout>
   );
