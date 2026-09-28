@@ -1,4 +1,5 @@
 import type { RouteObject } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import NotFound from "../pages/NotFound";
 import Login from "../pages/login/page";
 import Registro from "../pages/registro/page";
@@ -26,6 +27,18 @@ import ParticipanteTermoIndividualPublicoPage from "../pages/public/participante
 import EmailsPage from "../pages/emails/page";
 import AgendaInstitucional from "../pages/agenda/Institucional";
 import AgendaArtistas from "../pages/agenda/Artistas";
+import CrmPessoas from "../pages/crm/contatos/Pessoas";
+import CrmOrganizacoes from "../pages/crm/contatos/Organizacoes";
+import CrmFunil from "../pages/crm/negocios/Funil";
+import CrmNegociosLista from "../pages/crm/negocios/Lista";
+import CrmNegocioDetalhe from "../pages/crm/negocios/Detalhe";
+import CrmFunis from "../pages/crm/configuracoes/Funis";
+import CrmProdutos from "../pages/crm/configuracoes/Produtos";
+import CrmCamposPersonalizados from "../pages/crm/configuracoes/CamposPersonalizados";
+import CrmAtividades from "../pages/crm/atividades/Lista";
+import CrmCalendario from "../pages/crm/atividades/Calendario";
+import CrmLeads from "../pages/crm/leads/Caixa";
+import CrmInsights from "../pages/crm/insights/Painel";
 
 const routes: RouteObject[] = [
   {
@@ -155,6 +168,70 @@ const routes: RouteObject[] = [
   {
     path: "/covers",
     element: <CoversPage />,
+  },
+  {
+    path: "/crm",
+    element: <Navigate to="/crm/negocios/funil" replace />,
+  },
+  {
+    path: "/crm/negocios",
+    element: <Navigate to="/crm/negocios/funil" replace />,
+  },
+  {
+    path: "/crm/negocios/funil",
+    element: <CrmFunil />,
+  },
+  {
+    path: "/crm/negocios/lista",
+    element: <CrmNegociosLista />,
+  },
+  {
+    path: "/crm/negocios/:id",
+    element: <CrmNegocioDetalhe />,
+  },
+  {
+    path: "/crm/atividades",
+    element: <Navigate to="/crm/atividades/lista" replace />,
+  },
+  {
+    path: "/crm/atividades/lista",
+    element: <CrmAtividades />,
+  },
+  {
+    path: "/crm/atividades/calendario",
+    element: <CrmCalendario />,
+  },
+  {
+    path: "/crm/leads",
+    element: <CrmLeads />,
+  },
+  {
+    path: "/crm/insights",
+    element: <CrmInsights />,
+  },
+  {
+    path: "/crm/configuracoes/funis",
+    element: <CrmFunis />,
+  },
+  {
+    path: "/crm/configuracoes/produtos",
+    element: <CrmProdutos />,
+  },
+  {
+    path: "/crm/configuracoes/campos",
+    element: <CrmCamposPersonalizados />,
+  },
+  {
+    path: "/crm/contatos",
+    element: <Navigate to="/crm/contatos/pessoas" replace />,
+  },
+  {
+    path: "/crm/contatos/pessoas",
+    element: <CrmPessoas />,
+  },
+  {
+    path: "/crm/contatos/organizacoes",
+    element: <CrmOrganizacoes />,
   },
 
   {

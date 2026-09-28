@@ -28,6 +28,22 @@ const menuItems: MenuItem[] = [
       { path: '/agenda/artistas', icon: 'ri-calendar-check-line', label: 'Agenda Artistas', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
     ],
   },
+  {
+    icon: 'ri-contacts-book-line',
+    label: 'CRM',
+    roles: ['admin', 'executivo', 'ar', 'operador'],
+    subItems: [
+      { path: '/crm/negocios/funil', icon: 'ri-layout-column-line', label: 'Negócios', roles: ['admin', 'executivo', 'ar', 'operador'] },
+      { path: '/crm/leads', icon: 'ri-inbox-line', label: 'Leads', roles: ['admin', 'executivo', 'ar', 'operador'] },
+      { path: '/crm/atividades/lista', icon: 'ri-calendar-check-line', label: 'Atividades', roles: ['admin', 'executivo', 'ar', 'operador'] },
+      { path: '/crm/contatos/pessoas', icon: 'ri-user-line', label: 'Pessoas', roles: ['admin', 'executivo', 'ar', 'operador'] },
+      { path: '/crm/contatos/organizacoes', icon: 'ri-building-line', label: 'Organizações', roles: ['admin', 'executivo', 'ar', 'operador'] },
+      { path: '/crm/insights', icon: 'ri-line-chart-line', label: 'Insights', roles: ['admin', 'executivo', 'ar', 'operador'] },
+      { path: '/crm/configuracoes/funis', icon: 'ri-settings-3-line', label: 'Funis e etapas', roles: ['admin', 'executivo'] },
+      { path: '/crm/configuracoes/produtos', icon: 'ri-price-tag-3-line', label: 'Produtos', roles: ['admin', 'executivo'] },
+      { path: '/crm/configuracoes/campos', icon: 'ri-input-field', label: 'Campos personalizados', roles: ['admin', 'executivo'] },
+    ],
+  },
   { path: '/artistas', icon: 'ri-user-star-line', label: 'Artistas', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/projetos', icon: 'ri-music-2-line', label: 'Projetos', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
   { path: '/estudio', icon: 'ri-mic-line', label: 'Estúdio', roles: ['admin', 'executivo', 'ar', 'producao', 'operador'] },
@@ -55,6 +71,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>(() => {
     return {
       Agendas: location.pathname.startsWith('/agenda'),
+      CRM: location.pathname.startsWith('/crm'),
     };
   });
 
@@ -62,6 +79,9 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   useEffect(() => {
     if (location.pathname.startsWith('/agenda')) {
       setExpandedMenus((prev) => ({ ...prev, Agendas: true }));
+    }
+    if (location.pathname.startsWith('/crm')) {
+      setExpandedMenus((prev) => ({ ...prev, CRM: true }));
     }
   }, [location.pathname]);
 
