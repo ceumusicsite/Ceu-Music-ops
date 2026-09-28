@@ -366,41 +366,27 @@ export default function Configuracoes() {
         return;
       }
 
-      // Criar usuário no Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email.trim(),
-        password: formData.password,
-        options: {
-          data: {
-            name: formData.name.trim()
-          }
-        }
+      // A criação roda na Edge Function com service role. Chamar signUp aqui
+      // trocaria a sessão do admin pela do usuário recém-criado, porque a
+      // confirmação de e-mail está desligada e o signUp já devolve sessão.
+      const { data: resultado, error: fnError } = await supabase.functions.invoke('create-user', {
+        body: {
+          email: formData.email.trim(),
+          password: formData.password,
+          name: formData.name.trim(),
+          role: formData.role,
+        },
       });
 
-      if (authError) throw authError;
-
-      if (authData.user) {
-        // Criar perfil na tabela users
-        const { error: profileError } = await supabase
-          .from('users')
-          .upsert([{
-            id: authData.user.id,
-            name: formData.name.trim(),
-            email: formData.email.trim(),
-            role: formData.role,
-            status: 'approved',
-            avatar: null
-          }], {
-            onConflict: 'id'
-          });
-
-        if (profileError) throw profileError;
-
-        await loadUsuarios();
-        setShowModal(false);
-        resetForm();
-        alert('Usuário criado com sucesso!');
+      if (fnError) {
+        const detalhe = (resultado as { error?: string } | null)?.error;
+        throw new Error(detalhe || fnError.message);
       }
+
+      await loadUsuarios();
+      setShowModal(false);
+      resetForm();
+      alert('Usuário criado com sucesso!');
     } catch (error: any) {
       console.error('Erro ao criar usuário:', error);
       alert(`Erro ao criar usuário: ${error.message || 'Verifique o console para mais detalhes.'}`);

@@ -87,9 +87,12 @@ export default function Registro() {
       if (signUpError) throw signUpError;
 
       if (data.user) {
-        // Determinar status e role baseado no token
-        const userStatus = token ? 'pending' : 'approved';
-        const userRole = token ? 'operador' : 'admin'; // Usuários via convite começam como operador
+        // Todo auto-cadastro nasce como operador pendente, com ou sem convite.
+        // Antes, cadastrar-se sem token dava role 'admin' já aprovado: qualquer
+        // pessoa que abrisse /registro virava administrador. Promover a outro
+        // papel agora é decisão de um admin, em Configurações.
+        const userStatus = 'pending';
+        const userRole = 'operador';
 
         // Criar perfil do usuário na tabela users usando upsert para evitar conflitos
         const { error: profileError } = await supabase
@@ -126,17 +129,10 @@ export default function Registro() {
           }
         }
 
-        if (token) {
-          setSuccess(true);
-          setTimeout(() => {
-            navigate('/login');
-          }, 3000);
-        } else {
-          setSuccess(true);
-          setTimeout(() => {
-            navigate('/login');
-          }, 2000);
-        }
+        setSuccess(true);
+        setTimeout(() => {
+          navigate('/login');
+        }, 3000);
       }
     } catch (err: any) {
       console.error('Erro ao criar usuário:', err);
@@ -158,7 +154,7 @@ export default function Registro() {
           />
           <h1 className="text-3xl font-bold text-white mb-2">Céu Music</h1>
           <p className="text-gray-400">
-            {token ? 'Cadastro via convite' : 'Criar conta de administrador'}
+            {token ? 'Cadastro via convite' : 'Criar conta'}
           </p>
         </div>
 
@@ -195,7 +191,8 @@ export default function Registro() {
 
           {success && (
             <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm">
-              Usuário criado com sucesso! Redirecionando para login...
+              Cadastro criado! Um administrador precisa aprovar seu acesso antes do
+              primeiro login. Redirecionando...
             </div>
           )}
           
@@ -249,7 +246,7 @@ export default function Registro() {
                 disabled={loading || success || (token && !tokenValid)}
                 className="w-full py-3 bg-gradient-primary text-white font-medium rounded-lg hover:opacity-90 transition-smooth cursor-pointer disabled:opacity-50 whitespace-nowrap"
               >
-                {loading ? 'Criando usuário...' : success ? (token ? 'Cadastro realizado! Aguardando aprovação...' : 'Usuário criado!') : token ? 'Criar Conta' : 'Criar Usuário Admin'}
+                {loading ? 'Criando usuário...' : success ? 'Cadastro realizado! Aguardando aprovação...' : 'Criar Conta'}
               </button>
             </form>
 
