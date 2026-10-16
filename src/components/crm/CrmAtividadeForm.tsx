@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import CrmModal from './CrmModal';
-import { TIPOS_ATIVIDADE, type EntradaAtividade } from '../../services/crm/activities';
+import {
+  TIPOS_ATIVIDADE,
+  type EntradaAtividade,
+  type FrequenciaRecorrencia,
+} from '../../services/crm/activities';
+import { formatarData } from '../../services/crm/formato';
 import type { OpcaoUsuario } from '../../services/crm/usuarios';
 import type { CrmAtividade, TipoAtividade } from '../../services/crm/types';
 
@@ -155,6 +160,68 @@ export default function CrmAtividadeForm({
           </div>
         </div>
 
+        {/* Recorrência na área de data */}
+        <div className="md:col-span-2 rounded-lg border border-dark-border bg-dark-bg/60 p-3 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className={ROTULO} htmlFor="atividade-recorrencia">
+                <i className="ri-repeat-line mr-1 text-primary-teal" />
+                Recorrência
+              </label>
+              <select
+                id="atividade-recorrencia"
+                className={CAMPO}
+                value={form.recorrencia ?? 'nenhuma'}
+                onChange={(e) => alterar('recorrencia', e.target.value as FrequenciaRecorrencia)}
+              >
+                <option value="nenhuma">Não se repete</option>
+                <option value="diaria">Todos os dias (Diária)</option>
+                <option value="dias_uteis">Dias úteis (Segunda a Sexta)</option>
+                <option value="semanal">Semanalmente</option>
+                <option value="quinzenal">A cada 2 semanas (Quinzenal)</option>
+                <option value="mensal">Mensalmente</option>
+              </select>
+            </div>
+
+            {form.recorrencia && form.recorrencia !== 'nenhuma' && (
+              <div>
+                <label className={ROTULO} htmlFor="atividade-repeticoes">
+                  <i className="ri-calendar-check-line mr-1 text-primary-teal" />
+                  Repetições
+                </label>
+                <select
+                  id="atividade-repeticoes"
+                  className={CAMPO}
+                  value={form.recorrencia_repeticoes ?? 10}
+                  onChange={(e) => alterar('recorrencia_repeticoes', Number(e.target.value))}
+                >
+                  <option value={5}>5 repetições</option>
+                  <option value={10}>10 repetições (padrão)</option>
+                  <option value={15}>15 repetições</option>
+                  <option value={20}>20 repetições</option>
+                  <option value={30}>30 repetições</option>
+                  <option value={60}>60 repetições</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {form.recorrencia && form.recorrencia !== 'nenhuma' && (
+            <div className="rounded-md bg-primary-teal/10 px-3 py-2 text-xs text-primary-teal flex items-center gap-2">
+              <i className="ri-information-line text-sm shrink-0" />
+              <span>
+                {form.data ? (
+                  <>
+                    Serão geradas <strong>{form.recorrencia_repeticoes ?? 10}</strong> tarefas com recorrência <strong>{obterRotuloRecorrencia(form.recorrencia)}</strong> a partir de <strong>{formatarData(form.data)}</strong>.
+                  </>
+                ) : (
+                  'Defina a data acima para gerar as repetições automaticamente.'
+                )}
+              </span>
+            </div>
+          )}
+        </div>
+
         {!vinculoFixo && (
           <>
             <div>
@@ -262,6 +329,8 @@ function estadoInicial(
       deal_id: vinculoFixo?.deal_id ?? null,
       person_id: vinculoFixo?.person_id ?? null,
       organizacao_id: vinculoFixo?.organizacao_id ?? null,
+      recorrencia: 'nenhuma',
+      recorrencia_repeticoes: 10,
     };
   }
 
@@ -277,5 +346,25 @@ function estadoInicial(
     deal_id: atividade.deal_id ?? null,
     person_id: atividade.person_id ?? null,
     organizacao_id: atividade.organizacao_id ?? null,
+    recorrencia: (atividade.recorrencia as FrequenciaRecorrencia) ?? 'nenhuma',
+    recorrencia_repeticoes: 10,
   };
 }
+
+function obterRotuloRecorrencia(frequencia?: FrequenciaRecorrencia | null): string {
+  switch (frequencia) {
+    case 'diaria':
+      return 'diária (todos os dias)';
+    case 'dias_uteis':
+      return 'em dias úteis (segunda a sexta)';
+    case 'semanal':
+      return 'semanal';
+    case 'quinzenal':
+      return 'quinzenal';
+    case 'mensal':
+      return 'mensal';
+    default:
+      return '';
+  }
+}
+

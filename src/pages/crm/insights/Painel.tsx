@@ -4,6 +4,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Legend,
   ResponsiveContainer,
   Tooltip,
@@ -13,7 +14,7 @@ import {
 import CrmLayout from '../../../components/crm/CrmLayout';
 import { CRM_SUBITENS_INSIGHTS } from '../../../components/crm/navegacao';
 import { listarEtapas, listarPipelines } from '../../../services/crm/deals';
-import { carregarInsights, type DadosInsights } from '../../../services/crm/insights';
+import { carregarInsights, type DadosInsights, type PontoFunil } from '../../../services/crm/insights';
 import { formatarMoeda } from '../../../services/crm/formato';
 import type { CrmPipeline } from '../../../services/crm/types';
 
@@ -146,20 +147,53 @@ export default function CrmInsightsPage() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <Painel titulo="Funil de conversão" descricao="Negócios abertos por etapa">
+            <Painel
+              titulo="Funil de conversão"
+              descricao="Total acumulado de pessoas que passaram por cada etapa"
+            >
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={dados.funil} layout="vertical" margin={{ left: 8, right: 16 }}>
+                <BarChart data={dados.funil} layout="vertical" margin={{ left: 8, right: 32 }}>
                   <CartesianGrid stroke={GRADE} horizontal={false} />
                   <XAxis type="number" allowDecimals={false} {...EIXO} />
                   <YAxis type="category" dataKey="etapa" width={130} {...EIXO} />
                   <Tooltip
-                    contentStyle={ESTILO_TOOLTIP}
                     cursor={{ fill: '#ffffff08' }}
-                    formatter={(valor: number, nome) =>
-                      nome === 'valor' ? formatarMoeda(valor) : valor
-                    }
+                    content={({ active, payload }) => {
+                      if (!active || !payload || !payload.length) return null;
+                      const ponto = payload[0].payload as PontoFunil;
+                      return (
+                        <div style={ESTILO_TOOLTIP} className="p-3 text-xs space-y-1 shadow-xl">
+                          <p className="font-semibold text-white text-sm mb-1">{ponto.etapa}</p>
+                          <p className="text-primary-teal font-medium">
+                            Total que passaram: <strong className="text-white">{ponto.quantidade} {ponto.quantidade === 1 ? 'pessoa' : 'pessoas'}</strong>
+                          </p>
+                          {ponto.negocios !== undefined && ponto.negocios !== ponto.quantidade && (
+                            <p className="text-gray-300">
+                              Negócios relacionados: <strong className="text-white">{ponto.negocios}</strong>
+                            </p>
+                          )}
+                          <p className="text-gray-400">
+                            Parados nesta etapa: <span className="text-gray-200">{ponto.atuais ?? 0}</span>
+                          </p>
+                          <p className="text-gray-400">
+                            Avançaram de etapa: <span className="text-gray-200">{ponto.avancaram ?? 0}</span>
+                          </p>
+                          {ponto.taxa !== undefined && (
+                            <p className="text-gray-400">
+                              Conversão do funil: <span className="text-emerald-400 font-medium">{ponto.taxa.toFixed(0)}%</span>
+                            </p>
+                          )}
+                          {ponto.valor > 0 && (
+                            <p className="text-gray-400">
+                              Valor acumulado: <span className="text-white">{formatarMoeda(ponto.valor)}</span>
+                            </p>
+                          )}
+                        </div>
+                      );
+                    }}
                   />
-                  <Bar dataKey="quantidade" name="Negócios" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="quantidade" name="Pessoas que passaram" radius={[0, 4, 4, 0]}>
+                    <LabelList dataKey="quantidade" position="right" fill="#9ca3af" fontSize={11} offset={8} />
                     {dados.funil.map((_, indice) => (
                       <Cell key={indice} fill={TEAL} fillOpacity={1 - indice * 0.12} />
                     ))}

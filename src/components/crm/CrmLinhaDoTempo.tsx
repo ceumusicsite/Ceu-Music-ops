@@ -440,11 +440,17 @@ function ListaAtividades({
                 >
                   {atividade.assunto}
                 </button>
-                {(atividade.data || atividade.dono_nome) && (
-                  <p className="mt-0.5 text-xs text-gray-500">
-                    {atividade.data && formatarData(atividade.data)}
-                    {atividade.hora ? ` · ${atividade.hora}` : ''}
-                    {atividade.dono_nome ? ` · ${atividade.dono_nome}` : ''}
+                {(atividade.data || atividade.dono_nome || (atividade.recorrencia && atividade.recorrencia !== 'nenhuma')) && (
+                  <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
+                    {atividade.data && <span>{formatarData(atividade.data)}</span>}
+                    {atividade.hora && <span>· {atividade.hora}</span>}
+                    {atividade.recorrencia && atividade.recorrencia !== 'nenhuma' && (
+                      <span className="inline-flex items-center gap-1 rounded bg-primary-teal/15 px-1.5 py-0.5 text-[10px] font-medium text-primary-teal">
+                        <i className="ri-repeat-line" />
+                        <span className="capitalize">{atividade.recorrencia.replace('_', ' ')}</span>
+                      </span>
+                    )}
+                    {atividade.dono_nome && <span>· {atividade.dono_nome}</span>}
                   </p>
                 )}
               </div>

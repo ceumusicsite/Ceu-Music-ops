@@ -151,6 +151,9 @@ export default function CrmCalendarioPage() {
                     const conteudo = (
                       <>
                         <i className={`${tipo.icone} shrink-0`} />
+                        {atividade.recorrencia && atividade.recorrencia !== 'nenhuma' && (
+                          <i className="ri-repeat-line shrink-0 text-[10px] opacity-80" title="Atividade recorrente" />
+                        )}
                         <span className="truncate">
                           {atividade.hora ? `${atividade.hora} ` : ''}
                           {atividade.assunto}

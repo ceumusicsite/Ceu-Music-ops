@@ -184,6 +184,8 @@ export interface CrmAtividade {
   person_nome?: string | null;
   organizacao_id?: string | null;
   organizacao_nome?: string | null;
+  recorrencia?: string | null;
+  recorrencia_pai_id?: string | null;
   created_at: string;
   updated_at: string;
 }

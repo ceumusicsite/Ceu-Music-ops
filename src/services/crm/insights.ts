@@ -15,7 +15,11 @@ export interface ResumoInsights {
 export interface PontoFunil {
   etapa: string;
   quantidade: number;
+  negocios: number;
+  atuais: number;
+  avancaram: number;
   valor: number;
+  taxa: number;
 }
 
 export interface PontoMes {
@@ -65,13 +69,22 @@ export async function carregarInsights(
   pipelineId: string,
   etapas: CrmEtapa[]
 ): Promise<DadosInsights> {
-  const [{ data: negocios, error: erroNegocios }, { data: atividades, error: erroAtividades }] =
+  const promessaLogs = supabase
+    .from('crm_activity_log')
+    .select('entidade_id, valor_anterior, valor_novo')
+    .eq('entidade', 'negocio')
+    .eq('acao', 'mudou_etapa')
+    .then((r) => r.data ?? [])
+    .catch(() => []);
+
+  const [{ data: negocios, error: erroNegocios }, { data: atividades, error: erroAtividades }, logs] =
     await Promise.all([
       supabase
         .from('crm_deals')
-        .select('valor, status, stage_id, dono_id, created_at, data_fechamento, dono:users!crm_deals_dono_id_fkey ( name )')
+        .select('id, valor, status, stage_id, person_id, dono_id, created_at, data_fechamento, dono:users!crm_deals_dono_id_fkey ( name )')
         .eq('pipeline_id', pipelineId),
       supabase.from('crm_activities').select('tipo, concluida'),
+      promessaLogs,
     ]);
 
   if (erroNegocios) throw erroNegocios;
@@ -104,12 +117,86 @@ export async function carregarInsights(
     cicloMedioDias: ciclos.length === 0 ? null : Math.round(soma(ciclos) / ciclos.length),
   };
 
-  const funil: PontoFunil[] = etapas.map((etapa) => {
-    const daEtapa = abertos.filter((n) => n.stage_id === etapa.id);
+  // Garante a ordenação correta das etapas da esteira
+  const etapasOrdenadas = [...etapas].sort((a, b) => a.ordem - b.ordem);
+
+  const indicePorId = new Map<string, number>();
+  const indicePorNome = new Map<string, number>();
+  etapasOrdenadas.forEach((etapa, idx) => {
+    indicePorId.set(etapa.id, idx);
+    indicePorNome.set(etapa.nome.trim().toLowerCase(), idx);
+  });
+
+  const logsPorNegocio: Record<string, Array<{ valor_anterior: string | null; valor_novo: string | null }>> = {};
+  for (const log of (logs ?? [])) {
+    if (log?.entidade_id) {
+      (logsPorNegocio[log.entidade_id] ??= []).push(log);
+    }
+  }
+
+  // Negócios ativos, ganhos ou perdidos deste funil
+  const negociosValidos = lista.filter((n) => n.status !== 'arquivado');
+
+  // Determina o índice máximo de etapa já alcançado por cada negócio
+  const negociosComAlcance = negociosValidos.map((n) => {
+    const indiceAtual = indicePorId.get(n.stage_id) ?? 0;
+    let maxIndice = indiceAtual;
+
+    const eventos = logsPorNegocio[n.id] ?? [];
+    for (const ev of eventos) {
+      if (ev.valor_novo) {
+        const idxNovo = indicePorNome.get(ev.valor_novo.trim().toLowerCase());
+        if (idxNovo !== undefined && idxNovo > maxIndice) maxIndice = idxNovo;
+      }
+      if (ev.valor_anterior) {
+        const idxAnt = indicePorNome.get(ev.valor_anterior.trim().toLowerCase());
+        if (idxAnt !== undefined && idxAnt > maxIndice) maxIndice = idxAnt;
+      }
+    }
+
+    // Identificador único da pessoa/contato (person_id ou id do próprio negócio caso avulso)
+    const pessoaKey = n.person_id ? `p_${n.person_id}` : `d_${n.id}`;
+
+    return {
+      ...n,
+      indiceAtual,
+      maxIndice,
+      pessoaKey,
+    };
+  });
+
+  const totalTopo = (() => {
+    const dealsTopo = negociosComAlcance.filter((n) => n.maxIndice >= 0);
+    const pessoasTopo = new Set(dealsTopo.map((n) => n.pessoaKey));
+    return pessoasTopo.size || 1;
+  })();
+
+  const funil: PontoFunil[] = etapasOrdenadas.map((etapa, idx) => {
+    // Negócios que chegaram ou passaram por esta etapa
+    const quePassaram = negociosComAlcance.filter((n) => n.maxIndice >= idx);
+    const pessoasQuePassaram = new Set(quePassaram.map((n) => n.pessoaKey));
+
+    // Pessoas atualmente paradas nesta etapa (abertas)
+    const atuais = quePassaram.filter((n) => n.indiceAtual === idx && n.status === 'aberto');
+    const pessoasAtuais = new Set(atuais.map((n) => n.pessoaKey));
+
+    // Pessoas que avançaram para etapas seguintes ou já ganharam
+    const avancaram = quePassaram.filter(
+      (n) => n.maxIndice >= idx && (n.indiceAtual > idx || n.status === 'ganho')
+    );
+    const pessoasAvancaram = new Set(avancaram.map((n) => n.pessoaKey));
+
+    const totalPessoas = pessoasQuePassaram.size;
+    const taxa = (totalPessoas / totalTopo) * 100;
+
     return {
       etapa: etapa.nome,
-      quantidade: daEtapa.length,
-      valor: soma(daEtapa.map((n) => Number(n.valor ?? 0))),
+      quantidade: totalPessoas,
+      negocios: quePassaram.length,
+      atuais: pessoasAtuais.size,
+      avancaram: pessoasAvancaram.size,
+      valor: soma(quePassaram.map((n) => Number(n.valor ?? 0))),
+      taxa,
     };
   });
 

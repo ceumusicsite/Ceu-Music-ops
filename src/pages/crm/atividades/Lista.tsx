@@ -230,6 +230,15 @@ export default function CrmAtividadesPage() {
                           {atividade.hora ? ` · ${atividade.hora}` : ''}
                         </span>
                       )}
+                      {atividade.recorrencia && atividade.recorrencia !== 'nenhuma' && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded bg-primary-teal/15 px-1.5 py-0.5 text-[11px] font-medium text-primary-teal"
+                          title={`Recorrência: ${atividade.recorrencia}`}
+                        >
+                          <i className="ri-repeat-line text-xs" />
+                          <span className="capitalize">{atividade.recorrencia.replace('_', ' ')}</span>
+                        </span>
+                      )}
                       {atividade.deal_id && atividade.deal_titulo && (
                         <Link
                           to={`/crm/negocios/${atividade.deal_id}`}

@@ -42,6 +42,8 @@ function mapAtividade(row: any): CrmAtividade {
     person_nome: row.pessoa?.nome ?? null,
     organizacao_id: row.organizacao_id,
     organizacao_nome: row.organizacao?.nome ?? null,
+    recorrencia: row.recorrencia ?? 'nenhuma',
+    recorrencia_pai_id: row.recorrencia_pai_id ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -74,6 +76,14 @@ export async function listarAtividadesDe(
   return (data ?? []).map(mapAtividade);
 }
 
+export type FrequenciaRecorrencia =
+  | 'nenhuma'
+  | 'diaria'
+  | 'dias_uteis'
+  | 'semanal'
+  | 'quinzenal'
+  | 'mensal';
+
 export interface EntradaAtividade {
   tipo: TipoAtividade;
   assunto: string;
@@ -86,16 +96,117 @@ export interface EntradaAtividade {
   deal_id?: string | null;
   person_id?: string | null;
   organizacao_id?: string | null;
+  recorrencia?: FrequenciaRecorrencia | null;
+  recorrencia_pai_id?: string | null;
+  recorrencia_repeticoes?: number | null;
+}
+
+export function calcularDatasRecorrencia(
+  dataInicialStr: string,
+  frequencia: FrequenciaRecorrencia,
+  quantidade: number
+): string[] {
+  if (frequencia === 'nenhuma' || quantidade <= 1) return [];
+
+  const datas: string[] = [];
+  const [ano, mes, dia] = dataInicialStr.split('-').map(Number);
+  const atual = new Date(ano, mes - 1, dia, 12, 0, 0);
+
+  const total = Math.min(Math.max(quantidade, 1), 60);
+
+  while (datas.length < total - 1) {
+    if (frequencia === 'diaria') {
+      atual.setDate(atual.getDate() + 1);
+      datas.push(formatarDataISO(atual));
+    } else if (frequencia === 'dias_uteis') {
+      atual.setDate(atual.getDate() + 1);
+      const diaSemana = atual.getDay(); // 0 = Dom, 6 = Sab
+      if (diaSemana !== 0 && diaSemana !== 6) {
+        datas.push(formatarDataISO(atual));
+      }
+    } else if (frequencia === 'semanal') {
+      atual.setDate(atual.getDate() + 7);
+      datas.push(formatarDataISO(atual));
+    } else if (frequencia === 'quinzenal') {
+      atual.setDate(atual.getDate() + 14);
+      datas.push(formatarDataISO(atual));
+    } else if (frequencia === 'mensal') {
+      atual.setMonth(atual.getMonth() + 1);
+      datas.push(formatarDataISO(atual));
+    }
+  }
+
+  return datas;
+}
+
+function formatarDataISO(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export async function criarAtividade(entrada: EntradaAtividade): Promise<void> {
-  const { error } = await supabase.from('crm_activities').insert(normalizar(entrada));
+  const { recorrencia_repeticoes, ...dadosAtividade } = entrada;
+  const frequencia = entrada.recorrencia ?? 'nenhuma';
+
+  const { data: pai, error } = await supabase
+    .from('crm_activities')
+    .insert(sanitizarParaBanco(dadosAtividade))
+    .select('id')
+    .single();
+
   if (error) throw error;
+
+  // Se tiver recorrência configurada e data inicial, gera as repetições
+  if (frequencia !== 'nenhuma' && entrada.data && pai?.id) {
+    const qtd = Math.min(Math.max(Number(recorrencia_repeticoes) || 10, 1), 60);
+    const proximasDatas = calcularDatasRecorrencia(entrada.data, frequencia, qtd);
+
+    if (proximasDatas.length > 0) {
+      const repeticoes = proximasDatas.map((dt) => ({
+        ...sanitizarParaBanco(dadosAtividade),
+        data: dt,
+        recorrencia: frequencia,
+        recorrencia_pai_id: pai.id,
+      }));
+
+      const { error: erroRepeticoes } = await supabase.from('crm_activities').insert(repeticoes);
+      if (erroRepeticoes) {
+        console.error('Erro ao gerar atividades recorrentes:', erroRepeticoes);
+      }
+    }
+  }
 }
 
 export async function atualizarAtividade(id: string, entrada: EntradaAtividade): Promise<void> {
-  const { error } = await supabase.from('crm_activities').update(normalizar(entrada)).eq('id', id);
+  const { recorrencia_repeticoes, ...dadosAtividade } = entrada;
+  const frequencia = entrada.recorrencia ?? 'nenhuma';
+
+  const { error } = await supabase.from('crm_activities').update(sanitizarParaBanco(dadosAtividade)).eq('id', id);
   if (error) throw error;
+
+  if (frequencia !== 'nenhuma' && entrada.data) {
+    const { count } = await supabase
+      .from('crm_activities')
+      .select('id', { count: 'exact', head: true })
+      .eq('recorrencia_pai_id', id);
+
+    if (!count || count === 0) {
+      const qtd = Math.min(Math.max(Number(recorrencia_repeticoes) || 10, 1), 60);
+      const proximasDatas = calcularDatasRecorrencia(entrada.data, frequencia, qtd);
+
+      if (proximasDatas.length > 0) {
+        const repeticoes = proximasDatas.map((dt) => ({
+          ...sanitizarParaBanco(dadosAtividade),
+          data: dt,
+          recorrencia: frequencia,
+          recorrencia_pai_id: id,
+        }));
+        await supabase.from('crm_activities').insert(repeticoes);
+      }
+    }
+  }
 }
 
 export async function alternarConcluida(id: string, concluida: boolean): Promise<void> {
@@ -193,10 +304,15 @@ function somarDias(data: Date, dias: number): Date {
   return nova;
 }
 
-function normalizar(entrada: EntradaAtividade) {
+function sanitizarParaBanco(entrada: Partial<EntradaAtividade>) {
+  const { recorrencia_repeticoes, ...resto } = entrada;
   const normalizado: Record<string, unknown> = {};
-  for (const [chave, valor] of Object.entries(entrada)) {
+  for (const [chave, valor] of Object.entries(resto)) {
     normalizado[chave] = valor === '' ? null : valor;
   }
   return normalizado;
+}
+
+function normalizar(entrada: EntradaAtividade) {
+  return sanitizarParaBanco(entrada);
 }

@@ -7,6 +7,8 @@ import {
   type CrmCampoPersonalizado,
 } from '../../services/crm/customFields';
 import type { EntradaNegocio } from '../../services/crm/deals';
+import { criarPessoa } from '../../services/crm/persons';
+import { criarOrganizacao } from '../../services/crm/organizations';
 import type { OpcaoUsuario } from '../../services/crm/usuarios';
 import type { CrmEtapa, CrmNegocio } from '../../services/crm/types';
 
@@ -45,6 +47,10 @@ export default function CrmNegocioForm({
   const [form, setForm] = useState<EntradaNegocio>(() => estadoInicial(null, pipelineId, etapas, etapaInicialId));
   const [erro, setErro] = useState('');
   const [campos, setCampos] = useState<CrmCampoPersonalizado[]>([]);
+  const [criandoPessoa, setCriandoPessoa] = useState(false);
+  const [novaPessoaNome, setNovaPessoaNome] = useState('');
+  const [criandoOrg, setCriandoOrg] = useState(false);
+  const [novaOrgNome, setNovaOrgNome] = useState('');
 
   useEffect(() => {
     listarCampos('negocio')
@@ -56,13 +62,17 @@ export default function CrmNegocioForm({
     if (aberto) {
       setForm(estadoInicial(negocio, pipelineId, etapas, etapaInicialId));
       setErro('');
+      setCriandoPessoa(false);
+      setNovaPessoaNome('');
+      setCriandoOrg(false);
+      setNovaOrgNome('');
     }
   }, [aberto, negocio, pipelineId, etapas, etapaInicialId]);
 
   const alterar = (campo: keyof EntradaNegocio, valor: unknown) =>
     setForm((atual) => ({ ...atual, [campo]: valor }));
 
-  const enviar = () => {
+  const enviar = async () => {
     if (form.titulo.trim() === '') {
       setErro('O título do negócio é obrigatório.');
       return;
@@ -78,7 +88,36 @@ export default function CrmNegocioForm({
       return;
     }
 
-    onSalvar({ ...form, titulo: form.titulo.trim() });
+    let orgIdFinal = form.organizacao_id;
+    if (criandoOrg && novaOrgNome.trim()) {
+      try {
+        const criada = await criarOrganizacao({ nome: novaOrgNome.trim() });
+        orgIdFinal = criada.id;
+      } catch (err) {
+        console.error('Erro ao criar organização:', err);
+      }
+    }
+
+    let personIdFinal = form.person_id;
+    if (criandoPessoa && novaPessoaNome.trim()) {
+      try {
+        const criada = await criarPessoa({
+          nome: novaPessoaNome.trim(),
+          organizacao_id: orgIdFinal,
+          dono_id: form.dono_id,
+        });
+        personIdFinal = criada.id;
+      } catch (err) {
+        console.error('Erro ao criar pessoa:', err);
+      }
+    }
+
+    onSalvar({
+      ...form,
+      titulo: form.titulo.trim(),
+      organizacao_id: orgIdFinal,
+      person_id: personIdFinal,
+    });
   };
 
   return (
@@ -152,33 +191,77 @@ export default function CrmNegocioForm({
         </div>
 
         <div>
-          <label className={ROTULO} htmlFor="negocio-org">Organização</label>
-          <select
-            id="negocio-org"
-            className={CAMPO}
-            value={form.organizacao_id ?? ''}
-            onChange={(e) => alterar('organizacao_id', e.target.value || null)}
-          >
-            <option value="">—</option>
-            {organizacoes.map((org) => (
-              <option key={org.id} value={org.id}>{org.nome}</option>
-            ))}
-          </select>
+          <div className="mb-1 flex items-center justify-between">
+            <label className={ROTULO} htmlFor="negocio-org">Organização</label>
+            <button
+              type="button"
+              onClick={() => {
+                setCriandoOrg(!criandoOrg);
+                setNovaOrgNome('');
+              }}
+              className="text-xs text-primary-teal hover:underline"
+            >
+              {criandoOrg ? 'Selecionar existente' : '+ Nova organização'}
+            </button>
+          </div>
+          {criandoOrg ? (
+            <input
+              id="negocio-org-novo"
+              className={CAMPO}
+              placeholder="Nome da organização…"
+              value={novaOrgNome}
+              onChange={(e) => setNovaOrgNome(e.target.value)}
+            />
+          ) : (
+            <select
+              id="negocio-org"
+              className={CAMPO}
+              value={form.organizacao_id ?? ''}
+              onChange={(e) => alterar('organizacao_id', e.target.value || null)}
+            >
+              <option value="">—</option>
+              {organizacoes.map((org) => (
+                <option key={org.id} value={org.id}>{org.nome}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div>
-          <label className={ROTULO} htmlFor="negocio-pessoa">Pessoa de contato</label>
-          <select
-            id="negocio-pessoa"
-            className={CAMPO}
-            value={form.person_id ?? ''}
-            onChange={(e) => alterar('person_id', e.target.value || null)}
-          >
-            <option value="">—</option>
-            {pessoas.map((pessoa) => (
-              <option key={pessoa.id} value={pessoa.id}>{pessoa.nome}</option>
-            ))}
-          </select>
+          <div className="mb-1 flex items-center justify-between">
+            <label className={ROTULO} htmlFor="negocio-pessoa">Pessoa de contato</label>
+            <button
+              type="button"
+              onClick={() => {
+                setCriandoPessoa(!criandoPessoa);
+                setNovaPessoaNome('');
+              }}
+              className="text-xs text-primary-teal hover:underline"
+            >
+              {criandoPessoa ? 'Selecionar existente' : '+ Nova pessoa'}
+            </button>
+          </div>
+          {criandoPessoa ? (
+            <input
+              id="negocio-pessoa-novo"
+              className={CAMPO}
+              placeholder="Nome da pessoa de contato…"
+              value={novaPessoaNome}
+              onChange={(e) => setNovaPessoaNome(e.target.value)}
+            />
+          ) : (
+            <select
+              id="negocio-pessoa"
+              className={CAMPO}
+              value={form.person_id ?? ''}
+              onChange={(e) => alterar('person_id', e.target.value || null)}
+            >
+              <option value="">—</option>
+              {pessoas.map((pessoa) => (
+                <option key={pessoa.id} value={pessoa.id}>{pessoa.nome}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div>

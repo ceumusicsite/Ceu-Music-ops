@@ -208,6 +208,8 @@ CREATE TABLE IF NOT EXISTS crm_activities (
   lead_id UUID REFERENCES crm_leads(id) ON DELETE CASCADE,
   person_id UUID REFERENCES crm_persons(id) ON DELETE CASCADE,
   organizacao_id UUID REFERENCES crm_organizations(id) ON DELETE CASCADE,
+  recorrencia TEXT DEFAULT 'nenhuma',
+  recorrencia_pai_id UUID REFERENCES crm_activities(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -215,6 +217,7 @@ CREATE INDEX IF NOT EXISTS idx_crm_activities_data ON crm_activities(data, hora)
 CREATE INDEX IF NOT EXISTS idx_crm_activities_pendentes ON crm_activities(dono_id, concluida, data);
 CREATE INDEX IF NOT EXISTS idx_crm_activities_deal ON crm_activities(deal_id);
 CREATE INDEX IF NOT EXISTS idx_crm_activities_person ON crm_activities(person_id);
+CREATE INDEX IF NOT EXISTS idx_crm_activities_recorrencia_pai ON crm_activities(recorrencia_pai_id);
 
 CREATE TABLE IF NOT EXISTS crm_notes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -303,6 +306,7 @@ CREATE TABLE IF NOT EXISTS crm_activity_log (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_crm_log_alvo ON crm_activity_log(entidade, entidade_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_crm_log_acao ON crm_activity_log(entidade, acao);
 
 -- ----------------------------------------------------------------------------
 -- RLS + triggers de updated_at para todas as tabelas do CRM
@@ -350,3 +354,174 @@ BEGIN
       'CREATE TRIGGER set_updated_at BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION crm_set_updated_at()', t);
   END LOOP;
 END $$;
+
+-- ----------------------------------------------------------------------------
+-- Triggers de Sincronização Unificada (Negócios <-> Leads <-> Pessoas)
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.crm_deals_sincronizar_before()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_person_id UUID;
+  v_digits TEXT;
+BEGIN
+  IF NEW.person_id IS NULL AND NEW.titulo IS NOT NULL AND trim(NEW.titulo) <> '' THEN
+    SELECT id INTO v_person_id
+    FROM public.crm_persons
+    WHERE lower(trim(nome)) = lower(trim(NEW.titulo))
+    LIMIT 1;
+
+    IF v_person_id IS NULL THEN
+      INSERT INTO public.crm_persons (nome, organizacao_id, dono_id, observacoes)
+      VALUES (
+        NEW.titulo,
+        NEW.organizacao_id,
+        NEW.dono_id,
+        COALESCE('Origem: ' || NEW.origem, 'Cadastrado via Negócios')
+      )
+      RETURNING id INTO v_person_id;
+
+      v_digits := regexp_replace(NEW.titulo, '[^0-9]', '', 'g');
+      IF length(v_digits) >= 8 THEN
+        INSERT INTO public.crm_person_phones (person_id, telefone, rotulo, principal)
+        VALUES (v_person_id, v_digits, 'celular', TRUE)
+        ON CONFLICT DO NOTHING;
+      END IF;
+    END IF;
+
+    NEW.person_id := v_person_id;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_crm_deals_sincronizar_before') THEN
+  CREATE TRIGGER trg_crm_deals_sincronizar_before
+  BEFORE INSERT OR UPDATE ON public.crm_deals
+  FOR EACH ROW EXECUTE FUNCTION public.crm_deals_sincronizar_before();
+END IF; END $$;
+
+CREATE OR REPLACE FUNCTION public.crm_deals_sincronizar_after()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_status_lead TEXT;
+BEGIN
+  v_status_lead := CASE
+    WHEN NEW.status = 'aberto' THEN 'ativo'
+    WHEN NEW.status = 'ganho' THEN 'convertido'
+    ELSE 'arquivado'
+  END;
+
+  IF EXISTS (SELECT 1 FROM public.crm_leads WHERE deal_id = NEW.id) THEN
+    UPDATE public.crm_leads SET
+      titulo = NEW.titulo,
+      valor = NEW.valor,
+      moeda = NEW.moeda,
+      origem = NEW.origem,
+      status = v_status_lead,
+      person_id = NEW.person_id,
+      organizacao_id = NEW.organizacao_id,
+      dono_id = NEW.dono_id,
+      updated_at = NOW()
+    WHERE deal_id = NEW.id;
+  ELSE
+    INSERT INTO public.crm_leads (
+      titulo, valor, moeda, origem, status, deal_id, person_id, organizacao_id, dono_id, observacoes, created_at, updated_at
+    ) VALUES (
+      NEW.titulo,
+      NEW.valor,
+      NEW.moeda,
+      NEW.origem,
+      v_status_lead,
+      NEW.id,
+      NEW.person_id,
+      NEW.organizacao_id,
+      NEW.dono_id,
+      COALESCE(NEW.origem, 'Criado em Negócios'),
+      NEW.created_at,
+      NOW()
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_crm_deals_sincronizar_after') THEN
+  CREATE TRIGGER trg_crm_deals_sincronizar_after
+  AFTER INSERT OR UPDATE ON public.crm_deals
+  FOR EACH ROW EXECUTE FUNCTION public.crm_deals_sincronizar_after();
+END IF; END $$;
+
+CREATE OR REPLACE FUNCTION public.crm_leads_sincronizar_before()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_person_id UUID;
+  v_digits TEXT;
+BEGIN
+  IF NEW.person_id IS NULL AND NEW.titulo IS NOT NULL AND trim(NEW.titulo) <> '' THEN
+    SELECT id INTO v_person_id
+    FROM public.crm_persons
+    WHERE lower(trim(nome)) = lower(trim(NEW.titulo))
+    LIMIT 1;
+
+    IF v_person_id IS NULL THEN
+      INSERT INTO public.crm_persons (nome, organizacao_id, dono_id, observacoes)
+      VALUES (
+        NEW.titulo,
+        NEW.organizacao_id,
+        NEW.dono_id,
+        COALESCE('Origem: ' || NEW.origem, 'Cadastrado via Leads')
+      )
+      RETURNING id INTO v_person_id;
+
+      v_digits := regexp_replace(NEW.titulo, '[^0-9]', '', 'g');
+      IF length(v_digits) >= 8 THEN
+        INSERT INTO public.crm_person_phones (person_id, telefone, rotulo, principal)
+        VALUES (v_person_id, v_digits, 'celular', TRUE)
+        ON CONFLICT DO NOTHING;
+      END IF;
+    END IF;
+
+    NEW.person_id := v_person_id;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_crm_leads_sincronizar_before') THEN
+  CREATE TRIGGER trg_crm_leads_sincronizar_before
+  BEFORE INSERT OR UPDATE ON public.crm_leads
+  FOR EACH ROW EXECUTE FUNCTION public.crm_leads_sincronizar_before();
+END IF; END $$;
+
+CREATE OR REPLACE FUNCTION public.crm_deals_delete_sync()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  DELETE FROM public.crm_leads WHERE deal_id = OLD.id;
+  RETURN OLD;
+END;
+$$;
+
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_crm_deals_delete_sync') THEN
+  CREATE TRIGGER trg_crm_deals_delete_sync
+  AFTER DELETE ON public.crm_deals
+  FOR EACH ROW EXECUTE FUNCTION public.crm_deals_delete_sync();
+END IF; END $$;

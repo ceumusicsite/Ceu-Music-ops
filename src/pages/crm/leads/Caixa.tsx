@@ -17,8 +17,8 @@ import {
 } from '../../../services/crm/leads';
 import { definirEtiquetas, listarEtiquetas, listarVinculosDeEtiqueta } from '../../../services/crm/labels';
 import { listarPipelines } from '../../../services/crm/deals';
-import { listarOpcoesPessoas } from '../../../services/crm/persons';
-import { listarOpcoesOrganizacoes } from '../../../services/crm/organizations';
+import { criarPessoa, listarOpcoesPessoas } from '../../../services/crm/persons';
+import { criarOrganizacao, listarOpcoesOrganizacoes } from '../../../services/crm/organizations';
 import { listarUsuarios, type OpcaoUsuario } from '../../../services/crm/usuarios';
 import { formatarData, formatarMoeda } from '../../../services/crm/formato';
 import type {
@@ -87,6 +87,10 @@ export default function CrmLeadsPage() {
   const [form, setForm] = useState<EntradaLead>(ENTRADA_VAZIA);
   const [etiquetasForm, setEtiquetasForm] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
+  const [criandoPessoa, setCriandoPessoa] = useState(false);
+  const [novaPessoaNome, setNovaPessoaNome] = useState('');
+  const [criandoOrg, setCriandoOrg] = useState(false);
+  const [novaOrgNome, setNovaOrgNome] = useState('');
 
   const [conversaoAberta, setConversaoAberta] = useState<CrmLead | null>(null);
   const [funilEscolhido, setFunilEscolhido] = useState('');
@@ -169,7 +173,23 @@ export default function CrmLeadsPage() {
       valor: (l) => l.titulo,
       render: (l) => (
         <div>
-          <span className="font-medium text-white">{l.titulo}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-white">{l.titulo}</span>
+            {l.deal_id && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/crm/negocios/${l.deal_id}`);
+                }}
+                className="inline-flex items-center gap-1 rounded bg-primary-teal/15 px-2 py-0.5 text-xs text-primary-teal transition-smooth hover:bg-primary-teal/25"
+                title="Ver no funil de negócios"
+              >
+                <i className="ri-briefcase-line" />
+                <span>Negócio</span>
+              </button>
+            )}
+          </div>
           {(vinculos[l.id] ?? []).length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
               {(vinculos[l.id] ?? []).map((labelId) => {
@@ -236,6 +256,10 @@ export default function CrmLeadsPage() {
     setEmEdicao(null);
     setForm(ENTRADA_VAZIA);
     setEtiquetasForm([]);
+    setCriandoPessoa(false);
+    setNovaPessoaNome('');
+    setCriandoOrg(false);
+    setNovaOrgNome('');
     setFormAberto(true);
   };
 
@@ -252,6 +276,10 @@ export default function CrmLeadsPage() {
       organizacao_id: lead.organizacao_id ?? null,
     });
     setEtiquetasForm(vinculos[lead.id] ?? []);
+    setCriandoPessoa(false);
+    setNovaPessoaNome('');
+    setCriandoOrg(false);
+    setNovaOrgNome('');
     setFormAberto(true);
   };
 
@@ -267,7 +295,38 @@ export default function CrmLeadsPage() {
     setSalvando(true);
     setErro('');
     try {
-      const entrada = { ...form, titulo: form.titulo.trim() };
+      let orgIdFinal = form.organizacao_id;
+      if (criandoOrg && novaOrgNome.trim()) {
+        try {
+          const criada = await criarOrganizacao({ nome: novaOrgNome.trim() });
+          orgIdFinal = criada.id;
+          setOrganizacoes((atuais) => [...atuais, { id: criada.id, nome: criada.nome }]);
+        } catch (err) {
+          console.error('Erro ao criar organização:', err);
+        }
+      }
+
+      let personIdFinal = form.person_id;
+      if (criandoPessoa && novaPessoaNome.trim()) {
+        try {
+          const criada = await criarPessoa({
+            nome: novaPessoaNome.trim(),
+            organizacao_id: orgIdFinal,
+            dono_id: form.dono_id,
+          });
+          personIdFinal = criada.id;
+          setPessoas((atuais) => [...atuais, { id: criada.id, nome: criada.nome }]);
+        } catch (err) {
+          console.error('Erro ao criar pessoa:', err);
+        }
+      }
+
+      const entrada = {
+        ...form,
+        titulo: form.titulo.trim(),
+        organizacao_id: orgIdFinal,
+        person_id: personIdFinal,
+      };
       const id = emEdicao ? emEdicao.id : (await criarLead(entrada)).id;
       if (emEdicao) await atualizarLead(emEdicao.id, entrada);
 
@@ -484,33 +543,77 @@ export default function CrmLeadsPage() {
           </div>
 
           <div>
-            <label className={ROTULO} htmlFor="lead-pessoa">Pessoa de contato</label>
-            <select
-              id="lead-pessoa"
-              className={CAMPO}
-              value={form.person_id ?? ''}
-              onChange={(e) => alterar('person_id', e.target.value || null)}
-            >
-              <option value="">—</option>
-              {pessoas.map((p) => (
-                <option key={p.id} value={p.id}>{p.nome}</option>
-              ))}
-            </select>
+            <div className="mb-1 flex items-center justify-between">
+              <label className={ROTULO} htmlFor="lead-pessoa">Pessoa de contato</label>
+              <button
+                type="button"
+                onClick={() => {
+                  setCriandoPessoa(!criandoPessoa);
+                  setNovaPessoaNome('');
+                }}
+                className="text-xs text-primary-teal hover:underline"
+              >
+                {criandoPessoa ? 'Selecionar existente' : '+ Nova pessoa'}
+              </button>
+            </div>
+            {criandoPessoa ? (
+              <input
+                id="lead-pessoa-novo"
+                className={CAMPO}
+                placeholder="Nome da pessoa de contato…"
+                value={novaPessoaNome}
+                onChange={(e) => setNovaPessoaNome(e.target.value)}
+              />
+            ) : (
+              <select
+                id="lead-pessoa"
+                className={CAMPO}
+                value={form.person_id ?? ''}
+                onChange={(e) => alterar('person_id', e.target.value || null)}
+              >
+                <option value="">—</option>
+                {pessoas.map((p) => (
+                  <option key={p.id} value={p.id}>{p.nome}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div>
-            <label className={ROTULO} htmlFor="lead-org">Organização</label>
-            <select
-              id="lead-org"
-              className={CAMPO}
-              value={form.organizacao_id ?? ''}
-              onChange={(e) => alterar('organizacao_id', e.target.value || null)}
-            >
-              <option value="">—</option>
-              {organizacoes.map((o) => (
-                <option key={o.id} value={o.id}>{o.nome}</option>
-              ))}
-            </select>
+            <div className="mb-1 flex items-center justify-between">
+              <label className={ROTULO} htmlFor="lead-org">Organização</label>
+              <button
+                type="button"
+                onClick={() => {
+                  setCriandoOrg(!criandoOrg);
+                  setNovaOrgNome('');
+                }}
+                className="text-xs text-primary-teal hover:underline"
+              >
+                {criandoOrg ? 'Selecionar existente' : '+ Nova organização'}
+              </button>
+            </div>
+            {criandoOrg ? (
+              <input
+                id="lead-org-novo"
+                className={CAMPO}
+                placeholder="Nome da organização…"
+                value={novaOrgNome}
+                onChange={(e) => setNovaOrgNome(e.target.value)}
+              />
+            ) : (
+              <select
+                id="lead-org"
+                className={CAMPO}
+                value={form.organizacao_id ?? ''}
+                onChange={(e) => alterar('organizacao_id', e.target.value || null)}
+              >
+                <option value="">—</option>
+                {organizacoes.map((o) => (
+                  <option key={o.id} value={o.id}>{o.nome}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div>
