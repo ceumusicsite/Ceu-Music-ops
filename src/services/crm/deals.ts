@@ -7,12 +7,22 @@ import type { CrmEtapa, CrmNegocio, CrmPipeline, StatusNegocio } from './types';
 // PostgREST responde 300 Multiple Choices em vez dos dados.
 const SELECT_NEGOCIO = `
   *,
-  pessoa:crm_persons!crm_deals_person_id_fkey ( id, nome ),
+  pessoa:crm_persons!crm_deals_person_id_fkey (
+    id,
+    nome,
+    telefones:crm_person_phones ( telefone, principal ),
+    emails:crm_person_emails ( email, principal )
+  ),
   organizacao:crm_organizations!crm_deals_organizacao_id_fkey ( id, nome ),
   dono:users!crm_deals_dono_id_fkey ( id, name )
 `;
 
 function mapNegocio(row: any): CrmNegocio {
+  const telefones: { telefone: string; principal?: boolean }[] = row.pessoa?.telefones ?? [];
+  const emails: { email: string; principal?: boolean }[] = row.pessoa?.emails ?? [];
+  const telPrincipal = telefones.find((t) => t.principal)?.telefone ?? telefones[0]?.telefone ?? null;
+  const emailPrincipal = emails.find((e) => e.principal)?.email ?? emails[0]?.email ?? null;
+
   return {
     id: row.id,
     titulo: row.titulo,
@@ -22,6 +32,8 @@ function mapNegocio(row: any): CrmNegocio {
     stage_id: row.stage_id,
     person_id: row.person_id,
     person_nome: row.pessoa?.nome ?? null,
+    person_telefone: telPrincipal,
+    person_email: emailPrincipal,
     organizacao_id: row.organizacao_id,
     organizacao_nome: row.organizacao?.nome ?? null,
     dono_id: row.dono_id,
@@ -30,6 +42,7 @@ function mapNegocio(row: any): CrmNegocio {
     motivo_perda: row.motivo_perda,
     probabilidade: row.probabilidade,
     origem: row.origem,
+    observacoes: row.observacoes ?? null,
     ordem: row.ordem ?? 0,
     data_prevista_fechamento: row.data_prevista_fechamento,
     data_fechamento: row.data_fechamento,
@@ -102,6 +115,7 @@ export interface EntradaNegocio {
   organizacao_id?: string | null;
   dono_id?: string | null;
   origem?: string | null;
+  observacoes?: string | null;
   data_prevista_fechamento?: string | null;
   custom_fields?: Record<string, unknown>;
 }

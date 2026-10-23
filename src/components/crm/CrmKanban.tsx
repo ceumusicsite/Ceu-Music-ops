@@ -103,11 +103,25 @@ export default function CrmKanban({
                     <h4 className="text-sm font-medium leading-snug text-white">{negocio.titulo}</h4>
 
                     {(negocio.organizacao_nome || negocio.person_nome) && (
-                      <p className="mt-1 truncate text-xs text-gray-400">
-                        {[negocio.organizacao_nome, negocio.person_nome]
-                          .filter(Boolean)
-                          .join(', ')}
-                      </p>
+                      <div className="mt-1 flex items-center justify-between gap-1 text-xs text-gray-400">
+                        <span className="truncate">
+                          {[negocio.organizacao_nome, negocio.person_nome]
+                            .filter(Boolean)
+                            .join(', ')}
+                        </span>
+                        {negocio.person_telefone && (
+                          <a
+                            href={`https://wa.me/${negocio.person_telefone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            title={`WhatsApp: ${negocio.person_telefone}`}
+                            className="inline-flex shrink-0 items-center text-emerald-400 hover:text-emerald-300"
+                          >
+                            <i className="ri-whatsapp-line text-sm" />
+                          </a>
+                        )}
+                      </div>
                     )}
 
                     <div className="mt-2 flex items-center justify-between gap-2">

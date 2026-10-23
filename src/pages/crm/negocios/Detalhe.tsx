@@ -294,6 +294,40 @@ export default function CrmNegocioDetalhePage() {
               )}
             </Linha>
 
+            {negocio.person_telefone && (
+              <Linha icone="ri-phone-line" rotulo="Telefone / WhatsApp">
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`tel:${negocio.person_telefone}`}
+                    className="text-primary-teal hover:underline"
+                  >
+                    {negocio.person_telefone}
+                  </a>
+                  <a
+                    href={`https://wa.me/${negocio.person_telefone.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Conversar no WhatsApp"
+                    className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-xs font-medium text-emerald-400 transition-colors hover:bg-emerald-500/20"
+                  >
+                    <i className="ri-whatsapp-line" />
+                    WhatsApp
+                  </a>
+                </div>
+              </Linha>
+            )}
+
+            {negocio.person_email && (
+              <Linha icone="ri-mail-line" rotulo="E-mail">
+                <a
+                  href={`mailto:${negocio.person_email}`}
+                  className="text-primary-teal hover:underline"
+                >
+                  {negocio.person_email}
+                </a>
+              </Linha>
+            )}
+
             <Linha icone="ri-flag-line" rotulo="Previsão de fechamento">
               {formatarData(negocio.data_prevista_fechamento)}
             </Linha>
@@ -301,6 +335,12 @@ export default function CrmNegocioDetalhePage() {
             <Linha icone="ri-compass-3-line" rotulo="Origem">
               {negocio.origem || <span className="text-gray-600">—</span>}
             </Linha>
+
+            {negocio.observacoes && (
+              <Linha icone="ri-file-text-line" rotulo="Observações">
+                <span className="whitespace-pre-wrap text-gray-300">{negocio.observacoes}</span>
+              </Linha>
+            )}
 
             {negocio.motivo_perda && (
               <Linha icone="ri-close-circle-line" rotulo="Motivo da perda">

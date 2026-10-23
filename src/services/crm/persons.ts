@@ -156,8 +156,88 @@ async function salvarContatos(personId: string, emails: CrmEmail[], telefones: C
 }
 
 /** Opções para os selects de vínculo (negócio -> pessoa de contato). */
-export async function listarOpcoesPessoas(): Promise<{ id: string; nome: string }[]> {
-  const { data, error } = await supabase.from('crm_persons').select('id, nome').order('nome');
+export async function listarOpcoesPessoas(): Promise<{ id: string; nome: string; telefone?: string | null; email?: string | null }[]> {
+  const { data, error } = await supabase
+    .from('crm_persons')
+    .select(`
+      id,
+      nome,
+      telefones:crm_person_phones ( telefone, principal ),
+      emails:crm_person_emails ( email, principal )
+    `)
+    .order('nome');
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map((row: any) => {
+    const telefones: { telefone: string; principal?: boolean }[] = row.telefones ?? [];
+    const emails: { email: string; principal?: boolean }[] = row.emails ?? [];
+    const telPrincipal = telefones.find((t) => t.principal)?.telefone ?? telefones[0]?.telefone ?? null;
+    const emailPrincipal = emails.find((e) => e.principal)?.email ?? emails[0]?.email ?? null;
+    return {
+      id: row.id,
+      nome: row.nome,
+      telefone: telPrincipal,
+      email: emailPrincipal,
+    };
+  });
 }
+
+/** Atualiza ou define o telefone e email principal de uma pessoa diretamente. */
+export async function salvarTelefoneEEmailRapido(
+  personId: string,
+  telefone?: string | null,
+  email?: string | null
+): Promise<void> {
+  const telLimpo = telefone?.trim();
+  const emailLimpo = email?.trim();
+
+  if (telLimpo !== undefined) {
+    if (telLimpo) {
+      const { data: phones } = await supabase
+        .from('crm_person_phones')
+        .select('id, principal')
+        .eq('person_id', personId)
+        .order('principal', { ascending: false });
+
+      if (phones && phones.length > 0) {
+        // Atualiza o primeiro / principal
+        await supabase
+          .from('crm_person_phones')
+          .update({ telefone: telLimpo })
+          .eq('id', phones[0].id);
+      } else {
+        // Insere novo
+        await supabase.from('crm_person_phones').insert({
+          person_id: personId,
+          telefone: telLimpo,
+          rotulo: 'celular',
+          principal: true,
+        });
+      }
+    }
+  }
+
+  if (emailLimpo !== undefined) {
+    if (emailLimpo) {
+      const { data: emails } = await supabase
+        .from('crm_person_emails')
+        .select('id, principal')
+        .eq('person_id', personId)
+        .order('principal', { ascending: false });
+
+      if (emails && emails.length > 0) {
+        await supabase
+          .from('crm_person_emails')
+          .update({ email: emailLimpo })
+          .eq('id', emails[0].id);
+      } else {
+        await supabase.from('crm_person_emails').insert({
+          person_id: personId,
+          email: emailLimpo,
+          rotulo: 'comercial',
+          principal: true,
+        });
+      }
+    }
+  }
+}
+

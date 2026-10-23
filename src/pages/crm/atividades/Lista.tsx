@@ -8,6 +8,7 @@ import {
   alternarConcluida,
   atualizarAtividade,
   criarAtividade,
+  duplicarAtividade,
   excluirAtividades,
   filtrarPorPeriodo,
   infoTipo,
@@ -116,6 +117,16 @@ export default function CrmAtividadesPage() {
       setErro('Não foi possível salvar a atividade.');
     } finally {
       setSalvando(false);
+    }
+  };
+
+  const duplicar = async (atividade: CrmAtividade) => {
+    try {
+      await duplicarAtividade(atividade);
+      await carregar();
+    } catch (e) {
+      console.error('Erro ao duplicar atividade:', e);
+      setErro('Não foi possível duplicar a atividade.');
     }
   };
 
@@ -254,7 +265,18 @@ export default function CrmAtividadesPage() {
 
                   <button
                     type="button"
+                    onClick={() => duplicar(atividade)}
+                    title="Duplicar atividade"
+                    aria-label={`Duplicar ${atividade.assunto}`}
+                    className="shrink-0 rounded p-1.5 text-gray-500 transition-smooth hover:bg-dark-hover hover:text-primary-teal"
+                  >
+                    <i className="ri-file-copy-line" />
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => setParaExcluir(atividade)}
+                    title="Excluir atividade"
                     aria-label={`Excluir ${atividade.assunto}`}
                     className="shrink-0 rounded p-1.5 text-gray-600 transition-smooth hover:bg-dark-hover hover:text-red-400"
                   >

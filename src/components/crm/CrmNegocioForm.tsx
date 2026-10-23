@@ -7,7 +7,7 @@ import {
   type CrmCampoPersonalizado,
 } from '../../services/crm/customFields';
 import type { EntradaNegocio } from '../../services/crm/deals';
-import { criarPessoa } from '../../services/crm/persons';
+import { criarPessoa, salvarTelefoneEEmailRapido } from '../../services/crm/persons';
 import { criarOrganizacao } from '../../services/crm/organizations';
 import type { OpcaoUsuario } from '../../services/crm/usuarios';
 import type { CrmEtapa, CrmNegocio } from '../../services/crm/types';
@@ -16,6 +16,13 @@ const CAMPO =
   'w-full rounded-lg border border-dark-border bg-dark-bg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none transition-smooth focus:border-primary-teal';
 const ROTULO = 'mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500';
 
+export interface OpcaoPessoaNegocio {
+  id: string;
+  nome: string;
+  telefone?: string | null;
+  email?: string | null;
+}
+
 interface CrmNegocioFormProps {
   aberto: boolean;
   negocio: CrmNegocio | null;
@@ -23,7 +30,7 @@ interface CrmNegocioFormProps {
   /** Etapa pré-selecionada quando o usuário clica em "+ Negócio" dentro de uma coluna. */
   etapaInicialId?: string;
   etapas: CrmEtapa[];
-  pessoas: { id: string; nome: string }[];
+  pessoas: OpcaoPessoaNegocio[];
   organizacoes: { id: string; nome: string }[];
   usuarios: OpcaoUsuario[];
   salvando: boolean;
@@ -49,6 +56,8 @@ export default function CrmNegocioForm({
   const [campos, setCampos] = useState<CrmCampoPersonalizado[]>([]);
   const [criandoPessoa, setCriandoPessoa] = useState(false);
   const [novaPessoaNome, setNovaPessoaNome] = useState('');
+  const [contatoTelefone, setContatoTelefone] = useState('');
+  const [contatoEmail, setContatoEmail] = useState('');
   const [criandoOrg, setCriandoOrg] = useState(false);
   const [novaOrgNome, setNovaOrgNome] = useState('');
 
@@ -66,11 +75,35 @@ export default function CrmNegocioForm({
       setNovaPessoaNome('');
       setCriandoOrg(false);
       setNovaOrgNome('');
+
+      // Inicializa telefone e email
+      if (negocio?.person_id) {
+        const pessoaEncontrada = pessoas.find((p) => p.id === negocio.person_id);
+        setContatoTelefone(negocio.person_telefone ?? pessoaEncontrada?.telefone ?? '');
+        setContatoEmail(negocio.person_email ?? pessoaEncontrada?.email ?? '');
+      } else {
+        setContatoTelefone('');
+        setContatoEmail('');
+      }
     }
-  }, [aberto, negocio, pipelineId, etapas, etapaInicialId]);
+  }, [aberto, negocio, pipelineId, etapas, etapaInicialId, pessoas]);
 
   const alterar = (campo: keyof EntradaNegocio, valor: unknown) =>
     setForm((atual) => ({ ...atual, [campo]: valor }));
+
+  const selecionarPessoa = (pessoaId: string | null) => {
+    alterar('person_id', pessoaId);
+    if (!pessoaId) {
+      setContatoTelefone('');
+      setContatoEmail('');
+      return;
+    }
+    const pessoa = pessoas.find((p) => p.id === pessoaId);
+    if (pessoa) {
+      setContatoTelefone(pessoa.telefone ?? '');
+      setContatoEmail(pessoa.email ?? '');
+    }
+  };
 
   const enviar = async () => {
     if (form.titulo.trim() === '') {
@@ -99,16 +132,42 @@ export default function CrmNegocioForm({
     }
 
     let personIdFinal = form.person_id;
-    if (criandoPessoa && novaPessoaNome.trim()) {
+    const temTelefoneOuEmail = contatoTelefone.trim() !== '' || contatoEmail.trim() !== '';
+
+    if (criandoPessoa && (novaPessoaNome.trim() || temTelefoneOuEmail)) {
       try {
+        const nomeContato = novaPessoaNome.trim() || form.titulo.trim();
         const criada = await criarPessoa({
-          nome: novaPessoaNome.trim(),
+          nome: nomeContato,
           organizacao_id: orgIdFinal,
           dono_id: form.dono_id,
+          emails: contatoEmail.trim() ? [{ email: contatoEmail.trim(), rotulo: 'comercial', principal: true }] : [],
+          telefones: contatoTelefone.trim() ? [{ telefone: contatoTelefone.trim(), rotulo: 'celular', principal: true }] : [],
         });
         personIdFinal = criada.id;
       } catch (err) {
         console.error('Erro ao criar pessoa:', err);
+      }
+    } else if (personIdFinal && temTelefoneOuEmail) {
+      // Se selecionou pessoa existente e digitou/alterou telefone ou email, salva rápido
+      try {
+        await salvarTelefoneEEmailRapido(personIdFinal, contatoTelefone, contatoEmail);
+      } catch (err) {
+        console.error('Erro ao salvar contato da pessoa:', err);
+      }
+    } else if (!personIdFinal && temTelefoneOuEmail) {
+      // Criar contato com nome do negócio automaticamente se inseriu telefone/email
+      try {
+        const criada = await criarPessoa({
+          nome: form.titulo.trim(),
+          organizacao_id: orgIdFinal,
+          dono_id: form.dono_id,
+          emails: contatoEmail.trim() ? [{ email: contatoEmail.trim(), rotulo: 'comercial', principal: true }] : [],
+          telefones: contatoTelefone.trim() ? [{ telefone: contatoTelefone.trim(), rotulo: 'celular', principal: true }] : [],
+        });
+        personIdFinal = criada.id;
+      } catch (err) {
+        console.error('Erro ao criar contato automático:', err);
       }
     }
 
@@ -254,14 +313,53 @@ export default function CrmNegocioForm({
               id="negocio-pessoa"
               className={CAMPO}
               value={form.person_id ?? ''}
-              onChange={(e) => alterar('person_id', e.target.value || null)}
+              onChange={(e) => selecionarPessoa(e.target.value || null)}
             >
               <option value="">—</option>
               {pessoas.map((pessoa) => (
-                <option key={pessoa.id} value={pessoa.id}>{pessoa.nome}</option>
+                <option key={pessoa.id} value={pessoa.id}>
+                  {pessoa.nome}{pessoa.telefone ? ` (${pessoa.telefone})` : ''}
+                </option>
               ))}
             </select>
           )}
+        </div>
+
+        <div>
+          <label className={ROTULO} htmlFor="negocio-telefone">Telefone / WhatsApp</label>
+          <div className="relative">
+            <input
+              id="negocio-telefone"
+              type="tel"
+              className={CAMPO}
+              placeholder="Ex.: (21) 96649-0448"
+              value={contatoTelefone}
+              onChange={(e) => setContatoTelefone(e.target.value)}
+            />
+            {contatoTelefone.trim() && (
+              <a
+                href={`https://wa.me/${contatoTelefone.replace(/\D/g, '')}`}
+                target="_blank"
+                rel="noreferrer"
+                title="Abrir WhatsApp"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-primary-teal hover:text-white"
+              >
+                <i className="ri-whatsapp-line text-base" />
+              </a>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label className={ROTULO} htmlFor="negocio-email">E-mail de contato</label>
+          <input
+            id="negocio-email"
+            type="email"
+            className={CAMPO}
+            placeholder="Ex.: contato@email.com"
+            value={contatoEmail}
+            onChange={(e) => setContatoEmail(e.target.value)}
+          />
         </div>
 
         <div>
@@ -300,6 +398,18 @@ export default function CrmNegocioForm({
             placeholder="Ex.: Indicação, Instagram, Evento"
           />
         </div>
+
+        <div className="md:col-span-2">
+          <label className={ROTULO} htmlFor="negocio-obs">Observações</label>
+          <textarea
+            id="negocio-obs"
+            rows={3}
+            className={CAMPO}
+            value={form.observacoes ?? ''}
+            onChange={(e) => alterar('observacoes', e.target.value)}
+            placeholder="Anotações internas sobre o negócio…"
+          />
+        </div>
       </div>
 
       <CrmCamposPersonalizados
@@ -329,6 +439,7 @@ function estadoInicial(
       organizacao_id: null,
       dono_id: null,
       origem: '',
+      observacoes: '',
       data_prevista_fechamento: null,
       custom_fields: {},
     };
@@ -344,6 +455,7 @@ function estadoInicial(
     organizacao_id: negocio.organizacao_id ?? null,
     dono_id: negocio.dono_id ?? null,
     origem: negocio.origem ?? '',
+    observacoes: negocio.observacoes ?? '',
     data_prevista_fechamento: negocio.data_prevista_fechamento ?? null,
     custom_fields: negocio.custom_fields ?? {},
   };

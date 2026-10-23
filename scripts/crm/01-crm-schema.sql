@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS crm_deals (
   motivo_perda TEXT,
   probabilidade INTEGER CHECK (probabilidade BETWEEN 0 AND 100),
   origem TEXT,
+  observacoes TEXT,
   ordem INTEGER NOT NULL DEFAULT 0,
   data_prevista_fechamento DATE,
   data_fechamento TIMESTAMPTZ,

@@ -145,6 +145,28 @@ export default function CrmNegociosListaPage() {
       render: (n) => n.organizacao_nome ?? <span className="text-gray-600">—</span>,
     },
     {
+      chave: 'pessoa',
+      titulo: 'Contato',
+      valor: (n) => n.person_nome ?? '',
+      render: (n) =>
+        n.person_nome ? (
+          <div className="flex flex-col">
+            <span className="text-white">{n.person_nome}</span>
+            {n.person_telefone && (
+              <a
+                href={`tel:${n.person_telefone}`}
+                onClick={(e) => e.stopPropagation()}
+                className="text-xs text-primary-teal hover:underline"
+              >
+                {n.person_telefone}
+              </a>
+            )}
+          </div>
+        ) : (
+          <span className="text-gray-600">—</span>
+        ),
+    },
+    {
       chave: 'valor',
       titulo: 'Valor',
       alinhamento: 'right',

@@ -209,6 +209,26 @@ export async function atualizarAtividade(id: string, entrada: EntradaAtividade):
   }
 }
 
+export async function duplicarAtividade(atividade: CrmAtividade): Promise<void> {
+  const entrada: EntradaAtividade = {
+    tipo: atividade.tipo,
+    assunto: atividade.assunto,
+    nota: atividade.nota ?? null,
+    local: atividade.local ?? null,
+    data: atividade.data ?? null,
+    hora: atividade.hora ?? null,
+    duracao_minutos: atividade.duracao_minutos ?? null,
+    dono_id: atividade.dono_id ?? null,
+    deal_id: atividade.deal_id ?? null,
+    person_id: atividade.person_id ?? null,
+    organizacao_id: atividade.organizacao_id ?? null,
+    recorrencia: (atividade.recorrencia as FrequenciaRecorrencia) ?? 'nenhuma',
+    recorrencia_repeticoes: 10,
+  };
+
+  await criarAtividade(entrada);
+}
+
 export async function alternarConcluida(id: string, concluida: boolean): Promise<void> {
   const { error } = await supabase
     .from('crm_activities')

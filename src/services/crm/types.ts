@@ -146,6 +146,8 @@ export interface CrmNegocio {
   stage_id: string;
   person_id?: string | null;
   person_nome?: string | null;
+  person_telefone?: string | null;
+  person_email?: string | null;
   organizacao_id?: string | null;
   organizacao_nome?: string | null;
   dono_id?: string | null;
@@ -154,6 +156,7 @@ export interface CrmNegocio {
   motivo_perda?: string | null;
   probabilidade?: number | null;
   origem?: string | null;
+  observacoes?: string | null;
   ordem: number;
   data_prevista_fechamento?: string | null;
   data_fechamento?: string | null;

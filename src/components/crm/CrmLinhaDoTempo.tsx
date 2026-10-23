@@ -4,6 +4,7 @@ import {
   alternarConcluida,
   atualizarAtividade,
   criarAtividade,
+  duplicarAtividade,
   excluirAtividades,
   infoTipo,
   listarAtividadesDe,
@@ -133,6 +134,16 @@ export default function CrmLinhaDoTempo({ vinculo, usuarios }: CrmLinhaDoTempoPr
     }
   };
 
+  const duplicar = async (atividade: CrmAtividade) => {
+    try {
+      await duplicarAtividade(atividade);
+      await carregar();
+    } catch (e) {
+      console.error('Erro ao duplicar atividade:', e);
+      setErro('Não foi possível duplicar a atividade.');
+    }
+  };
+
   const pendentes = atividades.filter((a) => !a.concluida);
   const concluidas = atividades.filter((a) => a.concluida);
 
@@ -201,6 +212,7 @@ export default function CrmLinhaDoTempo({ vinculo, usuarios }: CrmLinhaDoTempoPr
                   setEmEdicao(a);
                   setFormAberto(true);
                 }}
+                onDuplicar={duplicar}
                 onExcluir={async (a) => {
                   await excluirAtividades([a.id]);
                   await carregar();
@@ -214,6 +226,7 @@ export default function CrmLinhaDoTempo({ vinculo, usuarios }: CrmLinhaDoTempoPr
                   setEmEdicao(a);
                   setFormAberto(true);
                 }}
+                onDuplicar={duplicar}
                 onExcluir={async (a) => {
                   await excluirAtividades([a.id]);
                   await carregar();
@@ -392,12 +405,14 @@ function ListaAtividades({
   atividades,
   onConcluir,
   onEditar,
+  onDuplicar,
   onExcluir,
 }: {
   titulo: string;
   atividades: CrmAtividade[];
   onConcluir: (a: CrmAtividade) => void;
   onEditar: (a: CrmAtividade) => void;
+  onDuplicar: (a: CrmAtividade) => void;
   onExcluir: (a: CrmAtividade) => void;
 }) {
   if (atividades.length === 0) return null;
@@ -457,7 +472,18 @@ function ListaAtividades({
 
               <button
                 type="button"
+                onClick={() => onDuplicar(atividade)}
+                title="Duplicar atividade"
+                aria-label="Duplicar atividade"
+                className="shrink-0 rounded p-1 text-gray-500 transition-smooth hover:bg-dark-hover hover:text-primary-teal"
+              >
+                <i className="ri-file-copy-line" />
+              </button>
+
+              <button
+                type="button"
                 onClick={() => onExcluir(atividade)}
+                title="Excluir atividade"
                 aria-label="Excluir atividade"
                 className="shrink-0 rounded p-1 text-gray-600 transition-smooth hover:bg-dark-hover hover:text-red-400"
               >
